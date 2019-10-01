@@ -24,15 +24,15 @@ public class SnakesRunner
     //--------------------------------------------------------------------
     private static int nextNumRows()
     {
-//        return 8;// + Rand.nextInt(5);
-        return 20;
+        return 10;// + Rand.nextInt(5);
+//        return 20;
 //        return 30;
     }
 
     private static int nextNumCols()
     {
-//        return 8;// + Rand.nextInt(5);
-        return 20;
+        return 10;// + Rand.nextInt(5);
+//        return 20;
 //        return 30;
     }
 

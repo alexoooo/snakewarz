@@ -1,7 +1,6 @@
 package ao.sw;
 
-import ao.ai.sample.ForkPathAi;
-import ao.ai.sample.monte_carlo.AtaptiveUct;
+import ao.ai.sample.monte_carlo.AdaptiveUct;
 import ao.ai.sample.monte_carlo.UctAi;
 import ao.sw.control.GameResult;
 import ao.sw.control.SnakesRunner;
@@ -27,14 +26,6 @@ public class SnakesContest
         pause();
         return result;
     }
-
-    //----------------------------------------------------------
-    @Override
-    protected void finalize() throws Throwable
-    {
-        super.finalize();
-    }
-
 
 
     //----------------------------------------------------------
@@ -69,7 +60,7 @@ public class SnakesContest
         for (int i = 0; i < Integer.MAX_VALUE; i++)
         {
             GameResult result = contest.run(
-                    AtaptiveUct.create(),
+                    AdaptiveUct.create(),
 //                    new Revan(),
 //                    new Findalife3(),
 //                    new SnakeThing(),
@@ -78,9 +69,9 @@ public class SnakesContest
 //                    new SnakeGuy(),
 //                    SnakesRunner.nestedInputPlayer(),
 //                    new MonteCarloAi(64, false),
-//                    SnakesRunner.nestedInputPlayer(),
+                    SnakesRunner.nestedInputPlayer());
 //                    new PathAi(),
-                    new ForkPathAi());
+//                    new ForkPathAi());
 //            contest.run(
 //                    new MonteCarloAi(64),
 //                    new UctAi(128*2*4),

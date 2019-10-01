@@ -6,25 +6,25 @@ import ao.sw.engine.board.Direction;
 import ao.sw.engine.player.MoveSpecifier;
 import ao.sw.engine.v2.Snake;
 
-import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 /**
- * Monte Carlo Techique:
+ * Monte Carlo Technique:
  * Upper Confidence Bounds applied to Trees 
  */
-public class AtaptiveUct extends PvpAi
+public class AdaptiveUct extends PvpAi
 {
     //--------------------------------------------------------------------
-    private static final int MIN_THINKING =        500;
-//    private static final int MIN_THINKING =  10 * 1000;
-    private static final int MAX_THINKING = 250 * 1000;
+//    private static final int MIN_THINKING =        500;
+    private static final int MIN_THINKING = 2500;
+    private static final int MAX_THINKING = 1000000;
 
 
     //--------------------------------------------------------------------
-    private final AbstractExecutorService exec =
-            (AbstractExecutorService) Executors.newSingleThreadExecutor();
+    private final ExecutorService exec =
+            /*(AbstractExecutorService) */Executors.newSingleThreadExecutor();
 
     private SimulationLoop curRunnable;
     private Future<?> preCalc = null;
@@ -44,7 +44,7 @@ public class AtaptiveUct extends PvpAi
 
     public static PvpAi create(boolean optimize)
     {
-        final AtaptiveUct ai = new AtaptiveUct( optimize );
+        final AdaptiveUct ai = new AdaptiveUct( optimize );
 
         ai.curRunnable = new SimulationLoop( ai );
         ai.preCalc = ai.exec.submit( ai.curRunnable );
@@ -56,8 +56,8 @@ public class AtaptiveUct extends PvpAi
     {
         private volatile boolean keepRunning = false;
 
-        private final AtaptiveUct ai;
-        public SimulationLoop(AtaptiveUct ai) {
+        private final AdaptiveUct ai;
+        public SimulationLoop(AdaptiveUct ai) {
             this.ai = ai;
         }
 
@@ -91,7 +91,7 @@ public class AtaptiveUct extends PvpAi
 
 
     //--------------------------------------------------------------------
-    private AtaptiveUct(boolean optimize)
+    private AdaptiveUct(boolean optimize)
     {
         this.optimize = optimize;
 

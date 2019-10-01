@@ -42,7 +42,7 @@ public interface Snake
     Direction lastMoveDirection();
 
     //-----------------------------------------------
-    public static class Util
+    class Util
     {
         private Util() {}
 

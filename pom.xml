@@ -21,8 +21,8 @@
 
     <!--====================================================================-->
     <name>Snake Warz</name>
-    <url>http://code.google.com/p/snakewarz</url>
-    <inceptionYear>2006</inceptionYear>
+    <url>https://github.com/alexoooo/snakewarz</url>
+    <inceptionYear>2005</inceptionYear>
     <description>Planning testbed</description>
 
 
@@ -37,11 +37,24 @@
         <dependency>
             <groupId>ao.util</groupId>
             <artifactId>util-lang</artifactId>
-            <!--<version>${ao.util.version}</version>-->
-            <version>2.0.0</version>
+            <version>${ao.util.version}</version>
         </dependency>
     </dependencies>
 
+
+    <!--====================================================================-->
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.0</version>
+                <configuration>
+                    <release>13</release>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
 
     <!--====================================================================-->
