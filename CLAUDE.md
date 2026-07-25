@@ -13,12 +13,12 @@ Everything else exists to serve that.
 
 ## Current state — read this first
 
-Mid-rewrite. **Phase 0 of 6 is complete**: the Gradle/Kotlin scaffold and the deployment pipeline
-exist and are verified, but there is no game logic yet.
+Mid-rewrite. **Phase 1 of 6 is complete**: the Gradle/Kotlin scaffold, the deployment pipeline and
+the whole rules engine exist and are verified. There is no driver, no bot and no game UI yet.
 
 | Path | Status |
 |---|---|
-| `core/` | `:core` module. Currently only the padded-grid primitives: `Cell`, `Direction`, `DirectionSet`, `Grid` |
+| `core/` | `:core` module. Padded-grid primitives plus the rules engine: `Occupancy`, `Board`, `MatchState`, `SplitMix64`, `Budget` |
 | `app/` | `:app` module. Phase 0 sanity page — paints an empty grid, no game |
 | `build-logic/` | Convention plugins `snakewarz.pure` and `snakewarz.browser`, incl. `checkModulePurity` |
 | `legacy/java/ao/**` | The original Java, reference only. Not in the build. Deleted at release 1 |
@@ -31,7 +31,7 @@ The pre-rewrite tree is one command away: `git show legacy-java-final:<path>`.
 
 **Phase tracker** — update this line as phases land, and mirror it in `docs/MIGRATION.md`:
 
-> Current phase: **1 — not started** (core rules: Occupancy, SnakeBody, Board, Rules, outcome)
+> Current phase: **2 — not started** (driver, replay codec, `RandomBot` and `WallHugBot`)
 
 ## Where the project is going
 
@@ -69,7 +69,7 @@ These are the load-bearing constraint of the architecture. Do not add any of the
 - `:bots` → `:match`, `:ui`, `:app`. A bot must not be able to reach the clock or another slot's RNG.
 - `:ui` → `:bots`.
 
-## Three non-obvious facts
+## Four non-obvious facts
 
 Getting any of these wrong silently breaks the game or its determinism.
 
@@ -90,6 +90,12 @@ platforms (`+ - * / sqrt` are), and UCB1 is `sqrt(log(v)/(5*cv))` — so a seed-
 could diverge between the JVM test target and the browser. Recording moves also survives you tuning a bot
 constant. The seed is kept as provenance and as a CI verification input, never as the playback source of
 truth.
+
+**4. Legality is evaluated *before* the tail retracts.** A snake may not move into the square its own tail
+is about to leave, even on a turn when that square is certain to clear. This is the legacy rule —
+`SimpleSnakesGame` tested the destination against a board built before the retraction — and letting the
+tail clear first is a materially different game, one where a snake can chase its own tail forever. It is
+`BoardRulesTest."a snake may not move into the square its own tail is about to leave"`.
 
 ## Determinism rules
 

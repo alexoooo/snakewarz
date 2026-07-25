@@ -9,7 +9,7 @@ change later and cheap to get right now.
 | Phase | Status | Summary |
 |---|---|---|
 | 0 | **done** | Gradle scaffold, Java moved to `legacy/`, empty page deploys |
-| 1 | not started | Core rules, rewritten from scratch |
+| 1 | **done** | Core rules, rewritten from scratch |
 | 2 | not started | Driver, replay codec, two trivial bots |
 | 3 | not started | UI — first playable milestone |
 | 4 | not started | Search bots (A*, flood fill, MCTS) |
@@ -149,17 +149,23 @@ rendering and flood-fill bots both need, with no shift/mask.
 class Occupancy(val grid: Grid) {
     private val owner = ByteArray(grid.cellCount)   // 0 empty, 1..n snake, -1 wall
     var hash: Long = 0L; private set                // Zobrist, O(1) update
-    fun isFree(c: Cell): Boolean
-    fun ownerOf(c: Cell): Int
+    fun isFree(c: Cell): Boolean; fun isWall(c: Cell): Boolean
+    fun ownerOf(c: Cell): SnakeId                   // SnakeId.NONE if empty or wall
     fun occupy(c: Cell, by: SnakeId); fun vacate(c: Cell)
     fun freeNeighbors(c: Cell): DirectionSet
     fun copyFrom(other: Occupancy)                  // reuse allocation
+    fun clear()                                     // keeps the wall ring
 }
 ```
 
 Zobrist keys derive from a **fixed compile-time constant**, not the match seed — the hash is never
 persisted, and MCTS tree reuse needs it stable within a process. This replaces `BiState.equals()`'s
-full `BitSet` comparison with a `Long` compare.
+full `BitSet` comparison with a `Long` compare. Shipped as a stateless `mix64(cell, owner)` rather
+than a key table: same guarantee, no per-instance array to copy around or miss cache on.
+
+`Occupancy.hash` covers the squares only. `BoardView.hash` xors in the heads, the growth phases, the
+liveness bits and whose turn it is — all four of which distinguish genuinely different positions that
+occupancy alone cannot tell apart.
 
 The invariant to property-test, the guard on this whole optimization: *incremental occupancy always
 equals occupancy rebuilt from all bodies.*
@@ -173,36 +179,42 @@ an immutable snapshot derived from it.** Rules logic exists once, on the mutable
 snapshots at most once per turn — O(snakes), negligible.
 
 ```kotlin
-class Board : BoardView {
+class Board(grid, spawnCells: IntArray, rules: RulesConfig, turnOrder: IntArray) : BoardView {
     fun apply(id: SnakeId, d: Direction): MoveOutcome   // mutates, pushes undo record
-    fun undo()
+    fun eliminate(id: SnakeId, reason: EliminationReason)  // RESIGNED / FORFEIT only
+    fun undo(); val undoDepth: Int
+    fun reset()
     fun copyFrom(other: Board)
     fun snapshot(): MatchState
 }
 
 interface BoardView {
-    val grid: Grid; val rules: RulesConfig
+    val grid: Grid; val rules: RulesConfig; val snakeCount: Int
     val toAct: SnakeId; val turnIndex: Int; val aliveCount: Int
-    val outcome: MatchOutcome?
+    val outcome: MatchOutcome?; val hash: Long
     fun isFree(c: Cell): Boolean
-    fun ownerOf(c: Cell): SnakeId?
+    fun ownerOf(c: Cell): SnakeId            // SnakeId.NONE, never null — a nullable value class boxes
     fun legalMoves(id: SnakeId): DirectionSet
     fun snake(id: SnakeId): SnakeView
-    fun snakeCount(): Int; fun snakeIdAt(i: Int): SnakeId
 }
 
 interface SnakeView {
-    val id: SnakeId; val alive: Boolean
+    val id: SnakeId; val alive: Boolean; val eliminationReason: EliminationReason?
     val length: Int; val head: Cell; val tail: Cell
     val lastDirection: Direction?; val movesMade: Int
+    val growsOnNextMove: Boolean
     fun cellAt(i: Int): Cell                 // 0 == tail
-    fun growsOnNextMove(): Boolean
 }
 ```
 
+Snake ids are dense — exactly `0 until snakeCount` — so the sketched `snakeIdAt(i)` was redundant and
+is not there. Turn order is a permutation `Board` holds, not a reordering of the ids, so `:match` can
+randomise who acts first without disturbing the slot identities the replay format records.
+
 Bodies are a **ring buffer over `IntArray`** with push/pop at both ends (both needed for undo). The
 undo record fits in one `Long` — vacated tail cell or grow sentinel, previous direction ordinal,
-liveness bits — stored in a `LongArray` stack, so search nodes cost zero allocation.
+elimination reason, the acting position in the turn order, and a bit for "the match ended here" —
+stored in a `LongArray` stack, so search nodes cost zero allocation.
 
 ### Rules and outcome
 
@@ -213,11 +225,22 @@ data class RulesConfig(
 )
 
 enum class EliminationReason { TRAPPED, SUICIDE, RESIGNED, FORFEIT }
+enum class MoveOutcome { MOVED, TRAPPED, SUICIDE }
+enum class MatchEnd { LAST_SNAKE_STANDING, ALL_ELIMINATED, TURN_LIMIT }
+data class MatchOutcome(val winner: SnakeId, val end: MatchEnd)  // winner NONE for a draw
 ```
 
 `apply` into a non-free cell eliminates the snake — `TRAPPED` if `legalMoves` was empty (no choice
 existed), `SUICIDE` otherwise. This preserves legacy semantics while replacing `GameResult`'s single
 confusing `isSuicide` boolean with a per-snake reason.
+
+**Legality is evaluated before the tail retracts**, so a snake cannot move into the square its own
+tail is about to leave. This is the legacy rule — `SimpleSnakesGame` tested the destination against a
+board built before the retraction — and the alternative is a different game, one in which a snake can
+chase its own tail indefinitely.
+
+**A dead snake's body stays on the board** as an obstacle, as in legacy. In a three-way match the
+first casualty leaves a wall behind, which is most of what makes three-way matches interesting.
 
 **Two deliberate rule changes:** `maxTurns` is new (legacy has no cap; required for browser safety
 and bounded rollouts). And the last survivor now **wins immediately** even if trapped — legacy asks
@@ -444,10 +467,10 @@ Divergence risk is real and bounded: `+ - * / sqrt` on `Double` are IEEE-754-exa
 `log`/`exp` are not guaranteed identical, and `Long` performance differs. So a **conformance suite**
 runs on both targets and is the *only* thing that runs in a browser in CI.
 
-1. **Rules units** (JVM): legality; the **growth cadence golden `1,1,2,2,3,3,4`**; `TRAPPED` vs
-   `SUICIDE`; first-move reversal legal, later reversal illegal; `TURN_LIMIT` draw.
-2. **Property tests:** `undo(apply(s, m))` restores the board bit-for-bit and by Zobrist hash;
-   **incremental occupancy == occupancy rebuilt from all bodies**.
+1. **Rules units** (JVM) — *done, Phase 1*: legality; the **growth cadence golden `1,1,2,2,3,3,4`**;
+   `TRAPPED` vs `SUICIDE`; first-move reversal legal, later reversal illegal; `TURN_LIMIT` draw.
+2. **Property tests** — *done, Phase 1*: `undo(apply(s, m))` restores the board bit-for-bit and by
+   Zobrist hash; **incremental occupancy == occupancy rebuilt from all bodies**.
 3. **Codec round-trip** + fuzz: `decode(encode(r)) == r`.
 4. **Golden move-stream hashes** per bot: `(seed, 20×20, bot vs RandomBot) → hash`. Catches the
    classic failure — iteration order over a `HashMap`. Legacy `GameStateImpl` iterated a `HashMap`
@@ -476,9 +499,20 @@ Measured results: 15 JVM tests green; production bundle **18.5 KiB gzipped** (9.
 source map) against a 1.5 MiB ceiling; `.wasm` served as `application/wasm`; boots clean in Chrome
 with no console output; the unsupported-browser panel verified by serving a deliberately broken dist.
 
-**Phase 1 — core rules, rewritten from scratch.** Occupancy, SnakeBody, Board, Rules, MatchState,
-outcome. Full JVM suite including the growth golden. Explicitly a rewrite, not a port: legacy has two
-competing board representations and the wrong performance shape.
+**Phase 1 — core rules, rewritten from scratch. DONE.** `Occupancy`, `SnakeBody`, `Board`,
+`RulesConfig`, `MatchState`, `MatchOutcome`. Explicitly a rewrite, not a port: legacy has two
+competing board representations and the wrong performance shape. `SplitMix64` and `Budget` landed
+here too — both are `:core`'s responsibility, both are small and fully specified above, and the
+property tests wanted a PRNG anyway.
+
+Measured results: 72 tests green, and green **identically on `wasmJs` in Chrome** — worth running
+once at this stage, because the RNG's known-answer vectors and the Zobrist keys both lean on 64-bit
+multiply and unsigned shift, which is exactly where the two targets could have drifted. The suite
+covers the growth golden `1,1,2,2,3,3,4`, classic Tron at `growEveryNthMove = 1`, `TRAPPED` vs
+`SUICIDE`, first-move reversal legal and later reversal fatal, the tail-square rule, the turn-limit
+draw, corpses as obstacles, dead slots skipped in the turn order, and the two property tests that
+guard the design: *unwinding a whole random game restores every position bit for bit, hash included*,
+and *incremental occupancy equals occupancy rebuilt from the bodies*.
 
 **Phase 2 — driver, replay codec, two trivial bots.** `RandomBot`, `WallHugBot` as semantic ports.
 Headless matches in JVM tests, replay round-trip, `verify()`. Still no UI — at the end of this phase
