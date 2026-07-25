@@ -1,4 +1,23 @@
-.svn
-target
-.idea
+# Gradle
+.gradle/
+build/
+
+# Kotlin compiler session state
+.kotlin/
+
+# IDE
+.idea/
 *.iml
+*.ipr
+*.iws
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local session config
+.claude/
+
+# Deliberately NOT ignored:
+#   gradle/wrapper/gradle-wrapper.jar  - the wrapper must work on a fresh clone
+#   kotlin-js-store/                   - the npm lockfile pins the webpack/karma toolchain

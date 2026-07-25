@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build, JVM tests, bundle budget
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # `build` compiles both targets, runs the fast JVM test suite, and runs
+      # checkModulePurity on every pure module. Browser tests are excluded here by design;
+      # they are the separate browser-conformance job below.
+      - name: Build
+        run: ./gradlew build --stacktrace
+
+      - name: Production distribution
+        run: ./gradlew :app:wasmJsBrowserDistribution
+
+      # Kotlin/Wasm bundle size is a standing risk, so it is a build failure rather than a
+      # code review question. GitHub Pages serves gzip, so measure gzipped -- not brotli.
+      # Source maps are excluded: browsers only fetch them with devtools open.
+      - name: Check gzipped transfer size
+        run: |
+          DIST=app/build/dist/wasmJs/productionExecutable
+          LIMIT=$((1536 * 1024))
+          TOTAL=0
+          for f in "$DIST"/*; do
+            case "$f" in *.map) continue ;; esac
+            SIZE=$(gzip -9 -c "$f" | wc -c)
+            printf '  %-40s %8d bytes gzipped\n' "$(basename "$f")" "$SIZE"
+            TOTAL=$((TOTAL + SIZE))
+          done
+          echo "Total gzipped transfer: ${TOTAL} bytes (limit ${LIMIT})"
+          if [ "$TOTAL" -gt "$LIMIT" ]; then
+            echo "::error::Bundle exceeds the gzipped transfer budget (${TOTAL} > ${LIMIT})."
+            exit 1
+          fi
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '**/build/reports/**'
+          retention-days: 7
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/master'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/build/dist/wasmJs/productionExecutable
+
+  browser-conformance:
+    name: Browser conformance (headless Chrome)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The only job that runs a real browser. Everything provable on the JVM is proven there
+      # instead, because Karma startup dominates the runtime of small suites.
+      - name: Run wasmJs tests
+        run: ./gradlew allTests -PbrowserTests=true --stacktrace
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-reports
+          path: '**/build/reports/**'
+          retention-days: 7
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

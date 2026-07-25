@@ -1,0 +1,173 @@
+/*
+ * Hand-written CSS, no framework. Theme-aware via prefers-color-scheme.
+ * Kept deliberately small: the sidebar and controls grow here rather than in Kotlin.
+ */
+
+:root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --ink: #16191d;
+    --ink-dim: #5b6470;
+    --line: #dfe3e8;
+    --accent: #2f6f4f;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #14171a;
+        --panel: #1c2024;
+        --ink: #e8ebee;
+        --ink-dim: #99a3ae;
+        --line: #2c3238;
+        --accent: #6fcf97;
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 1.5rem;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Boot states -------------------------------------------------------------- */
+
+#app,
+#unsupported {
+    display: none;
+}
+
+body.booted #app {
+    display: block;
+}
+
+body.failed #unsupported {
+    display: block;
+}
+
+body.booted #loading,
+body.failed #loading {
+    display: none;
+}
+
+#loading {
+    color: var(--ink-dim);
+    padding: 2rem 0;
+}
+
+#unsupported {
+    max-width: 34rem;
+    padding: 1.25rem 1.5rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+}
+
+#unsupported h1 {
+    margin-top: 0;
+    font-size: 1.2rem;
+}
+
+#unsupported .detail {
+    color: var(--ink-dim);
+    font-size: 0.85rem;
+    word-break: break-word;
+}
+
+/* Layout ------------------------------------------------------------------- */
+
+header h1 {
+    margin: 0;
+    font-size: 1.35rem;
+    letter-spacing: -0.01em;
+}
+
+.tagline {
+    margin: 0.15rem 0 1.25rem;
+    color: var(--ink-dim);
+    font-size: 0.9rem;
+}
+
+/*
+ * Grid, not flexbox, and deliberately so. The canvas sizes its backing store from the width of
+ * .board-wrap, so .board-wrap's width must not in turn depend on the canvas -- with `flex: 1 1 auto`
+ * it did, and the board came out a different size on each load. `minmax(0, 1fr)` gives the column a
+ * definite width that content cannot influence.
+ */
+.arena {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 17rem;
+    gap: 1.5rem;
+    align-items: start;
+    max-width: 70rem;
+}
+
+@media (max-width: 46rem) {
+    .arena {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.board-wrap {
+    min-width: 0;
+}
+
+#board {
+    display: block;
+    max-width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+.sidebar {
+    padding: 1rem 1.25rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+}
+
+.sidebar h2 {
+    margin: 0 0 0.75rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-dim);
+}
+
+.sidebar dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.3rem 0.9rem;
+    margin: 0 0 1rem;
+    font-size: 0.9rem;
+}
+
+.sidebar dt {
+    color: var(--ink-dim);
+}
+
+.sidebar dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.sidebar .note {
+    margin: 0;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--line);
+    color: var(--ink-dim);
+    font-size: 0.82rem;
+}
+
+code {
+    padding: 0.05em 0.3em;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    font-size: 0.85em;
+}

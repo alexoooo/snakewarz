@@ -1,0 +1,2 @@
+Required by GitHub Pages: without this file, Jekyll processing strips paths beginning with an
+underscore, which webpack and the Kotlin/Wasm toolchain do emit. Contents are ignored.

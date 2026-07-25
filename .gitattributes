@@ -1,0 +1,21 @@
+# The repository stores LF. Without this, line endings depend on each contributor's
+# core.autocrlf setting, and a CRLF gradlew fails on Linux and macOS -- including CI.
+* text=auto eol=lf
+
+# Explicit, because this one breaking is the expensive case.
+gradlew text eol=lf
+
+# Windows shells are happier with CRLF here.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary: never diffed, never line-ending converted.
+*.jar binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.wasm binary
+
+# Frozen reference material. Exempt from normalisation so Git never rewrites bytes that
+# were committed years ago, but still diffable.
+legacy/** -text
