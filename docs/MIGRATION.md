@@ -10,7 +10,7 @@ change later and cheap to get right now.
 |---|---|---|
 | 0 | **done** | Gradle scaffold, Java moved to `legacy/`, empty page deploys |
 | 1 | **done** | Core rules, rewritten from scratch |
-| 2 | not started | Driver, replay codec, two trivial bots |
+| 2 | **done** | Driver, replay codec, two trivial bots |
 | 3 | not started | UI — first playable milestone |
 | 4 | not started | Search bots (A*, flood fill, MCTS) |
 | 5 | not started | Contributed bots |
@@ -407,7 +407,12 @@ class MatchRecord(
 alphabet reserving codes for resign/forfeit — costs 50% more for events occurring at most
 `slots - 1` times per match. A **suicide needs no symbol at all**: it is a recorded direction that
 happens to be illegal on replay, so it is self-describing. Only `RESIGNED` and `FORFEIT` need the
-table.
+table, and a turn listed there carries no entry in the move stream, which is what keeps that stream
+dense.
+
+The `slots - 1` bound is right for a contested match and wrong for a **solo** one, where there is no
+survivor to crown and the single snake can itself be the one that leaves. `MatchRecord.maxTerminals`
+is the corrected form.
 
 Header: version byte, flags, `rows-1`, `cols-1`, LE64 seed, rules varints, then per slot a
 length-prefixed **stable string slug** (`"uct"`, `"wallhug"`). Slugs, not registry indices — indices
@@ -514,9 +519,47 @@ draw, corpses as obstacles, dead slots skipped in the turn order, and the two pr
 guard the design: *unwinding a whole random game restores every position bit for bit, hash included*,
 and *incremental occupancy equals occupancy rebuilt from the bodies*.
 
-**Phase 2 — driver, replay codec, two trivial bots.** `RandomBot`, `WallHugBot` as semantic ports.
-Headless matches in JVM tests, replay round-trip, `verify()`. Still no UI — at the end of this phase
-you can run thousands of matches per second on the JVM.
+**Phase 2 — driver, replay codec, two trivial bots. DONE.** `:bot-api`, `:bots` and `:match` landed
+together, because the thing worth getting right is the *seam* between them and it cannot be evaluated
+one module at a time. `RandomBot` and `WallHugBot` as semantic ports; `Match` with `step()`;
+`MatchSetup`/`MatchRecord`/`ReplayCodec`; `mostDistantSpawns`. Still no UI.
+
+Measured results: 168 tests green, and green **identically on `wasmJs` in Chrome** — which for this
+phase is not a formality. The golden move-stream hashes and the two-bit codec both lean on 64-bit
+arithmetic and byte packing, and the replay format is the one artifact here that has to keep decoding
+years from now, so a silent divergence between the JVM the tests run on and the browser the game runs
+in would be exactly the bug worth catching early. A 20×20 match encodes to under 400 base64url
+characters. `verify()` re-runs the real bots from the seed and reproduces the stream move for move,
+and the same test proves it *fails* on a stream tampered with at one index.
+
+Throughput, measured rather than assumed: **~80,000 complete 20×20 matches per second** on the JVM,
+around 26M turns/s, with the trivial bots — so the figure is the engine and the driver rather than a
+search. That is the number the phase existed to reach, and it is what makes batch tournaments in
+Phase 6 nearly free.
+
+Four decisions worth recording, because each closed off a plausible alternative:
+
+- **Spawns are recorded in the header, not re-derived at playback.** Deriving them saves a dozen bytes
+  and stakes every replay ever shared on `mostDistantSpawns` never changing again. Recording them
+  costs a varint per slot and makes the record self-contained.
+- **`budgetPerTurn` is in the header too.** Playback does not need it, but `verify()` does: re-running
+  an MCTS bot under a different allowance produces different moves, and the divergence would look
+  like a determinism bug rather than a missing field.
+- **The contract suite lives in `:bots`, not `:match`.** Testing "the driver plus the real bots" would
+  have meant a `:match` → `:bots` test dependency, and a test dependency is still an edge in the
+  resolved graph. `:bots` proves its bots deterministic against a forty-line local turn loop, `:match`
+  proves the driver and codec against its own stub bots, and the layering survives. `checkModulePurity`
+  now encodes the whole forbidden-edge table and checks test source sets as well.
+- **`Scratch`/`Playout` shipped now, though no Phase 2 bot uses them.** `:bot-api` is supposed to be
+  the small stable thing bot authors read; adding a field to `Turn` in Phase 4 would break that
+  promise at exactly the moment the first external bots exist.
+
+One real bug found and fixed while writing the tests: the "at most `slots - 1` terminal events" bound
+in this document is wrong for a **solo** match. A contested match ends the instant one survivor is
+left, so nobody is ever the last to go — but a solo match has no survivor to crown, ends with
+`ALL_ELIMINATED`, and its single snake genuinely can be the one that leaves. The literal bound made a
+lone player resigning unrecordable, which Phase 3 would have hit the first time somebody quit a
+practice game.
 
 **Phase 3 — UI. First playable milestone.** Canvas renderer with dirty-cell painting, rAF scheduler,
 play/pause/step/speed, scoreboard, hash replay load/share, `InteractiveBot`.

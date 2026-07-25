@@ -13,25 +13,29 @@ Everything else exists to serve that.
 
 ## Current state — read this first
 
-Mid-rewrite. **Phase 1 of 6 is complete**: the Gradle/Kotlin scaffold, the deployment pipeline and
-the whole rules engine exist and are verified. There is no driver, no bot and no game UI yet.
+Mid-rewrite. **Phase 2 of 6 is complete**: the scaffold, the deployment pipeline, the rules engine,
+the bot contract, the match driver and the replay codec all exist and are verified. Matches run
+headless and reproduce exactly. There is no game UI yet, and no search bot yet.
 
 | Path | Status |
 |---|---|
 | `core/` | `:core` module. Padded-grid primitives plus the rules engine: `Occupancy`, `Board`, `MatchState`, `SplitMix64`, `Budget` |
-| `app/` | `:app` module. Phase 0 sanity page — paints an empty grid, no game |
+| `bot-api/` | `:bot-api` module. `Bot`, `Decision`, `Turn`, `BotSetup`, `BotRegistry`, plus `Scratch`/`Playout` — the search arena that makes the budget structural |
+| `bots/` | `:bots` module. `RandomBot`, `WallHugBot`, and `ShippedBots`, the `BotRegistry` implementation |
+| `match/` | `:match` module. `Match` driver, `MatchSetup`, `MatchRecord`, `ReplayCodec`, spawn placement. No time, no DOM |
+| `app/` | `:app` module. Phase 0 sanity page — paints an empty grid, no game. Not yet wired to the driver |
 | `build-logic/` | Convention plugins `snakewarz.pure` and `snakewarz.browser`, incl. `checkModulePurity` |
 | `legacy/java/ao/**` | The original Java, reference only. Not in the build. Deleted at release 1 |
 | `docs/MIGRATION.md` | The design doc and phase plan. **Read this before changing architecture** |
 
-`:bot-api`, `:bots`, `:match` and `:ui` do **not exist yet** — they arrive in Phases 2–3. Do not
-assume anything below exists; check the tree.
+`:ui` does **not exist yet** — it arrives in Phase 3, and `:app` is still the Phase 0 sanity page. Do
+not assume anything below exists; check the tree.
 
 The pre-rewrite tree is one command away: `git show legacy-java-final:<path>`.
 
 **Phase tracker** — update this line as phases land, and mirror it in `docs/MIGRATION.md`:
 
-> Current phase: **2 — not started** (driver, replay codec, `RandomBot` and `WallHugBot`)
+> Current phase: **3 — not started** (canvas renderer, rAF scheduler, controls, `InteractiveBot`)
 
 ## Where the project is going
 
@@ -162,22 +166,35 @@ several minutes, while `jvmTest` is seconds.
 ## Adding a bot
 
 ```kotlin
-class MyBot(private val setup: BotSetup) : Bot {
+class MyBot(setup: BotSetup) : Bot {
+    private val rng = setup.rng
+
     override fun chooseMove(turn: Turn): Decision =
-        turn.rng.pick(turn.legalMoves)?.let { Decision.Move(it) } ?: Decision.Resign
+        Decision.Move(rng.pick(turn.legalMoves) ?: Direction.NORTH)
 }
 
-// bots/BotRegistry.kt
-register("my-bot", ::MyBot)
+// bots/ShippedBots.kt
+register("my-bot", "My Bot", ::MyBot)
 ```
 
 A bot instance is created once per slot per match, so instance fields persist across turns — that is how
 MCTS keeps its tree with no extra API. Get randomness from `setup.rng`, never `Random.Default`. Poll
 `turn.budget` in any search loop.
 
-Every registry entry is run against the shared `botContract` suite in CI: never returns an illegal move
-when a legal one exists, respects its budget, is deterministic given an identical seed, retains no
-cross-match state. That suite is what makes "fork → add a bot → PR" safe to accept.
+Every registry entry is run against the shared contract suite in CI (`bots/src/commonTest/.../BotContractTest`):
+never returns an illegal move when a legal one exists, survives a budget of zero, is deterministic given
+an identical seed, retains no cross-match state, does not claim to be interactive, and terminates on every
+board shape. That suite is what makes "fork → add a bot → PR" safe to accept.
+
+For a rollout, take `turn.scratch.playout()` and spin on `outcome`:
+
+```kotlin
+val p = turn.scratch.playout()
+while (p.outcome == null) p.advance(policy.pick(p.board.legalMoves(p.toAct)) ?: Direction.NORTH)
+```
+
+`advance` charges the budget itself, and an exhausted budget makes `outcome` a draw — so the loop
+condition *is* the budget check and the search terminates structurally rather than on trust.
 
 ## Working with the legacy Java
 

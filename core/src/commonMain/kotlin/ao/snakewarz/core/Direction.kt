@@ -18,11 +18,22 @@ public enum class Direction(public val dRow: Int, public val dCol: Int) {
 
     public val opposite: Direction get() = OPPOSITES[ordinal]
 
+    /**
+     * A quarter turn to the left of a snake facing this way — counter-clockwise on screen, since the
+     * row axis points down. Facing [NORTH], left is [WEST].
+     */
+    public val turnedLeft: Direction get() = LEFT_TURNS[ordinal]
+
+    /** A quarter turn to the right of a snake facing this way. Facing [NORTH], right is [EAST]. */
+    public val turnedRight: Direction get() = RIGHT_TURNS[ordinal]
+
     private companion object {
         /**
          * Indexed by ordinal. Safe to reference entries here: enum constants are initialized before
          * any other static state, including the companion itself.
          */
         val OPPOSITES: Array<Direction> = arrayOf(SOUTH, NORTH, WEST, EAST)
+        val LEFT_TURNS: Array<Direction> = arrayOf(WEST, EAST, NORTH, SOUTH)
+        val RIGHT_TURNS: Array<Direction> = arrayOf(EAST, WEST, SOUTH, NORTH)
     }
 }

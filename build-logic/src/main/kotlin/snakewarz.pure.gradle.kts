@@ -53,7 +53,17 @@ tasks.matching { it.name == "wasmJsBrowserTest" }.configureEach {
 // the JVM, and (b) add a Kotlin/JS fallback target later as a config change rather than a rewrite.
 // ---------------------------------------------------------------------------------------------
 
-val forbiddenProjects = setOf(":ui", ":app")
+// The forbidden-edge table from docs/MIGRATION.md, encoded where it can actually be enforced.
+// A module may depend only on the ones above it, so each entry lists everything below.
+// Test source sets are checked too — an integration test is not a licence to cross a layer.
+val forbiddenByModule = mapOf(
+    ":core" to setOf(":bot-api", ":bots", ":match", ":ui", ":app"),
+    ":bot-api" to setOf(":bots", ":match", ":ui", ":app"),
+    ":bots" to setOf(":match", ":ui", ":app"),
+    ":match" to setOf(":bots", ":ui", ":app"),
+)
+
+val forbiddenProjects = forbiddenByModule[project.path] ?: setOf(":ui", ":app")
 val forbiddenModules = setOf("kotlinx-browser")
 
 val checkModulePurity = tasks.register("checkModulePurity") {
@@ -99,12 +109,14 @@ val checkModulePurity = tasks.register("checkModulePurity") {
         if (violations.isNotEmpty()) {
             error(
                 buildString {
-                    appendLine("Module $modulePath must stay platform-free, but it depends on:")
+                    appendLine("Module $modulePath may not depend on:")
                     violations.sorted().forEach { appendLine("  - $it") }
                     appendLine()
                     appendLine("See \"Forbidden dependency edges\" in CLAUDE.md. Do not add these, even")
-                    appendLine("temporarily. If a pure module seems to need the DOM, the dependency is")
-                    appendLine("pointing the wrong way: invert it behind an interface and inject from :app.")
+                    appendLine("temporarily, and not in a test source set either — a test dependency is")
+                    appendLine("still an edge in the graph. When a module seems to need something below")
+                    appendLine("it, the dependency is pointing the wrong way: invert it behind an")
+                    appendLine("interface here and inject the implementation from :app.")
                 },
             )
         }

@@ -292,6 +292,18 @@ public class Board(
         journalTop = 0
     }
 
+    /**
+     * An independent board at the same position, with an empty undo journal.
+     *
+     * This is how a search arena comes into being: allocate one of these once, then [copyFrom] the
+     * live board on every rollout reset. Never call it per node — that is the legacy mistake.
+     */
+    public fun copy(): Board {
+        val clone = Board(grid, spawns, rules, order)
+        clone.copyFrom(this)
+        return clone
+    }
+
     /** An immutable copy of the current position. O(total snake length), so at most once per turn. */
     public fun snapshot(): MatchState {
         val snakes = Array(snakeCount) { slot ->
