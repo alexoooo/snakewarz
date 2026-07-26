@@ -55,6 +55,8 @@ internal class Chrome(
     private val shareButton: HTMLButtonElement = elementById("share")
     private val shareUrlInput: HTMLInputElement = elementById("share-url")
 
+    private val repeat = KeyRepeat { direction -> dispatch(UiIntent.Steer(direction)) }
+
     init {
         fillPickers(registry)
         seedInput.value = freshSeed().toString()
@@ -76,6 +78,11 @@ internal class Chrome(
         }
 
         window.addEventListener("keydown") { event -> onKeyDown(event as KeyboardEvent) }
+        window.addEventListener("keyup") { event -> onKeyUp(event as KeyboardEvent) }
+
+        // A key let go of while the page is not looking never reports it, so a snake that kept
+        // moving because somebody alt-tabbed would have nothing on screen to explain it.
+        window.addEventListener("blur") { repeat.cancel() }
     }
 
     /** Where the speed slider is now, so the scheduler and the label agree from the first frame. */
@@ -114,6 +121,12 @@ internal class Chrome(
     fun render(model: UiModel) {
         playButton.textContent = if (model.running) "Pause" else "Play"
         status.textContent = "Turn ${model.turnIndex} · ${model.status}"
+
+        // A match with a person in it advances on their key and on nothing else, so there is no
+        // clock here to start or step. Greyed rather than hidden: the buttons come back the moment
+        // they are out and the survivors play on, and a control that moves is worse than one that dims.
+        playButton.disabled = model.interactive
+        stepButton.disabled = model.interactive
 
         scrub.hidden = !model.replay
         if (model.replay) {
@@ -170,8 +183,9 @@ internal class Chrome(
     }
 
     private fun onKeyDown(event: KeyboardEvent) {
-        // Auto-repeat is the keyboard talking, not the player. InputBuffer collapses repeats too;
-        // this is the cheaper half of the pair, and the half that also leaves the queue alone.
+        // Auto-repeat is the keyboard talking, not the player: its rate is a text-editing rate, and
+        // a different one on every machine. A held key is repeated by KeyRepeat instead, which is
+        // the same everywhere and slow enough to steer by.
         if (event.repeat) {
             return
         }
@@ -180,17 +194,10 @@ internal class Chrome(
             return
         }
 
-        val steer = when (event.key) {
-            "ArrowUp", "w", "W" -> Direction.NORTH
-            "ArrowDown", "s", "S" -> Direction.SOUTH
-            "ArrowLeft", "a", "A" -> Direction.WEST
-            "ArrowRight", "d", "D" -> Direction.EAST
-            else -> null
-        }
-
+        val steer = steerFor(event.key)
         if (steer != null) {
             event.preventDefault()
-            dispatch(UiIntent.Steer(steer))
+            repeat.press(steer)
             return
         }
 
@@ -202,6 +209,22 @@ internal class Chrome(
 
             "." -> dispatch(UiIntent.StepOnce)
         }
+    }
+
+    /**
+     * Deliberately without the focus guard [onKeyDown] has: if the focus moves mid-hold, the key
+     * still has to be able to stop, and a release that stops nothing costs nothing.
+     */
+    private fun onKeyUp(event: KeyboardEvent) {
+        steerFor(event.key)?.let(repeat::release)
+    }
+
+    private fun steerFor(key: String): Direction? = when (key) {
+        "ArrowUp", "w", "W" -> Direction.NORTH
+        "ArrowDown", "s", "S" -> Direction.SOUTH
+        "ArrowLeft", "a", "A" -> Direction.WEST
+        "ArrowRight", "d", "D" -> Direction.EAST
+        else -> null
     }
 
     private fun speedLabel(): String {

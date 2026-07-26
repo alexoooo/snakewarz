@@ -199,6 +199,14 @@ button:hover {
     border-color: var(--accent);
 }
 
+/* The transport while a person is playing: a turn-based match has no clock to drive. */
+button:disabled,
+button:disabled:hover {
+    opacity: 0.45;
+    border-color: var(--line);
+    cursor: default;
+}
+
 button.primary {
     background: var(--accent);
     color: var(--accent-ink);

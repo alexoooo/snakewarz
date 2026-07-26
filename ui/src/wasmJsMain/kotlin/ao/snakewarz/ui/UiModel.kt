@@ -13,6 +13,11 @@ package ao.snakewarz.ui
 internal class UiModel(
     /** Watching a recording rather than playing a match. Reveals the scrub bar. */
     val replay: Boolean,
+    /**
+     * A person is still in this match, so the keyboard is its clock rather than the scheduler.
+     * Disables the transport: there is no clock to start, stop or step.
+     */
+    val interactive: Boolean,
     val running: Boolean,
     val turnIndex: Int,
     /** The length of the recording, or [turnIndex] when there is no recording to be ahead of. */

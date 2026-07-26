@@ -2,9 +2,12 @@ package ao.snakewarz.match
 
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.core.Direction
+import ao.snakewarz.core.EliminationReason
+import ao.snakewarz.core.MatchEnd
 import ao.snakewarz.core.SnakeId
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class InteractiveBotTest {
@@ -30,34 +33,57 @@ class InteractiveBotTest {
         val buffer = InputBuffer()
         buffer.push(Direction.NORTH)
 
-        // NORTH is where the neck is, so it is not legal and the buffer drops it. With nothing left
-        // to play the snake carries on south rather than reversing into itself.
-        assertEquals(Decision.Move(Direction.SOUTH), InteractiveBot(buffer).chooseMove(turnOn(board)))
+        // NORTH is where the neck is, so it is not legal and the buffer drops it. Under
+        // CONTINUE_STRAIGHT that leaves nothing to play, so the snake carries on south rather than
+        // reversing into itself.
+        val bot = InteractiveBot(buffer, StallPolicy.CONTINUE_STRAIGHT)
+
+        assertEquals(Decision.Move(Direction.SOUTH), bot.chooseMove(turnOn(board)))
     }
 
     @Test
-    fun `with nothing queued it keeps the heading the player chose`() {
+    fun `CONTINUE_STRAIGHT keeps the heading the player chose when nothing is queued`() {
+        val board = soloBoard()
+        board.apply(SnakeId(0), Direction.EAST)
+        val bot = InteractiveBot(InputBuffer(), StallPolicy.CONTINUE_STRAIGHT)
+
+        assertEquals(Decision.Move(Direction.EAST), bot.chooseMove(turnOn(board)))
+    }
+
+    @Test
+    fun `before the first move there is no heading to continue, so even CONTINUE_STRAIGHT waits`() {
+        // It sustains a direction the player picked; it never invents one. The legacy MoveTracker
+        // did invent one -- the first available direction -- so a bot played a move nobody chose
+        // and then repeated it forever.
+        val bot = InteractiveBot(InputBuffer(), StallPolicy.CONTINUE_STRAIGHT)
+
+        assertEquals(Decision.Pending, bot.chooseMove(turnOn(soloBoard())))
+    }
+
+    @Test
+    fun `the default never moves on its own, even once under way`() {
+        // WAIT_FOR_INPUT, because the shipped game is turn-based: the board is never a move ahead
+        // of the last key the player pressed.
         val board = soloBoard()
         board.apply(SnakeId(0), Direction.EAST)
 
-        assertEquals(Decision.Move(Direction.EAST), InteractiveBot(InputBuffer()).chooseMove(turnOn(board)))
+        assertEquals(Decision.Pending, InteractiveBot(InputBuffer()).chooseMove(turnOn(board)))
     }
 
     @Test
-    fun `before the first move there is no heading to continue, so it waits`() {
-        // CONTINUE_STRAIGHT sustains a direction the player picked; it never invents one. The legacy
-        // MoveTracker did invent one -- the first available direction -- so a bot played a move
-        // nobody chose and then repeated it forever.
-        assertEquals(Decision.Pending, InteractiveBot(InputBuffer()).chooseMove(turnOn(soloBoard())))
-    }
+    fun `a trapped player is eliminated rather than parking the match for good`() {
+        // The one case where waiting is not patience but a deadlock: take() filters illegal input,
+        // so with nothing legal left no key the player could press would ever come back from it.
+        // A snake still has to move, and the engine calls that death what it is.
+        val match = Match(
+            MatchSetup.create(1, 1, listOf(PlayableRegistry.HUMAN_ID), seed = 5),
+            PlayableRegistry(TestRegistry(emptyList()), InputBuffer()),
+        )
 
-    @Test
-    fun `WAIT_FOR_INPUT never moves on its own, even once under way`() {
-        val board = soloBoard()
-        board.apply(SnakeId(0), Direction.EAST)
-        val bot = InteractiveBot(InputBuffer(), StallPolicy.WAIT_FOR_INPUT)
+        assertIs<StepResult.Advanced>(match.step())
 
-        assertEquals(Decision.Pending, bot.chooseMove(turnOn(board)))
+        assertEquals(EliminationReason.TRAPPED, match.view.snake(SnakeId(0)).eliminationReason)
+        assertEquals(MatchEnd.ALL_ELIMINATED, match.outcome?.end)
     }
 
     @Test

@@ -16,11 +16,17 @@ import ao.snakewarz.botapi.BotRegistry
  *
  * Every interactive slot reads the **same** [buffer], because there is only one keyboard. A match
  * therefore takes at most one human; `:ui` offers the seat for one slot only.
+ *
+ * The default [StallPolicy] is [StallPolicy.WAIT_FOR_INPUT], which is what makes a match with a
+ * person in it turn-based. It is a default rather than a caller's decision because `:ui` reads
+ * `Match.interactive` and stops the clock on the strength of it: a registry composed with
+ * [StallPolicy.CONTINUE_STRAIGHT] and shown in a view that expects a person to park would run
+ * itself.
  */
 public class PlayableRegistry(
     private val delegate: BotRegistry,
     buffer: InputBuffer,
-    stallPolicy: StallPolicy = StallPolicy.CONTINUE_STRAIGHT,
+    stallPolicy: StallPolicy = StallPolicy.WAIT_FOR_INPUT,
 ) : BotRegistry {
     private val human = BotEntry(HUMAN_ID, HUMAN_DISPLAY_NAME, BotFactory { InteractiveBot(buffer, stallPolicy) })
 

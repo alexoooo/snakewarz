@@ -34,10 +34,15 @@ import ao.snakewarz.core.SplitMix64
  * Bots are resolved through the [BotRegistry] *interface*. `:match` cannot see `:bots` and does not
  * want to: a replay is a list of slugs, and the codec has no opinion about what they mean.
  */
-public class Match(
+public class Match private constructor(
     public val setup: MatchSetup,
     registry: BotRegistry,
+    /** Set by [playback] alone, and read by [interactive] alone. Stepping does not know about it. */
+    private val scripted: Boolean,
 ) {
+    /** A match played for real: every slot is resolved through [registry] and decides for itself. */
+    public constructor(setup: MatchSetup, registry: BotRegistry) : this(setup, registry, scripted = false)
+
     public val grid: Grid = setup.grid()
 
     private val board: Board = Board(grid, setup.spawnCells(grid), setup.rules, setup.turnOrder())
@@ -69,6 +74,21 @@ public class Match(
     public val turnIndex: Int get() = board.turnIndex
 
     public val outcome: MatchOutcome? get() = board.outcome
+
+    /**
+     * Whether a slot somebody steers by hand is still in the match.
+     *
+     * This goes false the moment that player is eliminated, because a dead slot is never asked for
+     * a move again — which is exactly what lets `:ui` run a match with a person in it from the
+     * keyboard and then hand the ending back to the clock so the survivors can finish it.
+     *
+     * Always false under [playback], and that is why it cannot simply be `bots.any { interactive }`:
+     * a scripted stand-in claims to be interactive too, so that running off the end of a partial
+     * recording parks instead of forfeiting. That is a driver mechanism rather than a person, and
+     * nobody watching a replay is going to press a key to make it continue.
+     */
+    public val interactive: Boolean
+        get() = !scripted && bots.indices.any { bots[it].interactive && board.snake(SnakeId(it)).alive }
 
     /**
      * Plays one turn.
@@ -199,6 +219,7 @@ public class Match(
          * seeking to turn N is a few microseconds of replaying moves onto a fresh board, followed by
          * one full repaint.
          */
-        public fun playback(record: MatchRecord): Match = Match(record.setup, ScriptedRegistry(record))
+        public fun playback(record: MatchRecord): Match =
+            Match(record.setup, ScriptedRegistry(record), scripted = true)
     }
 }

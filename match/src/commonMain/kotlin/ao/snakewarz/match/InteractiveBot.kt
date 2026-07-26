@@ -3,6 +3,7 @@ package ao.snakewarz.match
 import ao.snakewarz.botapi.Bot
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Turn
+import ao.snakewarz.core.Direction
 
 /**
  * A human player, wearing the same interface as every search bot.
@@ -18,7 +19,7 @@ import ao.snakewarz.botapi.Turn
  */
 public class InteractiveBot(
     private val buffer: InputBuffer,
-    private val stallPolicy: StallPolicy = StallPolicy.CONTINUE_STRAIGHT,
+    private val stallPolicy: StallPolicy = StallPolicy.WAIT_FOR_INPUT,
 ) : Bot {
     /** The one bot in the project that may answer [Decision.Pending]. */
     override val interactive: Boolean get() = true
@@ -27,6 +28,15 @@ public class InteractiveBot(
         val chosen = buffer.take(turn.legalMoves)
         if (chosen != null) {
             return Decision.Move(chosen)
+        }
+
+        // Trapped, so there is no key left that would help: [InputBuffer.take] filters illegal
+        // input, and under [StallPolicy.WAIT_FOR_INPUT] waiting for one that can never come would
+        // park the match for good. Every direction from here is the same death, which the engine
+        // records as `TRAPPED` whichever is played — this is a move in the sense that a snake has
+        // to make one, not a choice.
+        if (turn.legalMoves.isEmpty) {
+            return Decision.Move(turn.me.lastDirection ?: Direction.NORTH)
         }
 
         if (stallPolicy == StallPolicy.WAIT_FOR_INPUT) {

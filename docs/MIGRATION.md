@@ -345,9 +345,9 @@ class InteractiveBot(buffer: InputBuffer, policy: StallPolicy) : Bot
 ```
 
 Two UX choices baked in: `take` **filters illegal inputs**, so humans die by being trapped rather
-than by a mistimed keypress into their own neck; and `CONTINUE_STRAIGHT` is the default for the live
-view, because a match that visibly stalls reads as broken. Under replay the interactive slot is
-substituted by a `ScriptedBot`, so `Pending` never appears on a deterministic path.
+than by a mistimed keypress into their own neck; and the stall policy is what decides whether a live
+match is arcade or turn-based. Under replay the interactive slot is substituted by a `ScriptedBot`,
+so `Pending` never appears on a deterministic path.
 
 *Landed in Phase 3, in `:match` rather than `:bot-api`* — the module table always gave `:match`
 human input, and putting them there keeps them JVM-testable. Two refinements the sketch did not have.
@@ -355,6 +355,9 @@ human input, and putting them there keeps them JVM-testable. Two refinements the
 inventing one is precisely the legacy `MoveTracker` bug. And `push` collapses a repeat of the
 direction queued most recently, because a held arrow key fires `keydown` at the operating system's
 auto-repeat rate and would otherwise fill the queue and eat the next several turns the player meant.
+
+*Changed after Phase 3*: **`WAIT_FOR_INPUT` is the shipped default**, and a match with a person in
+it is turn-based rather than real-time — see the note under Phase 3 below.
 
 The seat is composed *outside* `ShippedBots`, by a `PlayableRegistry` that `:app` wraps around it.
 That is forced, and usefully so: the bot contract suite requires that no registry entry claims to be
@@ -612,6 +615,7 @@ Five decisions worth recording:
 - **`CONTINUE_STRAIGHT` waits before the first move.** It sustains a heading the player chose and
   never invents one — which is the legacy `MoveTracker` bug read backwards, and it turns the opening
   into "the board is drawn, the game is live, waiting for you" instead of a snake that bolts.
+  *Superseded after Phase 3, and the opening it describes is now the whole game* — see below.
 - **One canvas, not an underlay.** This document specified a second canvas for the gridlines. Inset
   fills reach the same end: a cell owns `(c*s+1, r*s+1)` to `(c*s+s, r*s+s)`, the one-pixel gutter
   belongs to the gridline, and no fill ever touches it. Same "paint the lines once" property, one
@@ -634,6 +638,35 @@ until it climbed back; the lower bound now costs one `coerceIn`.
 
 Not built, and deliberately: a light-theme pass was written but only exercised on a dark display, and
 the scoreboard shows the first four slots of a replay that somehow carries more.
+
+**After Phase 3 — a match with a person in it is turn-based.** The arcade default was wrong for this
+game. A snake that keeps moving while you think turns every decision into a reaction test, and on a
+board where one square is the whole difference between trapping somebody and trapping yourself, that
+is the wrong difficulty to be selling. So `WAIT_FOR_INPUT` is now the default of both `InteractiveBot`
+and `PlayableRegistry`, and the key is the clock: `:ui` does not start `TurnScheduler` at all while a
+player is alive, and each keypress plays exactly the round it belongs to.
+
+Turn-based does not have to mean one key per square, and `KeyRepeat` is the other half of the feel:
+a held key plays a move every 250ms, a tap plays exactly one, and a key pressed while another is
+held takes the repeat over. It is deliberately *not* the keyboard's own auto-repeat, which
+`Chrome` still drops — that rate is tuned for cursors in text, arrives after half a second of
+nothing, and differs per machine, none of which is a rate you can stop a snake on. It runs on
+`requestAnimationFrame` for the reasons `TurnScheduler` does, and takes its timestamps from the
+frame, so the same synthetic-frame trick drives it in a test.
+
+One bug came with it, and it was only ever latent under `CONTINUE_STRAIGHT`: a **trapped** player
+can never press a legal key, because `take` filters illegal input — so waiting for one parked the
+match for good, with the board saying "your move" and no move able to exist. `InteractiveBot` now
+plays a fatal direction when `legalMoves` is empty, which the engine records as `TRAPPED` exactly as
+it would for a bot in the same position. Found by playing the thing in a browser, not by reading it.
+
+Three more things fell out of it. The transport is *disabled* rather than removed while somebody is
+playing — there is no clock to start, stop or step, and greying it says so without moving anything.
+The moment the player is eliminated the match stops being interactive, the scheduler takes over, and
+the survivors finish the game at the speed on the slider. And `Match.interactive` cannot be
+`bots.any { it.interactive }`, because `ScriptedBot` claims to be interactive so that the end of a
+partial recording parks rather than forfeits; playback is therefore excluded explicitly, by the flag
+`Match.playback` sets. Every one of those is a JVM test in `MatchTest`.
 
 **Phase 4 — search bots.** `AStar`/`Path` semantic ports. `ForkAi`/`ForkPathAi` with flood-fill
 rewritten onto the padded array. Then MCTS: `Reward` **deleted** (a `double` wrapper that allocates

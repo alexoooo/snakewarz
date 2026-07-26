@@ -38,6 +38,7 @@ internal class TestRegistry(entries: List<BotEntry>) : BotRegistry {
                 entry("thrower") { ThrowingBot() },
                 entry("staller") { StallingBot(interactive = false) },
                 entry("human") { StallingBot(interactive = true) },
+                entry("human-east") { FixedBot(Direction.EAST, interactive = true) },
             ),
         )
 
@@ -78,8 +79,16 @@ internal class CyclingBot : Bot {
     }
 }
 
-/** Plays one direction forever, legal or not — the shortest route to a recorded suicide. */
-internal class FixedBot(private val direction: Direction) : Bot {
+/**
+ * Plays one direction forever, legal or not — the shortest route to a recorded suicide.
+ *
+ * [interactive] makes it a person who only ever presses one key, which is what a test needs to put
+ * a player on the board and then get them killed.
+ */
+internal class FixedBot(
+    private val direction: Direction,
+    override val interactive: Boolean = false,
+) : Bot {
     override fun chooseMove(turn: Turn): Decision = Decision.Move(direction)
 }
 

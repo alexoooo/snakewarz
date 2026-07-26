@@ -58,6 +58,18 @@ class PlayableRegistryTest {
     }
 
     @Test
+    fun `the seat waits by default, which is what makes a match with a person in it turn-based`() {
+        // Load-bearing, not a taste: :ui stops the clock on the strength of Match.interactive and
+        // plays one round per keypress, so a seat that coasted on the last heading would run the
+        // match with nobody driving it.
+        val board = soloBoard()
+        board.apply(SnakeId(0), Direction.EAST)
+        val seat = PlayableRegistry(delegate(), InputBuffer()).entryOf(PlayableRegistry.HUMAN_ID).seat()
+
+        assertEquals(Decision.Pending, seat.chooseMove(turnOn(board)), "under way, and still waiting")
+    }
+
+    @Test
     fun `a delegate cannot quietly claim the reserved slug`() {
         // 'human' goes into the header of every replay somebody played themselves, so it is frozen,
         // and it is not a name a contributed bot may take.

@@ -1,6 +1,7 @@
 package ao.snakewarz.ui
 
 import ao.snakewarz.botapi.BotRegistry
+import ao.snakewarz.core.Direction
 import ao.snakewarz.core.EliminationReason
 import ao.snakewarz.core.MatchEnd
 import ao.snakewarz.core.MatchOutcome
@@ -24,6 +25,12 @@ import kotlinx.browser.window
  * know what they are going to do, so play, pause, step, restart and the scoreboard all work on one
  * without a single branch; only seeking is replay-specific, because only a recording has a future to
  * wind into.
+ *
+ * There are two clocks, and which one runs is decided by `Match.interactive` rather than by a mode
+ * flag. Bots are paced by [TurnScheduler], because watching them is the point. A match with a person
+ * in it is **turn-based**: the scheduler is not started at all, and each keypress plays the round it
+ * belongs to. The moment that person is eliminated the match stops being interactive and the
+ * scheduler takes over, so the survivors finish the game while they watch.
  */
 public class GameSession(
     private val registry: BotRegistry,
@@ -94,9 +101,7 @@ public class GameSession(
 
             is UiIntent.SeekTo -> seek(intent.turnIndex)
 
-            // Straight into the buffer, and deliberately not into the scheduler: a player who paused
-            // meant it, and a keypress is a move they are queueing rather than a request to resume.
-            is UiIntent.Steer -> input.push(intent.direction)
+            is UiIntent.Steer -> steer(intent.direction)
         }
     }
 
@@ -105,8 +110,15 @@ public class GameSession(
     private fun begin() {
         awaitingInput = false
         renderer.fit(match.view)
-        scheduler.start()
-        renderChrome()
+
+        if (match.interactive) {
+            // Play up to the player's first move and stop there: any slot ahead of them in the turn
+            // order opens, and then the board sits and waits, which is the whole point.
+            playRound()
+        } else {
+            scheduler.start()
+            renderChrome()
+        }
     }
 
     private fun newMatch(options: MatchOptions) {
@@ -130,6 +142,11 @@ public class GameSession(
         // A finished match has nothing left to play, so Play means "again".
         if (match.outcome != null) {
             restart()
+            return
+        }
+        // A match waiting on a person has no clock to start; it advances when they press a key. The
+        // chrome disables the button for exactly this reason, but the space bar does not care.
+        if (match.interactive) {
             return
         }
         scheduler.start()
@@ -176,6 +193,55 @@ public class GameSession(
 
     // -- one turn -------------------------------------------------------------------------------
 
+    /**
+     * Queues a move, and — in a turn-based match — plays the round it belongs to.
+     *
+     * The buffer is still there because the driver takes moves through it, but in a match where the
+     * key *is* the clock it holds a direction for the length of one call: nothing else can run
+     * between the push and the turn that consumes it.
+     *
+     * Both guards matter. A running scheduler already drains the buffer every frame, so pumping
+     * here as well would double-step; and a paused bots-only match must not resume because somebody
+     * leant on an arrow key.
+     */
+    private fun steer(direction: Direction) {
+        input.push(direction)
+
+        if (match.interactive && !scheduler.running) {
+            playRound()
+        }
+    }
+
+    /**
+     * Plays turns until it is the player's move again.
+     *
+     * One key buys one round: the loop stops on the turn an interactive slot has nothing to play,
+     * which is the player's own next turn.
+     *
+     * That stopping turn is one step *past* the round — asking a player who has nothing queued
+     * consumes no turn, it only reports that they are waiting — so the bound is a slot per snake
+     * plus that poll. Miss the poll and the match never registers as waiting for anybody, which is
+     * the difference between the board saying "your move" and the board saying "paused". The bound
+     * itself is there in case a stall policy that keeps moving on its own is ever wired in
+     * underneath this view; ordinarily the poll ends the loop well inside it.
+     *
+     * If the player is eliminated part-way through, nobody is left to press a key — so the clock
+     * takes the match over on the spot and the ending plays out at the speed on the slider.
+     */
+    private fun playRound() {
+        var remaining = match.setup.slotCount + 1
+
+        while (remaining > 0 && advance() == TurnScheduler.Progress.CONTINUED) {
+            remaining--
+            if (!match.interactive) {
+                scheduler.start()
+                break
+            }
+        }
+
+        renderChrome()
+    }
+
     private fun advance(): TurnScheduler.Progress {
         when (val result = match.step()) {
             is StepResult.Advanced -> {
@@ -211,6 +277,7 @@ public class GameSession(
         chrome.render(
             UiModel(
                 replay = replay != null,
+                interactive = match.interactive,
                 running = scheduler.running,
                 turnIndex = match.turnIndex,
                 turnCount = replay?.turnCount ?: match.turnIndex,

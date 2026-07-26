@@ -9,6 +9,7 @@ import ao.snakewarz.core.RulesConfig
 import ao.snakewarz.core.SnakeId
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -95,6 +96,33 @@ class MatchTest {
             assertEquals(0, match.turnIndex, "waiting for a human is not a turn")
             assertNull(match.outcome)
         }
+    }
+
+    @Test
+    fun `a match knows whether somebody is playing it by hand`() {
+        assertTrue(matchInOrder(5, 5, "human", "cycle").interactive)
+        assertFalse(matchInOrder(5, 5, "cycle", "south").interactive, "bots all the way down")
+    }
+
+    @Test
+    fun `a match stops being interactive the moment its player is out`() {
+        // :ui decides on the strength of this whether the keyboard or the clock drives the match,
+        // so a dead player has to stop counting: nothing will ever ask them for another move, and a
+        // match that waits for one would sit there for good.
+        val match = matchInOrder(1, 2, "human-east", "cycle")
+
+        assertTrue(match.interactive)
+        match.step()
+
+        assertFalse(match.interactive, "and the survivors can be left to finish it")
+    }
+
+    @Test
+    fun `playback is never interactive, whoever played the original`() {
+        val original = matchInOrder(1, 2, "human-east", "cycle")
+        original.runToCompletion()
+
+        assertFalse(Match.playback(original.record()).interactive, "every slot is scripted")
     }
 
     @Test

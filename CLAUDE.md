@@ -95,6 +95,29 @@ will not survive `MatchRecord.verify`, because re-running a person is not a thin
 Every interactive slot reads the same `InputBuffer`, because there is one keyboard. A match takes at
 most one human, and `:ui` offers the seat for slot 1 only.
 
+**A match with a person in it is turn-based.** `StallPolicy.WAIT_FOR_INPUT` is the default of both
+`InteractiveBot` and `PlayableRegistry`, so a human slot answers `Pending` on every turn it has no
+key for, and `:ui` does not start `TurnScheduler` at all while `Match.interactive` — one keypress
+plays exactly the round it belongs to, and the transport is disabled because there is no clock to
+drive. When the player is eliminated `interactive` goes false, the scheduler takes over and the
+survivors finish the match on the clock. `Match.interactive` is deliberately not
+`bots.any { it.interactive }`: `ScriptedBot` claims to be interactive so that a partial recording
+parks rather than forfeits, so playback is excluded by a flag `Match.playback` sets.
+
+**A held key repeats on our clock, not the operating system's.** `Chrome` drops
+`KeyboardEvent.repeat` — a text-editing rate, half a second of nothing then thirty a second, and
+different on every machine — and `KeyRepeat` (in `:ui`, on `requestAnimationFrame`) turns a held key
+into one move every 250ms. A tap is exactly one move. A second key pressed while the first is down
+takes the repeat over, and `blur` cancels it, because a key released while the page is not looking
+never sends `keyup`.
+
+**A trapped player plays a fatal move instead of waiting.** `InputBuffer.take` filters illegal
+input, so once nothing is legal no key the player could press would ever come back from it, and
+`WAIT_FOR_INPUT` would park that match for good. Every direction from there is the same death — the
+engine records `TRAPPED` whichever is played — so this is a move in the sense that a snake has to
+make one, not a choice, and it is not the `MoveTracker` bug (which invented a *survivable* move
+nobody chose).
+
 ## Four non-obvious facts
 
 Getting any of these wrong silently breaks the game or its determinism.
@@ -235,6 +258,10 @@ Keep those two cadences apart: `UiModel` is built once per *frame*, not once per
 are going to do, so play, pause, step, restart and the scoreboard work on both without a branch. Only
 seeking is replay-specific, and it is implemented by rebuilding the playback match and stepping to the
 target — microseconds, and nothing to keep consistent.
+
+What *does* branch is which clock runs, and it branches on `Match.interactive` rather than on a mode
+flag: `TurnScheduler` paces bots and replays, while a match with a live player is stepped by
+`GameSession.playRound` straight out of the keydown.
 
 The static skeleton lives in `app/.../index.html`. Kotlin looks elements up by id once and then only
 writes text, values and `hidden`; do not start constructing structure there.
