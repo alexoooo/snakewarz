@@ -11,7 +11,7 @@ change later and cheap to get right now.
 | 0 | **done** | Gradle scaffold, Java moved to `legacy/`, empty page deploys |
 | 1 | **done** | Core rules, rewritten from scratch |
 | 2 | **done** | Driver, replay codec, two trivial bots |
-| 3 | not started | UI — first playable milestone |
+| 3 | **done** | UI — first playable milestone |
 | 4 | not started | Search bots (A*, flood fill, MCTS) |
 | 5 | not started | Contributed bots |
 | 6 | not started | Stats, batch tournaments, delete `legacy/` |
@@ -113,9 +113,12 @@ build fact. The KMP-config-per-module friction is solved once in a convention pl
   another slot's RNG.
 - `:ui` → `:bots`.
 
-Enforced by `snakewarz.pure` (both targets, `explicitApi()`, plus a `check`-wired
-`checkModulePurity` task that walks the resolved dependency graph and fails on a browser artifact or
-a browser-only project) and `snakewarz.browser` (wasmJs only), plus aggressive `internal`.
+Enforced by `snakewarz.pure` (both targets, `explicitApi()`) and `snakewarz.browser` (wasmJs only),
+plus aggressive `internal`. Both wire a `checkModulePurity` task into `check` that walks the resolved
+dependency graph of every `*CompileClasspath` — test source sets included — and fails on a forbidden
+edge. The walk itself is shared as `registerModulePurityCheck`, so `:ui → :bots` is enforced by the
+same code that keeps a browser artifact out of `:core`. Negative-tested by adding the edge and
+watching it fail.
 
 ---
 
@@ -346,6 +349,17 @@ than by a mistimed keypress into their own neck; and `CONTINUE_STRAIGHT` is the 
 view, because a match that visibly stalls reads as broken. Under replay the interactive slot is
 substituted by a `ScriptedBot`, so `Pending` never appears on a deterministic path.
 
+*Landed in Phase 3, in `:match` rather than `:bot-api`* — the module table always gave `:match`
+human input, and putting them there keeps them JVM-testable. Two refinements the sketch did not have.
+`CONTINUE_STRAIGHT` **waits before the first move**, because there is no heading to continue and
+inventing one is precisely the legacy `MoveTracker` bug. And `push` collapses a repeat of the
+direction queued most recently, because a held arrow key fires `keydown` at the operating system's
+auto-repeat rate and would otherwise fill the queue and eat the next several turns the player meant.
+
+The seat is composed *outside* `ShippedBots`, by a `PlayableRegistry` that `:app` wraps around it.
+That is forced, and usefully so: the bot contract suite requires that no registry entry claims to be
+interactive, and the alternative was to weaken the gate that makes accepting a contributed bot safe.
+
 Also port `PvpAi`'s nearest-opponent reduction as an abstract `DuelBot` base class — every MCTS bot
 depends on it — while keeping `Bot` itself N-player-capable.
 
@@ -439,8 +453,20 @@ type of `GameState`'s map — so the game state transitively dragged in AWT. It 
 things in three modules: `SnakeId` in `:core`, `Bot` in `:bot-api`, `Palette` in `:ui`.
 
 **Dirty-cell rendering.** A normal turn paints one or two cells; full repaint only on resize, seek
-and match start. Gridlines go on a separate underlay canvas painted once. Use integer cell sizes to
-avoid seams, and be `devicePixelRatio` aware.
+and match start. Gridlines are painted once. Use integer cell sizes to avoid seams, and be
+`devicePixelRatio` aware.
+
+*Built differently from the sketch, and better.* The gridlines share the board's single canvas rather
+than getting an underlay of their own: a cell fill is inset by one pixel, that gutter belongs to the
+line, and so nothing ever repaints a line. And "be `devicePixelRatio` aware" turned out to mean the
+opposite of the usual recipe — the cell size is chosen in **device** pixels and the context is never
+scaled, because `scale(dpr, dpr)` at a fractional ratio lands every coordinate between two device
+pixels and antialiases the hairlines away.
+
+One thing the renderer has to track that the engine does not: `TurnEvents` reports the squares the
+*engine* changed, and a head that became ordinary body is not one of them — nothing about that square
+changed as far as the rules are concerned. Drawing heads differently is the renderer's idea, so the
+renderer keeps the previous head per snake and repaints the handoff itself.
 
 Deliberately **no** per-frame immutable `Scene` value type — producing one per frame allocates for
 no benefit, since `BoardView` is already a read-only projection with no drawing concepts.
@@ -561,8 +587,53 @@ left, so nobody is ever the last to go — but a solo match has no survivor to c
 lone player resigning unrecordable, which Phase 3 would have hit the first time somebody quit a
 practice game.
 
-**Phase 3 — UI. First playable milestone.** Canvas renderer with dirty-cell painting, rAF scheduler,
-play/pause/step/speed, scoreboard, hash replay load/share, `InteractiveBot`.
+**Phase 3 — UI. First playable milestone. DONE.** `:ui` with `BoardRenderer`, `TurnScheduler`,
+`Chrome` and `Palette`; `InputBuffer`/`StallPolicy`/`InteractiveBot`/`PlayableRegistry` in `:match`;
+`:app` reduced to registry injection and `#r=` routing. The game is playable: human against the
+shipped bots, up to four seats, play/pause/step/speed, a scoreboard, a scrub bar over a recording,
+and a match shared as a URL.
+
+Measured results: 186 JVM tests green, production bundle **50.5 KiB gzipped** (up from 18.5 in
+Phase 0) against the 1.5 MiB ceiling. Verified in Chrome against the production distribution rather
+than the dev server: a three-way match ran to `LAST_SNAKE_STANDING` in 165 turns and encoded to a
+**131-character** URL fragment; reloading that link reproduced the final position exactly — lengths
+34/33/17, same winner — and seeking to turn 80 and back cost nothing measurable. Pacing was checked
+by replacing `requestAnimationFrame` and pumping the callback with synthetic timestamps: 12 turns a
+second comes out as 12, identically at 60 fps and at 30 fps, and a five-second stall yields three
+turns rather than sixty.
+
+Five decisions worth recording:
+
+- **The human lives in `:match`, outside `ShippedBots`.** The bot contract suite requires that no
+  registry entry claims to be interactive, so `InteractiveBot` cannot be a shipped bot without
+  either weakening that gate or special-casing it. Composing the seat *outside* the shipped registry
+  with `PlayableRegistry` keeps the gate absolute, and `:match` already owned human input. The slug
+  `"human"` is frozen like any other; a replay carrying it plays back but cannot `verify`.
+- **`CONTINUE_STRAIGHT` waits before the first move.** It sustains a heading the player chose and
+  never invents one — which is the legacy `MoveTracker` bug read backwards, and it turns the opening
+  into "the board is drawn, the game is live, waiting for you" instead of a snake that bolts.
+- **One canvas, not an underlay.** This document specified a second canvas for the gridlines. Inset
+  fills reach the same end: a cell owns `(c*s+1, r*s+1)` to `(c*s+s, r*s+s)`, the one-pixel gutter
+  belongs to the gridline, and no fill ever touches it. Same "paint the lines once" property, one
+  fewer canvas, no stacking context and no second device-pixel-ratio dance.
+- **Draw in device pixels; never scale the context.** The obvious `scale(dpr, dpr)` puts every
+  coordinate between two device pixels as soon as the ratio is fractional — 1.35 on the machine this
+  was built on — and a hairline gridline becomes a soft two-pixel smear. Choosing a whole number of
+  device pixels per cell makes it exact at any ratio; sampling the backing store across a row now
+  yields exactly two colours.
+- **Seeking rebuilds and replays rather than snapshotting.** The engine runs tens of millions of
+  turns a second and a scripted slot costs no search, so winding to turn N is microseconds. Keeping
+  periodic snapshots would have bought nothing and added a consistency problem.
+
+Two bugs found by looking at the actual page rather than at the code. Author CSS `display: flex` and
+`display: grid` outrank the user agent's `[hidden] { display: none }`, so hidden rows sat on screen
+while correctly reporting `hidden == true` — invisible from Kotlin, and fixed with one `!important`
+in `styles.css`. And an unclamped negative frame interval, which real `requestAnimationFrame`
+timestamps should never produce, would drive the accumulator below zero and silently freeze the match
+until it climbed back; the lower bound now costs one `coerceIn`.
+
+Not built, and deliberately: a light-theme pass was written but only exercised on a dark display, and
+the scoreboard shows the first four slots of a replay that somehow carries more.
 
 **Phase 4 — search bots.** `AStar`/`Path` semantic ports. `ForkAi`/`ForkPathAi` with flood-fill
 rewritten onto the padded array. Then MCTS: `Reward` **deleted** (a `double` wrapper that allocates

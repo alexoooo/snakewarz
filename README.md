@@ -9,10 +9,13 @@ Java/Swing into Kotlin/Wasm as a web app.
 
 ## Status
 
-Rewrite in progress — **Phase 2 of 6 complete**. The engine, the bot contract, the match driver and
-the replay codec are all in place: matches run headless, reproduce exactly from a seed, and encode
-into a shareable URL. There is no game UI yet, so the deployed page is still the toolchain sanity
-check. First playable milestone is Phase 3.
+Rewrite in progress — **Phase 3 of 6 complete, and the game is playable**. Play against the shipped
+bots with the arrow keys, or sit out and watch up to four of them fight; pause, step a turn at a
+time, change the speed, scrub back through a finished match, and share the whole thing as a link. A
+165-turn three-way game is 131 characters of URL, and no server is involved at any point.
+
+What is missing is an opponent worth losing to: the roster is a random mover and a wall hugger.
+Search bots are Phase 4.
 
 See [docs/MIGRATION.md](docs/MIGRATION.md) for the design and the phase plan.
 
@@ -61,11 +64,12 @@ JVM and keeps a Kotlin/JS fallback target a config change rather than a rewrite.
 | `:core` | Grid, occupancy, rules, state transition, PRNG. Pure Kotlin |
 | `:bot-api` | The contract bot authors implement |
 | `:bots` | Shipped bots and the registry |
-| `:match` | Turn sequencing, replay codec, stats. No time, no DOM |
+| `:match` | Turn sequencing, human input, replay codec, stats. No time, no DOM |
 | `:ui` | Canvas renderer, DOM chrome, frame scheduler |
 | `:app` | Entry point and wiring |
 
-Modules arrive as their phase lands; everything but `:ui` exists today.
+All six exist. Time lives only in `:ui`: a bot is handed a budget counted in iterations and has no
+way to reach a clock, so a match reproduces by construction rather than by discipline.
 
 ## Writing a bot
 
@@ -93,9 +97,11 @@ A bot instance lives for a whole match, so a search tree is just an instance fie
 take `turn.scratch.playout()` — a private copy of the board that plays forward and unwinds without
 allocating, and which stops on its own when the turn's budget runs out.
 
-Matches are deterministic from a seed, so results are reproducible and a whole game fits in a URL.
+That is the whole of it: no HTML to edit, because the pickers in the sidebar are built from the
+registry. Matches are deterministic from a seed, so results are reproducible and a whole game fits in
+a URL.
 
 ## Contributing
 
 Read [CLAUDE.md](CLAUDE.md) first — it documents the conventions, the forbidden dependency edges, and
-the three non-obvious engine facts that a rewrite tends to get wrong.
+the four non-obvious engine facts that a rewrite tends to get wrong.

@@ -20,6 +20,14 @@ kotlin {
     explicitApi()
     jvmToolchain(jvmToolchainVersion)
 
+    // Reaching JS is the definition of a browser module: `fillStyle` takes a `JsAny?`, so painting a
+    // single rectangle needs `toJsString()`. Opting in once here rather than annotating every call
+    // site, and deliberately *not* in snakewarz.pure, where the same warning would be a design
+    // failure rather than noise.
+    compilerOptions {
+        optIn.add("kotlin.js.ExperimentalWasmJsInterop")
+    }
+
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         browser()
@@ -35,3 +43,12 @@ kotlin {
 tasks.matching { it.name == "wasmJsBrowserTest" }.configureEach {
     enabled = browserTests
 }
+
+// A browser module may touch the DOM, but it is still layered. `:ui` renders a BoardView and a
+// MatchRecord and must not know which bot produced them — that is what keeps a replay a list of
+// slugs and lets :app be the only place the registry is chosen. `:app` sits on top of everything
+// and so forbids nothing.
+registerModulePurityCheck(
+    forbiddenProjects = if (project.path == ":ui") setOf(":bots", ":app") else emptySet(),
+    forbiddenModules = emptySet(),
+)

@@ -13,29 +13,31 @@ Everything else exists to serve that.
 
 ## Current state — read this first
 
-Mid-rewrite. **Phase 2 of 6 is complete**: the scaffold, the deployment pipeline, the rules engine,
-the bot contract, the match driver and the replay codec all exist and are verified. Matches run
-headless and reproduce exactly. There is no game UI yet, and no search bot yet.
+Mid-rewrite. **Phase 3 of 6 is complete**, which means the game is **playable**: the rules engine,
+the bot contract, the match driver, the replay codec, the canvas renderer and the DOM chrome all
+exist and are verified. You can play against the shipped bots, watch bots fight, scrub a recording
+and share a match as a URL. What is missing is a bot worth losing to — that is Phase 4.
 
 | Path | Status |
 |---|---|
 | `core/` | `:core` module. Padded-grid primitives plus the rules engine: `Occupancy`, `Board`, `MatchState`, `SplitMix64`, `Budget` |
 | `bot-api/` | `:bot-api` module. `Bot`, `Decision`, `Turn`, `BotSetup`, `BotRegistry`, plus `Scratch`/`Playout` — the search arena that makes the budget structural |
 | `bots/` | `:bots` module. `RandomBot`, `WallHugBot`, and `ShippedBots`, the `BotRegistry` implementation |
-| `match/` | `:match` module. `Match` driver, `MatchSetup`, `MatchRecord`, `ReplayCodec`, spawn placement. No time, no DOM |
-| `app/` | `:app` module. Phase 0 sanity page — paints an empty grid, no game. Not yet wired to the driver |
-| `build-logic/` | Convention plugins `snakewarz.pure` and `snakewarz.browser`, incl. `checkModulePurity` |
+| `match/` | `:match` module. `Match` driver, `MatchSetup`, `MatchRecord`, `ReplayCodec`, spawn placement, and human input — `InputBuffer`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM |
+| `ui/` | `:ui` module. `GameSession` — the only public class — over `BoardRenderer`, `TurnScheduler`, `Chrome` and `Palette` |
+| `app/` | `:app` module. `main()`, registry injection and `#r=` replay routing. Sixty lines, and that is the point |
+| `build-logic/` | Convention plugins `snakewarz.pure` and `snakewarz.browser`, sharing `registerModulePurityCheck` |
 | `legacy/java/ao/**` | The original Java, reference only. Not in the build. Deleted at release 1 |
 | `docs/MIGRATION.md` | The design doc and phase plan. **Read this before changing architecture** |
 
-`:ui` does **not exist yet** — it arrives in Phase 3, and `:app` is still the Phase 0 sanity page. Do
-not assume anything below exists; check the tree.
+There is still **no search bot**: `RandomBot` and `WallHugBot` are the whole roster, and neither
+touches `Turn.scratch`. Do not assume anything else exists; check the tree.
 
 The pre-rewrite tree is one command away: `git show legacy-java-final:<path>`.
 
 **Phase tracker** — update this line as phases land, and mirror it in `docs/MIGRATION.md`:
 
-> Current phase: **3 — not started** (canvas renderer, rAF scheduler, controls, `InteractiveBot`)
+> Current phase: **4 — not started** (`AStar`, flood fill, then `UctBot` on flat node pools)
 
 ## Where the project is going
 
@@ -71,7 +73,27 @@ These are the load-bearing constraint of the architecture. Do not add any of the
 - `:match` → `:bots`. The driver resolves bots through the `BotRegistry` *interface*; `:app` injects the
   implementation. This is what keeps the replay codec free of bot classes.
 - `:bots` → `:match`, `:ui`, `:app`. A bot must not be able to reach the clock or another slot's RNG.
-- `:ui` → `:bots`.
+- `:ui` → `:bots`. The renderer paints a `BoardView` and the chrome names slots through the
+  `BotRegistry` interface, so nothing in `:ui` can tell a wall hugger from a human.
+
+Every one of these is enforced by `checkModulePurity`, which is wired into `check` for both
+convention plugins and walks every `*CompileClasspath` — test source sets included.
+
+### Where the human lives
+
+`InteractiveBot` is in **`:match`**, not `:bots`, and is deliberately **not** in `ShippedBots`. The
+bot contract suite requires that no registry entry claims to be interactive — a search bot that
+stalls has malfunctioned — so the human seat is composed *on the outside* of the shipped registry by
+`PlayableRegistry`, which `:app` wraps around `ShippedBots`. `:match` already owns human input in the
+module table, and keeping the pieces there makes them JVM-testable.
+
+`PlayableRegistry.HUMAN_ID` is the slug `"human"`, and it is **frozen** like every released bot id:
+it goes into the header of every replay of a game somebody played themselves. Such a replay plays
+back perfectly — playback substitutes a scripted stand-in for every slot regardless of slug — but it
+will not survive `MatchRecord.verify`, because re-running a person is not a thing a registry can do.
+
+Every interactive slot reads the same `InputBuffer`, because there is one keyboard. A match takes at
+most one human, and `:ui` offers the seat for slot 1 only.
 
 ## Four non-obvious facts
 
@@ -196,6 +218,27 @@ while (p.outcome == null) p.advance(policy.pick(p.board.legalMoves(p.toAct)) ?: 
 `advance` charges the budget itself, and an exhausted budget makes `outcome` a draw — so the loop
 condition *is* the budget check and the search terminates structurally rather than on trust.
 
+Adding a bot needs **no HTML change**: the pickers in the sidebar are filled from `BotRegistry.entries`
+at startup. That is the one place `:ui` builds DOM, and it is why.
+
+## Working on the UI
+
+`:ui` exposes exactly two things — `GameSession` and `ReplayLink`. Everything else is `internal`, and
+should stay that way; `:app` builds a session and is otherwise sixty lines of wiring.
+
+Inside, it is a one-way data flow with no virtual DOM. State goes down through `Chrome.render(model)`,
+everything a person does comes back up as a `UiIntent` into `GameSession.dispatch`, and the board is
+painted separately per turn because painting two rectangles is nearly free while writing text is not.
+Keep those two cadences apart: `UiModel` is built once per *frame*, not once per turn.
+
+**Playing and replaying are one code path.** A replay is a match whose slots already know what they
+are going to do, so play, pause, step, restart and the scoreboard work on both without a branch. Only
+seeking is replay-specific, and it is implemented by rebuilding the playback match and stepping to the
+target — microseconds, and nothing to keep consistent.
+
+The static skeleton lives in `app/.../index.html`. Kotlin looks elements up by id once and then only
+writes text, values and `hidden`; do not start constructing structure there.
+
 ## Working with the legacy Java
 
 Treat it as a **specification to read, not code to translate**. It has two competing board representations
@@ -238,14 +281,29 @@ build-config change, not a rewrite.
 
 - **Reveal `#app` before the first paint.** It starts `display: none`, and a hidden element reports
   `clientWidth == 0`, so measuring the board container first sizes every board to the minimum cell
-  size. `document.body.classList.add("booted")` must stay ahead of `render()` in `Main.kt`.
+  size. `document.body.classList.add("booted")` must stay ahead of `session.start()` in `Main.kt`.
 - **The board container's width must not depend on the canvas.** The canvas sizes its backing store
   from the container width; with `flex: 1 1 auto` that was circular and the board came out a
   different size on each load. `.arena` is a CSS grid with `minmax(0, 1fr)` so the track width is
   definite. Don't switch it back to flexbox.
-- **Canvas resizing resets the 2D context**, so apply `scale(dpr, dpr)` *after* setting
-  `canvas.width`/`height`, never before.
+- **`[hidden] { display: none !important; }` is load-bearing.** The chrome hides things by setting
+  `hidden`, and an author `display: flex`/`grid` outranks the user agent's `[hidden]` rule — so
+  hidden rows stayed on screen while reporting `hidden == true`. Kotlin cannot see that; the fix
+  belongs in `styles.css` and it is already there.
+- **`BoardRenderer` draws in device pixels and never scales the context.** The backing store is
+  `cellSize * cols + 1` device pixels with a *fractional* CSS size, rather than a CSS-pixel size with
+  `context.scale(dpr, dpr)`. On a fractional `devicePixelRatio` — 1.25, 1.35 and 1.5 are all ordinary
+  on Windows — the scaled version puts every coordinate between two device pixels and a 1px gridline
+  antialiases into a two-pixel smear. Verified: sampling the backing store now yields exactly two
+  colours across a row. If you do re-introduce `scale`, note that setting `canvas.width` resets the
+  transform, so it must come *after* the resize.
 - In `wasmJs`, `fillStyle`/`strokeStyle` take `JsAny?`, so a Kotlin `String` needs `.toJsString()`.
+  `snakewarz.browser` opts into `kotlin.js.ExperimentalWasmJsInterop` once so this is not a warning
+  at every call site.
+- **There is no `console` in Kotlin/Wasm.** Use `println`, which lands in the browser console.
+- **`requestAnimationFrame` does not fire in a hidden tab at all** — which is exactly why the
+  scheduler uses it. Automated checks against a backgrounded tab will see a frozen match; drive
+  `Step`, or replace `window.requestAnimationFrame` and pump the callback with synthetic timestamps.
 - A harmless configure-time warning — `Kotlin does not yet support 26 JDK target, falling back to
   Kotlin JVM_25` — comes from `:app`, which emits no JVM bytecode. `:core` correctly compiles to Java
   21 bytecode via `jvmToolchain`.

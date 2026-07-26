@@ -10,6 +10,8 @@
     --ink-dim: #5b6470;
     --line: #dfe3e8;
     --accent: #2f6f4f;
+    --accent-ink: #ffffff;
+    --board: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -19,12 +21,24 @@
         --ink: #e8ebee;
         --ink-dim: #99a3ae;
         --line: #2c3238;
-        --accent: #6fcf97;
+        --accent: #3f9e6c;
+        --accent-ink: #06120c;
+        --board: #171b1f;
     }
 }
 
 * {
     box-sizing: border-box;
+}
+
+/*
+ * The chrome hides things by setting `hidden`, and every one of them is also given a `display` here
+ * -- a flex transport, a grid scoreboard row. An author `display` outranks the user agent's
+ * `[hidden] { display: none }`, so without this the hidden rows stay on screen while reporting
+ * themselves as hidden. Kotlin cannot see that, which is exactly why the fix belongs here.
+ */
+[hidden] {
+    display: none !important;
 }
 
 body {
@@ -101,16 +115,20 @@ header h1 {
  */
 .arena {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 17rem;
+    grid-template-columns: minmax(0, 1fr) 18rem;
     gap: 1.5rem;
     align-items: start;
-    max-width: 70rem;
+    max-width: 74rem;
 }
 
-@media (max-width: 46rem) {
+@media (max-width: 52rem) {
     .arena {
         grid-template-columns: minmax(0, 1fr);
     }
+}
+
+.board-panel {
+    min-width: 0;
 }
 
 .board-wrap {
@@ -119,16 +137,105 @@ header h1 {
 
 #board {
     display: block;
-    max-width: 100%;
+    background: var(--board);
     border: 1px solid var(--line);
     border-radius: 6px;
 }
 
+/* Transport ---------------------------------------------------------------- */
+
+.transport {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.9rem;
+    flex-wrap: wrap;
+}
+
+.transport label {
+    margin-left: 0.5rem;
+    color: var(--ink-dim);
+    font-size: 0.85rem;
+}
+
+.transport input[type="range"] {
+    flex: 0 1 11rem;
+    min-width: 6rem;
+    accent-color: var(--accent);
+}
+
+.transport output {
+    min-width: 5.5rem;
+    color: var(--ink-dim);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.scrub input[type="range"] {
+    flex: 1 1 16rem;
+}
+
+#status {
+    margin: 0.75rem 0 0;
+    color: var(--ink-dim);
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Controls ----------------------------------------------------------------- */
+
+button {
+    padding: 0.35rem 0.8rem;
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+button:hover {
+    border-color: var(--accent);
+}
+
+button.primary {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: transparent;
+}
+
+button.wide {
+    display: block;
+    width: 100%;
+    margin-top: 0.75rem;
+}
+
+select,
+input[type="text"] {
+    width: 100%;
+    padding: 0.3rem 0.4rem;
+    background: var(--bg);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+/* Sidebar ------------------------------------------------------------------ */
+
 .sidebar {
-    padding: 1rem 1.25rem;
+    padding: 1rem 1.25rem 1.25rem;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 10px;
+}
+
+.sidebar section + section {
+    margin-top: 1.4rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--line);
 }
 
 .sidebar h2 {
@@ -139,29 +246,97 @@ header h1 {
     color: var(--ink-dim);
 }
 
-.sidebar dl {
+#scoreboard {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.slot {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.3rem 0.9rem;
-    margin: 0 0 1rem;
+    grid-template-columns: 0.75rem 1fr auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
     font-size: 0.9rem;
 }
 
-.sidebar dt {
-    color: var(--ink-dim);
+.slot .swatch {
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 3px;
 }
 
-.sidebar dd {
-    margin: 0;
+.slot .length {
+    color: var(--ink-dim);
     font-variant-numeric: tabular-nums;
 }
 
-.sidebar .note {
-    margin: 0;
-    padding-top: 0.85rem;
-    border-top: 1px solid var(--line);
+.slot .fate {
+    grid-column: 2 / -1;
     color: var(--ink-dim);
-    font-size: 0.82rem;
+    font-size: 0.8rem;
+}
+
+.slot .fate:empty {
+    display: none;
+}
+
+.slot.out .who,
+.slot.out .length {
+    opacity: 0.55;
+}
+
+.slot.out .swatch {
+    opacity: 0.35;
+}
+
+.setup {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.45rem 0.7rem;
+}
+
+.setup label {
+    color: var(--ink-dim);
+    font-size: 0.85rem;
+}
+
+.seed-row {
+    display: flex;
+    gap: 0.35rem;
+}
+
+.seed-row button {
+    padding: 0.3rem 0.55rem;
+    line-height: 1;
+}
+
+#share-url {
+    margin-top: 0.5rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    font-size: 0.75rem;
+}
+
+.note {
+    margin: 0.75rem 0 0;
+    color: var(--ink-dim);
+    font-size: 0.8rem;
+}
+
+footer {
+    max-width: 74rem;
+    margin-top: 1.25rem;
+}
+
+kbd {
+    padding: 0.05em 0.35em;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 0.85em;
 }
 
 code {

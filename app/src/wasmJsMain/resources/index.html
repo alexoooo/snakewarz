@@ -10,8 +10,13 @@
 
     <!--
       The chrome below is static on purpose: it paints before the wasm module finishes compiling,
-      so the page is never blank. Kotlin queries these elements by id once at startup and never
-      constructs structural DOM.
+      so the page is never blank. Kotlin looks these elements up by id once at startup and then only
+      writes text, values and hidden flags -- it never constructs structure.
+
+      The single exception is the <option> list inside each bot picker, which comes from the
+      BotRegistry. That is deliberate: hard-coding the bots here would turn "fork, add a file,
+      register it, open a PR" into "and also edit the markup", and keeping that workflow cheap is
+      most of why this project exists.
     -->
 </head>
 <body>
@@ -36,25 +41,111 @@
     </header>
 
     <div class="arena">
-        <div class="board-wrap">
-            <canvas id="board" aria-label="Game board"></canvas>
-        </div>
+        <section class="board-panel">
+            <div class="board-wrap">
+                <canvas id="board" aria-label="Game board"></canvas>
+            </div>
+
+            <div class="transport">
+                <button id="play" type="button" class="primary">Play</button>
+                <button id="step" type="button">Step</button>
+                <button id="restart" type="button">Restart</button>
+                <label for="speed">Speed</label>
+                <input id="speed" type="range" min="0" max="7" step="1" value="4"
+                       aria-label="Turns per second">
+                <output id="speed-value" for="speed">&mdash;</output>
+            </div>
+
+            <div class="transport scrub" id="scrub" hidden>
+                <label for="seek">Turn</label>
+                <input id="seek" type="range" min="0" max="0" step="1" value="0"
+                       aria-label="Seek to turn">
+                <output id="seek-value" for="seek">0 / 0</output>
+            </div>
+
+            <p id="status" role="status">Starting&hellip;</p>
+        </section>
+
         <aside class="sidebar">
-            <h2>Status</h2>
-            <dl>
-                <dt>Phase</dt>
-                <dd id="status-phase">0 &mdash; scaffold</dd>
-                <dt>Board</dt>
-                <dd id="status-board">&mdash;</dd>
-                <dt>Engine</dt>
-                <dd id="status-engine">&mdash;</dd>
-            </dl>
-            <p class="note">
-                No game yet. This page exists to prove the toolchain: Kotlin/Wasm boots, reaches
-                <code>:core</code>, and paints a canvas. Play arrives in Phase&nbsp;3.
-            </p>
+            <section>
+                <h2>Players</h2>
+                <ol id="scoreboard">
+                    <li class="slot" id="slot-0" hidden>
+                        <span class="swatch"></span>
+                        <span class="who">&mdash;</span>
+                        <span class="length">0</span>
+                        <span class="fate"></span>
+                    </li>
+                    <li class="slot" id="slot-1" hidden>
+                        <span class="swatch"></span>
+                        <span class="who">&mdash;</span>
+                        <span class="length">0</span>
+                        <span class="fate"></span>
+                    </li>
+                    <li class="slot" id="slot-2" hidden>
+                        <span class="swatch"></span>
+                        <span class="who">&mdash;</span>
+                        <span class="length">0</span>
+                        <span class="fate"></span>
+                    </li>
+                    <li class="slot" id="slot-3" hidden>
+                        <span class="swatch"></span>
+                        <span class="who">&mdash;</span>
+                        <span class="length">0</span>
+                        <span class="fate"></span>
+                    </li>
+                </ol>
+            </section>
+
+            <section>
+                <h2>New match</h2>
+                <div class="setup">
+                    <label for="size">Board</label>
+                    <select id="size">
+                        <option value="12">12 &times; 12</option>
+                        <option value="16">16 &times; 16</option>
+                        <option value="20" selected>20 &times; 20</option>
+                        <option value="28">28 &times; 28</option>
+                        <option value="40">40 &times; 40</option>
+                    </select>
+
+                    <label for="bot-0">Slot 1</label>
+                    <select id="bot-0"></select>
+                    <label for="bot-1">Slot 2</label>
+                    <select id="bot-1"></select>
+                    <label for="bot-2">Slot 3</label>
+                    <select id="bot-2"></select>
+                    <label for="bot-3">Slot 4</label>
+                    <select id="bot-3"></select>
+
+                    <label for="seed">Seed</label>
+                    <span class="seed-row">
+                        <input id="seed" type="text" inputmode="numeric" autocomplete="off"
+                               spellcheck="false">
+                        <button id="reseed" type="button" title="New random seed"
+                                aria-label="New random seed">&#8635;</button>
+                    </span>
+                </div>
+                <button id="new-match" type="button" class="primary wide">Start match</button>
+            </section>
+
+            <section>
+                <h2>Replay</h2>
+                <button id="share" type="button" class="wide">Copy replay link</button>
+                <input id="share-url" type="text" readonly hidden aria-label="Replay link">
+                <p class="note">
+                    The link carries the whole match, move by move &mdash; no server involved.
+                    Open one and it plays back here.
+                </p>
+            </section>
         </aside>
     </div>
+
+    <footer>
+        <p class="note">
+            Arrow keys or WASD to steer, space to play and pause, <kbd>.</kbd> to step one turn.
+        </p>
+    </footer>
 </main>
 
 <script>
