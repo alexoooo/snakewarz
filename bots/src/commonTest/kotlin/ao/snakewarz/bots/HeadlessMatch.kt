@@ -33,11 +33,23 @@ internal class HeadlessMatch(
     seed: Long,
     budgetPerTurn: Int = 1_000,
     rules: RulesConfig = RulesConfig(),
+    /**
+     * Off for the throughput benchmark and on for everything else. Recording allocates once a turn,
+     * which is nothing beside a search and is most of the cost of a match between trivial bots — so a
+     * benchmark that left it on would be measuring this list.
+     */
+    private val recording: Boolean = true,
+    /**
+     * Per-slot allowances, for the one question a single figure cannot ask: *is a bigger allowance
+     * worth anything?* Defaults to [budgetPerTurn] for every slot, which is what every other test
+     * wants.
+     */
+    budgetPerSlot: IntArray = IntArray(entries.size) { budgetPerTurn },
 ) {
     private val grid = Grid(rows, cols)
     private val board = Board(grid, cornerSpawns(grid, entries.size), rules)
     private val matchRng = SplitMix64(seed)
-    private val budgets = Array(entries.size) { Budget(budgetPerTurn) }
+    private val budgets = Array(entries.size) { Budget(budgetPerSlot[it]) }
     private val scratches = Array(entries.size) { BoardScratch(board, budgets[it]) }
 
     private val bots: Array<Bot> = Array(entries.size) { slot ->
@@ -55,6 +67,9 @@ internal class HeadlessMatch(
 
     /** Every decision made, in play order, alongside what was legal when it was made. */
     val decisions: MutableList<RecordedDecision> = mutableListOf()
+
+    /** Turns played, which a benchmark needs and [decisions] cannot supply when it is switched off. */
+    val turns: Int get() = board.turnIndex
 
     fun run(): MatchOutcome {
         while (true) {
@@ -80,7 +95,9 @@ internal class HeadlessMatch(
                 "${bots[id.index]} moved the live board while deciding"
             }
 
-            decisions += RecordedDecision(id, legal, decision, budget.consumed)
+            if (recording) {
+                decisions += RecordedDecision(id, legal, decision, budget.consumed)
+            }
 
             when (decision) {
                 is Decision.Move -> board.apply(id, decision.direction)

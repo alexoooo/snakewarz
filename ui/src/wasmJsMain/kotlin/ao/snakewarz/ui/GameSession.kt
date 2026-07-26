@@ -1,8 +1,8 @@
 package ao.snakewarz.ui
 
+import ao.snakewarz.botapi.BotId
 import ao.snakewarz.botapi.BotRegistry
 import ao.snakewarz.core.Direction
-import ao.snakewarz.core.EliminationReason
 import ao.snakewarz.core.MatchEnd
 import ao.snakewarz.core.MatchOutcome
 import ao.snakewarz.core.SnakeId
@@ -12,6 +12,8 @@ import ao.snakewarz.match.MatchRecord
 import ao.snakewarz.match.MatchSetup
 import ao.snakewarz.match.ReplayCodec
 import ao.snakewarz.match.StepResult
+import ao.snakewarz.match.Tournament
+import ao.snakewarz.match.TournamentConfig
 import kotlinx.browser.window
 
 /**
@@ -40,6 +42,7 @@ public class GameSession(
     private val chrome = Chrome(registry, ::dispatch)
     private val renderer = BoardRenderer(chrome.canvas)
     private val scheduler = TurnScheduler(::advance, ::renderChrome)
+    private val batch = TournamentRunner(::batchFrame)
 
     private var match: Match = Match(setupFrom(chrome.readOptions()), registry)
 
@@ -48,6 +51,27 @@ public class GameSession(
 
     private var awaitingInput = false
     private var shareUrl: String? = null
+
+    /**
+     * The matrix as text, re-rendered when a match of the batch ends rather than once a frame.
+     *
+     * A frame is worth hundreds of tournament turns and at most one result, so laying the table out
+     * per frame would be the one genuinely wasteful thing on this path.
+     */
+    private var batchTable: String = ""
+    private var batchMatchesRendered: Int = -1
+
+    /** Why a batch could not start, shown until one does. */
+    private var batchRefusal: String? = null
+
+    /**
+     * The batch match the arena is showing.
+     *
+     * Kept here rather than read off the tournament, because a finished tournament has no current
+     * match and the last one it played is still on the board — the scoreboard and the stats have to
+     * describe *that* position and not the idle match behind it.
+     */
+    private var batchBoard: Match? = null
 
     /** Opens on [record] if there is one in the URL, and on a fresh match if there is not. */
     public fun start(record: MatchRecord?) {
@@ -82,6 +106,25 @@ public class GameSession(
     // -- the one dispatch -----------------------------------------------------------------------
 
     private fun dispatch(intent: UiIntent) {
+        // The chrome greys the transport while a batch owns the board, but the space bar and the
+        // step key do not read the DOM's disabled flags. One guard covers both routes in.
+        if (batch.running && intent != UiIntent.ToggleTournament) {
+            return
+        }
+
+        // A finished batch leaves its last position on screen. Anything the player then does to the
+        // *match* takes the arena back first, and takes it back with a full repaint — the renderer
+        // paints one square at a time, so stepping the match onto a board still showing somebody
+        // else's game would leave that game underneath it.
+        if (batchBoard != null && intent != UiIntent.ToggleTournament) {
+            batchBoard = null
+            renderer.fit(match.view)
+            // Here rather than left to whatever the intent does next: a turn-based match answers
+            // Play by doing nothing at all, and the scoreboard would then still be describing the
+            // tournament while the board underneath it had gone back to the player's own game.
+            renderChrome()
+        }
+
         when (intent) {
             UiIntent.TogglePlay -> if (scheduler.running) pause() else play()
 
@@ -97,6 +140,8 @@ public class GameSession(
 
             is UiIntent.StartMatch -> newMatch(intent.options)
 
+            UiIntent.ToggleTournament -> if (batch.running) stopBatch() else startBatch()
+
             is UiIntent.SetSpeed -> scheduler.turnsPerSecond = intent.turnsPerSecond
 
             is UiIntent.SeekTo -> seek(intent.turnIndex)
@@ -109,6 +154,12 @@ public class GameSession(
 
     private fun begin() {
         awaitingInput = false
+
+        // A match starting takes the arena back off the batch, whose table stays on the page. A
+        // replay arriving from a hash change is the one route in here that a running batch does not
+        // already block, so stopping is not merely tidiness.
+        batch.stop()
+        batchBoard = null
         renderer.fit(match.view)
 
         if (match.interactive) {
@@ -190,6 +241,116 @@ public class GameSession(
 
     private fun setupFrom(options: MatchOptions): MatchSetup =
         MatchSetup.create(options.rows, options.cols, options.slots, options.seed)
+
+    // -- the batch ------------------------------------------------------------------------------
+
+    /**
+     * Starts a tournament between the bots seated in the pickers.
+     *
+     * The board becomes the batch's: every frame paints whichever match it is currently on, which
+     * costs one full repaint of a small board and turns a progress bar into something worth watching.
+     * The match that was on screen before is dropped rather than kept — Restart and Start match are
+     * one click away, and quietly restoring a position somebody has since forgotten about is worse
+     * than plainly not having it.
+     */
+    private fun startBatch() {
+        val options = chrome.readTournamentOptions()
+        if (!options.ready) {
+            batchRefusal = "a tournament needs at least ${TournamentOptions.MINIMUM_CONTESTANTS} " +
+                "different bots in the slots"
+            renderChrome()
+            return
+        }
+
+        scheduler.stop()
+        input.clear()
+        batchRefusal = null
+        batchTable = ""
+        batchMatchesRendered = -1
+
+        batch.start(
+            Tournament(
+                TournamentConfig(
+                    contestants = options.contestants,
+                    rows = options.rows,
+                    cols = options.cols,
+                    rounds = options.rounds,
+                    seed = options.seed,
+                ),
+                registry,
+            ),
+        )
+
+        // Geometry is the same for every match of the batch, so the board is measured once here and
+        // only ever repainted after that.
+        batch.tournament?.let { fitToBatch(it) }
+        renderChrome()
+    }
+
+    /**
+     * Shows the opening position of the batch's first match, before a single turn of it is played.
+     *
+     * Building that match here costs one board and no search, and it means the arena, the scoreboard
+     * and the stats all describe the tournament from the frame it starts rather than from the frame
+     * after — the alternative shows one frame of the match this just replaced.
+     */
+    private fun fitToBatch(tournament: Tournament) {
+        val opening = Match(tournament.setupFor(0), registry)
+        batchBoard = opening
+        renderer.fit(opening.view)
+    }
+
+    private fun stopBatch() {
+        batch.stop()
+        refreshBatchTable()
+        renderChrome()
+    }
+
+    /** Called once a frame while a batch runs: paint where it has got to, then write the numbers. */
+    private fun batchFrame() {
+        batch.tournament?.current?.let {
+            batchBoard = it
+            renderer.repaint(it.view)
+        }
+        refreshBatchTable()
+        renderChrome()
+    }
+
+    private fun refreshBatchTable() {
+        val tournament = batch.tournament ?: return
+        if (tournament.matchesPlayed == batchMatchesRendered) {
+            return
+        }
+        batchMatchesRendered = tournament.matchesPlayed
+        batchTable = if (tournament.matchesPlayed == 0) "" else tournament.table.toString()
+    }
+
+    private fun batchStatus(): TournamentStatus? {
+        val tournament = batch.tournament
+        if (tournament == null) {
+            val refusal = batchRefusal ?: return null
+            return TournamentStatus(running = false, progress = refusal, table = "")
+        }
+
+        val played = tournament.matchesPlayed
+        val total = tournament.matchCount
+
+        return TournamentStatus(
+            running = batch.running,
+            progress = when {
+                tournament.finished -> "done — $total matches, ${tournament.turnsPlayed} turns"
+                !batch.running -> "stopped after $played of $total"
+                else -> "match ${played + 1} of $total${seatingText(tournament.current)}"
+            },
+            table = batchTable,
+        )
+    }
+
+    /** " — space vs wallhug", or nothing at all in the instant before the first match is seated. */
+    private fun seatingText(playing: Match?): String {
+        val slots = playing?.setup?.slots ?: return ""
+        return " — ${nameOf(slots[0])} vs ${nameOf(slots[1])}"
+    }
 
     // -- one turn -------------------------------------------------------------------------------
 
@@ -274,24 +435,37 @@ public class GameSession(
     // -- what the chrome is told ----------------------------------------------------------------
 
     private fun renderChrome() {
+        // The one snapshot the whole frame is built from, batch or no batch: whichever match is on
+        // screen is the one being reported on, so the scoreboard, the stats and the board agree.
+        val shown = batchBoard ?: match
+
         chrome.render(
             UiModel(
                 replay = replay != null,
                 interactive = match.interactive,
                 running = scheduler.running,
-                turnIndex = match.turnIndex,
-                turnCount = replay?.turnCount ?: match.turnIndex,
-                status = statusText(),
-                slots = slotStatuses(),
+                turnCount = replay?.turnCount ?: shown.turnIndex,
+                status = statusText(shown),
+                stats = shown.stats(),
                 shareUrl = shareUrl,
+                tournament = batchStatus(),
             ),
         )
     }
 
-    private fun statusText(): String {
-        val outcome = match.outcome
+    /** What the line under the board says about [shown], which is not always the player's match. */
+    private fun statusText(shown: Match): String {
+        if (batch.running) {
+            return "tournament running"
+        }
+
+        val outcome = shown.outcome
         if (outcome != null) {
-            return outcomeText(outcome)
+            return outcomeText(shown, outcome)
+        }
+        if (shown !== match) {
+            // A batch stopped part-way through one of its matches.
+            return "tournament stopped"
         }
         if (awaitingInput) {
             // A scripted slot answers `Pending` once it runs off the end of what was recorded, which
@@ -301,39 +475,14 @@ public class GameSession(
         return if (scheduler.running) "playing" else "paused"
     }
 
-    private fun outcomeText(outcome: MatchOutcome): String = when (outcome.end) {
-        MatchEnd.LAST_SNAKE_STANDING -> "${nameOf(outcome.winner)} wins — last snake standing"
+    private fun outcomeText(shown: Match, outcome: MatchOutcome): String = when (outcome.end) {
+        MatchEnd.LAST_SNAKE_STANDING -> "${nameOf(shown, outcome.winner)} wins — last snake standing"
         MatchEnd.ALL_ELIMINATED -> "nobody left standing"
         MatchEnd.TURN_LIMIT -> "a draw — the turn limit ran out"
     }
 
-    private fun slotStatuses(): List<SlotStatus> {
-        val winner = match.outcome?.winner
-        return List(match.setup.slotCount) { slot ->
-            val snake = match.view.snake(SnakeId(slot))
-            SlotStatus(
-                slot = slot,
-                name = nameOf(SnakeId(slot)),
-                length = snake.length,
-                alive = snake.alive,
-                fate = snake.eliminationReason?.let(::fateText) ?: "",
-                winner = winner != null && winner.index == slot,
-            )
-        }
-    }
+    private fun nameOf(shown: Match, id: SnakeId): String =
+        if (id.isNone) "nobody" else nameOf(shown.setup.slots[id.index])
 
-    private fun nameOf(id: SnakeId): String {
-        if (id.isNone) {
-            return "nobody"
-        }
-        val slug = match.setup.slots[id.index]
-        return registry[slug]?.displayName ?: slug.slug
-    }
-
-    private fun fateText(reason: EliminationReason): String = when (reason) {
-        EliminationReason.TRAPPED -> "trapped"
-        EliminationReason.SUICIDE -> "crashed"
-        EliminationReason.RESIGNED -> "resigned"
-        EliminationReason.FORFEIT -> "forfeited"
-    }
+    private fun nameOf(bot: BotId): String = registry[bot]?.displayName ?: bot.slug
 }

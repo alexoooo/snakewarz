@@ -31,6 +31,7 @@ internal class TestRegistry(entries: List<BotEntry>) : BotRegistry {
         val ALL: TestRegistry = TestRegistry(
             listOf(
                 entry("cycle") { CyclingBot() },
+                entry("last") { LastLegalBot() },
                 entry("south") { FixedBot(Direction.SOUTH) },
                 entry("north") { FixedBot(Direction.NORTH) },
                 entry("east") { FixedBot(Direction.EAST) },
@@ -76,6 +77,17 @@ internal class CyclingBot : Bot {
     override fun chooseMove(turn: Turn): Decision {
         val legal = turn.legalMoves
         return Decision.Move(if (legal.isEmpty) Direction.NORTH else legal.nth(0))
+    }
+}
+
+/**
+ * Plays the highest-ordinal legal direction, so it also survives — and plays differently from
+ * [CyclingBot], which is what a tournament test needs to put two survivors in one match.
+ */
+internal class LastLegalBot : Bot {
+    override fun chooseMove(turn: Turn): Decision {
+        val legal = turn.legalMoves
+        return Decision.Move(if (legal.isEmpty) Direction.NORTH else legal.nth(legal.size - 1))
     }
 }
 

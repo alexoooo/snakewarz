@@ -4,16 +4,15 @@ Tron-style snakes game as an **AI testbed**. Snakes move one square per turn on 
 walls and every snake body — including your own — are lethal; the last one moving wins. No food, no
 score. Snakes grow at half speed: the tail retracts on alternating turns only.
 
-Originally written in 2005 and imported from the Google Code archive. Currently being rewritten from
-Java/Swing into Kotlin/Wasm as a web app.
+Originally written in 2005 and imported from the Google Code archive, and rewritten from Java/Swing
+into Kotlin/Wasm as a web app.
 
 ## Status
 
-Rewrite in progress — **Phase 5 of 6 complete, and there is now something worth losing to**. Play
-against the shipped bots with the arrow keys, or sit out and watch up to four of them fight; pause,
-step a turn at a time, change the speed, scrub back through a finished match, and share the whole
-thing as a link. A 165-turn three-way game is 131 characters of URL, and no server is involved at
-any point.
+**The rewrite is done — all six phases, and there is now something worth losing to.** Play against
+the shipped bots with the arrow keys, or sit out and watch up to four of them fight; pause, step a
+turn at a time, change the speed, scrub back through a finished match, and share the whole thing as a
+link. A 160-turn duel is 129 characters of URL, and no server is involved at any point.
 
 Seven of the nine bots are a ladder, weakest first, and each rung beats the one below it over twenty
 matches:
@@ -36,12 +35,31 @@ what they are, and they play the same contract suite as everything else:
 | Burnin Hell | First open direction, always north, south, east, west — which comes out as a serpentine sweep of the board |
 | Tom Snake | Pressure one turn in five, Random the other four |
 
-Batch tournaments are Phase 6.
+## Tournaments
 
-See [docs/MIGRATION.md](docs/MIGRATION.md) for the design and the phase plan.
+"Is this bot better than that one" is a question about a few hundred matches, not about one, and the
+engine runs millions of turns a second — so asking it properly is nearly free. Pick two to four bots
+in the sidebar, choose how many rounds a pairing, and press **Run tournament**: every pair meets over
+that many matches, each seed played from both seats so that acting first is not a free point, and the
+win-rate matrix fills in as it goes.
 
-The original Java implementation is preserved in `legacy/java/` for reference during porting, and at
-the `legacy-java-final` git tag. It is not part of the build and will be deleted at release 1.
+```
+        | wallhug |  random |   space |   score
+wallhug |       - |       7 |       4 |     55%
+random  |       3 |       - |       2 |     25%
+space   |       6 |       8 |       - |     70%
+```
+
+It runs on the animation frame in slices of a few milliseconds, so the page stays responsive
+throughout and the board shows whichever match the batch is currently on. No server, no worker, and
+nothing to install.
+
+See [docs/MIGRATION.md](docs/MIGRATION.md) for the design, the phase log, and the measurements behind
+the tuning constants.
+
+The original Java implementation is at the `legacy-java-final` git tag —
+`git show legacy-java-final:src/main/java/ao/…`. It was deleted from the working tree once the port
+was complete.
 
 ## Building
 
@@ -50,9 +68,12 @@ the Gradle wrapper.
 
 ```bash
 ./gradlew build          # compiles wasmJs + jvm, runs JVM tests, checks module purity
-./gradlew jvmTest        # fast inner loop, with IDE breakpoints
+./gradlew jvmTest        # inner loop, with IDE breakpoints
 ./gradlew :app:wasmJsBrowserDevelopmentRun   # local dev server with hot reload
 ```
+
+Most modules test in seconds. `:bots` takes a couple of minutes, because the tests that claim one bot
+is stronger than another play several hundred complete matches to say so.
 
 The `wasmJs` target is what ships. The `jvm` target exists **only** so tests run in milliseconds with
 a debugger instead of seconds in headless Chrome; it is never deployed.
@@ -85,8 +106,8 @@ JVM and keeps a Kotlin/JS fallback target a config change rather than a rewrite.
 | `:core` | Grid, occupancy, rules, state transition, PRNG. Pure Kotlin |
 | `:bot-api` | The contract bot authors implement |
 | `:bots` | Shipped bots and the registry |
-| `:match` | Turn sequencing, human input, replay codec, stats. No time, no DOM |
-| `:ui` | Canvas renderer, DOM chrome, frame scheduler |
+| `:match` | Turn sequencing, human input, replay codec, stats, tournaments. No time, no DOM |
+| `:ui` | Canvas renderer, DOM chrome, frame schedulers |
 | `:app` | Entry point and wiring |
 
 All six exist. Time lives only in `:ui`: a bot is handed a budget counted in iterations and has no

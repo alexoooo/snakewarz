@@ -13,23 +13,23 @@ Everything else exists to serve that.
 
 ## Current state — read this first
 
-Mid-rewrite. **Phase 5 of 6 is complete**, which means the game is playable *and* worth playing: the
-rules engine, the bot contract, the match driver, the replay codec, the canvas renderer, the DOM
-chrome and a seven-bot ladder topped by an MCTS bot all exist and are verified, and the legacy AI is
-fully ported. You can play against the shipped bots, watch bots fight, scrub a recording and share a
-match as a URL. What is left is stats plus batch tournaments (Phase 6), which also deletes `legacy/`.
+**All six phases are complete.** The rewrite is done: the rules engine, the bot contract, the match
+driver, the replay codec, the canvas renderer, the DOM chrome, a seven-bot ladder topped by an MCTS
+bot, per-match stats and batch tournaments all exist and are verified, and the legacy Java is deleted
+— it lives at the `legacy-java-final` tag and nowhere else. You can play against the shipped bots,
+watch bots fight, scrub a recording, share a match as a URL, and run a win-rate matrix over a few
+hundred matches without the page stopping.
 
 | Path | Status |
 |---|---|
 | `core/` | `:core` module. Padded-grid primitives plus the rules engine: `Occupancy`, `Board`, `MatchState`, `SplitMix64`, `Budget` |
 | `bot-api/` | `:bot-api` module. `Bot`, `Decision`, `Turn`, `BotSetup`, `BotRegistry`, plus `Scratch`/`Playout` — the search arena that makes the budget structural |
-| `bots/` | `:bots` module. Nine bots and `ShippedBots`, the `BotRegistry` implementation, over the `internal` search primitives `FloodFill`, `ShortestPaths`, `nearestOpponent`, `randomPlayout`, `portableLog` and `UctTree` |
-| `match/` | `:match` module. `Match` driver, `MatchSetup`, `MatchRecord`, `ReplayCodec`, spawn placement, and human input — `InputBuffer`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM |
-| `ui/` | `:ui` module. `GameSession` — the only public class — over `BoardRenderer`, `TurnScheduler`, `Chrome` and `Palette` |
+| `bots/` | `:bots` module. Nine bots and `ShippedBots`, the `BotRegistry` implementation, over the `internal` search primitives `FloodFill`, `ShortestPaths`, `SpaceOwnership`, `nearestOpponent`, `randomPlayout`, `truncatedPlayout`, `portableLog` and `UctTree` |
+| `match/` | `:match` module. `Match` driver, `MatchSetup`, `MatchRecord`, `ReplayCodec`, spawn placement, `MatchStats`, `Tournament`, and human input — `InputBuffer`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM |
+| `ui/` | `:ui` module. `GameSession` — the only public class — over `BoardRenderer`, `TurnScheduler`, `TournamentRunner`, `Chrome` and `Palette` |
 | `app/` | `:app` module. `main()`, registry injection and `#r=` replay routing. Sixty lines, and that is the point |
 | `build-logic/` | Convention plugins `snakewarz.pure` and `snakewarz.browser`, sharing `registerModulePurityCheck` |
-| `legacy/java/ao/**` | The original Java, reference only. Not in the build. Deleted at release 1 |
-| `docs/MIGRATION.md` | The design doc and phase plan. **Read this before changing architecture** |
+| `docs/MIGRATION.md` | The design doc and phase log. **Read this before changing architecture** |
 
 `ShippedBots` has **two sections, and only the first is a ladder**. The ladder is registered weakest
 first: `random`, `wallhug`, `space`, `pressure`, `chase`, `flat-monte-carlo`, `uct`. Each rung beats
@@ -44,21 +44,24 @@ consume no budget at all.
 
 Do not assume anything else exists; check the tree.
 
-The pre-rewrite tree is one command away: `git show legacy-java-final:<path>`.
+The pre-rewrite Java is one command away, in its original Maven shape:
+`git show legacy-java-final:src/main/java/ao/<path>`. Paths written as `legacy/java/ao/…` in older
+notes are that, one directory level shifted.
 
 **Phase tracker** — update this line as phases land, and mirror it in `docs/MIGRATION.md`:
 
-> Current phase: **6 — not started** (stats, batch tournaments, delete `legacy/`)
+> Current phase: **6 — done**. Release 1 is feature-complete; further work is new work, not the
+> remainder of a plan.
 
-## Where the project is going
+## What it is built on
 
 Kotlin 2.4.10, Gradle KTS, **`wasmJs` browser target only**, deployed as static files to GitHub Pages.
 Rendering is Kotlin/Wasm drawing to an HTML `<canvas>` 2D context, with hand-written HTML/CSS for the
 chrome — deliberately **not** Compose Multiplatform. Bots are Kotlin classes compiled into the app and
 registered in an explicit `BotRegistry`.
 
-Release 1: live match view with play/pause/step/speed, human vs bot, deterministic seeded matches,
-shareable replays encoded in the URL hash, per-match stats.
+Release 1, all of it shipped: live match view with play/pause/step/speed, human vs bot, deterministic
+seeded matches, shareable replays encoded in the URL hash, per-match stats, and batch tournaments.
 
 ### Module graph
 
@@ -129,6 +132,28 @@ engine records `TRAPPED` whichever is played — so this is a move in the sense 
 make one, not a choice, and it is not the `MoveTracker` bug (which invented a *survivable* move
 nobody chose).
 
+### Stats and tournaments
+
+`MatchStats` is **derived, never accumulated**. The board already knows every figure worth reporting
+— lengths, moves survived, who is left and why the rest are not — so `Match.stats()` is a read, taken
+at most once a frame, and the driver counts nothing extra as it goes. Do not add a counter to `Match`
+for a statistic; work out whether the board can already answer it. It also serves the scoreboard, so
+`:ui` has one set of per-slot numbers rather than two that could disagree.
+
+`Tournament.step()` advances **one turn**, not one match, for the same reason `Match.step()` does: a
+match at the shipped allowance is most of a second, and `:ui` has to be able to stop between any two
+units of work. `TournamentRunner` slices it across frames on an 8ms guard, exactly as `TurnScheduler`
+paces a match. That is what lets a batch of search bots run on a page that stays responsive, with no
+worker and nothing `suspend` below `:ui`.
+
+`Tournament.current` keeps reporting the **last** match after the batch ends, because somebody is
+usually looking at it. `Tournament.setupFor(index)` exposes the whole schedule as a pure function of
+the config — that is how `:ui` paints the opening position before a turn is played, and how the tests
+assert the seat-swapping without catching the driver between two steps.
+
+The contestants are the **slot pickers**, not a second list of bots: a tournament is the question the
+sidebar already asks, over a few hundred matches. A human seat and a duplicate both drop out.
+
 ## Four non-obvious facts
 
 Getting any of these wrong silently breaks the game or its determinism.
@@ -136,7 +161,7 @@ Getting any of these wrong silently breaks the game or its determinism.
 **1. Snakes grow at half speed.** `SnakeImpl.advance` flips `willGrow` on every call, starting from `false`,
 so body lengths go `1, 1, 2, 2, 3, 3, 4…` — the tail only retracts on alternating turns. This is a real
 rule, not an artifact. It is `RulesConfig.growEveryNthMove = 2` (`1` = classic Tron) and it has a golden
-test. Reference: `ao/sw/engine/v2/SnakeImpl.java:47-68`.
+test. Reference: `git show legacy-java-final:src/main/java/ao/sw/engine/v2/SnakeImpl.java`, lines 47-68.
 
 **2. `Bot.chooseMove` is synchronous and must never become `suspend`.** Bots run the engine *inside their
 own turn*: `BiState.rollout()` builds a whole game per MCTS rollout using `RandomAi` as its policy. A
@@ -217,13 +242,19 @@ The engine is called millions of times per turn from inside MCTS. In `:core` and
 ./gradlew allTests -PbrowserTests=true       # browser suite (needs Chrome; off by default)
 ./gradlew :app:wasmJsBrowserDevelopmentRun   # local dev server
 ./gradlew :app:wasmJsBrowserDistribution     # production bundle -> app/build/dist/wasmJs/productionExecutable
+
+# The measuring instruments. Both print `[bench]` lines and run on either target.
+./gradlew :bots:jvmTest --tests '*ThroughputTest*' -i | grep '\[bench\]'
+./gradlew :bots:wasmJsBrowserTest -PbrowserTests=true --rerun -i | grep '\[bench\]'
 ```
 
 Browser tests are disabled unless `-PbrowserTests=true`, because Karma startup dominates the runtime
 of small suites. Anything provable on the JVM should be proven there instead.
 
-Prefer `jvmTest` while developing. The wasm toolchain is slow to warm up; a full cold `build` takes
-several minutes, while `jvmTest` is seconds.
+Prefer `jvmTest` while developing; most modules answer in seconds. **`:bots` does not** — it is a
+couple of minutes, because `BotLadderTest` and `RolloutTruncationTest` play several hundred complete
+matches with a search bot in them, which is the point of both. Narrow with `--tests` while working on
+something else. A full cold `build` takes several minutes; the wasm toolchain is slow to warm up.
 
 ## Adding a bot
 
@@ -255,8 +286,13 @@ Three rules that are not obvious until they bite:
   test, and the shipped answer is to fall back on `SpaceBot`, whose flood fill charges nothing.
 
 The `internal` primitives in `:bots` are there to be used: `FloodFill` for room, `ShortestPaths` for
-distances and first steps, `nearestOpponent` for `PvpAi`'s reduction, `randomPlayout` for a rollout,
-`UctTree` for a flat-array search tree.
+distances and first steps, `SpaceOwnership` for the board carved up between the snakes,
+`nearestOpponent` for `PvpAi`'s reduction, `randomPlayout` for a rollout, `truncatedPlayout` for a
+short one judged by ownership, `UctTree` for a flat-array search tree.
+
+`truncatedPlayout` and `SpaceOwnership` ship **wired and off**, and the reason is measured rather
+than aesthetic — see `UctBot.ROLLOUT_DEPTH`. Do not turn them on without re-running
+`RolloutTruncationTest`, and do not delete them either: they are the evidence.
 
 Every registry entry is run against the shared contract suite in CI (`bots/src/commonTest/.../BotContractTest`):
 never returns an illegal move when a legal one exists, survives a budget of zero, is deterministic given
@@ -293,18 +329,33 @@ target — microseconds, and nothing to keep consistent.
 
 What *does* branch is which clock runs, and it branches on `Match.interactive` rather than on a mode
 flag: `TurnScheduler` paces bots and replays, while a match with a live player is stepped by
-`GameSession.playRound` straight out of the keydown.
+`GameSession.playRound` straight out of the keydown. `TournamentRunner` is the third clock and the
+only one with no speed at all — a batch is not something you watch at a rate, it is something you
+wait for, so it runs flat out on an 8ms-per-frame guard and reports progress instead.
+
+While a batch runs it **owns the arena**: `GameSession` paints its current match and builds the whole
+`UiModel` from that match, so the board, the scoreboard and the stats cannot disagree. The transport
+is greyed, and `dispatch` drops transport intents outright — the space bar does not read the DOM's
+disabled flags. Touching the transport afterwards hands the arena back with a full `fit`, because the
+renderer paints one square at a time and would otherwise step a match onto somebody else's board.
 
 The static skeleton lives in `app/.../index.html`. Kotlin looks elements up by id once and then only
-writes text, values and `hidden`; do not start constructing structure there.
+writes text, values and `hidden`; do not start constructing structure there. The win-rate matrix is
+the case that most invites breaking that rule and does not: `TournamentTable.toString()` lays it out
+in `:match` and the chrome writes the text into one `<pre>`.
 
 ## Working with the legacy Java
 
-Treat it as a **specification to read, not code to translate**. It has two competing board representations
-and the wrong performance shape; `:core` is a from-scratch rewrite. Port algorithms semantically and
-delete the scaffolding.
+**The port is finished and `legacy/` is deleted.** What follows is a record of what was found there,
+kept because it is the reasoning behind several decisions in the live code and because somebody will
+eventually read the old Java and wonder why the rewrite disagrees with it. The tree is at
+`git show legacy-java-final:src/main/java/ao/…`; nothing in it is outstanding work.
 
-**The AI is now fully ported and nothing under `ai/` is outstanding.** The sample bots landed in
+It was always a **specification to read, not code to translate**. It has two competing board
+representations and the wrong performance shape; `:core` is a from-scratch rewrite. Algorithms were
+ported semantically and the scaffolding deleted.
+
+**The AI is fully ported and nothing under `ai/` is outstanding.** The sample bots landed in
 Phase 4 — `WallHugAi`, `RandomAi`, `ForkAi`, `ForkPathAi`, `PathAi`, `AStar`, `MonteCarloAi`,
 `UctAi`/`Node`/`BiState`, `PvpAi`'s reduction and `BoardOccupancy.mostDistant` — and the contributed
 `ai/da/` bots in Phase 5, as `BurninHellBot` and `TomSnakeBot`. `OtherSnake` is the one deliberate

@@ -160,6 +160,34 @@ public class Match private constructor(
     public fun snapshot(): MatchState = board.snapshot()
 
     /**
+     * Where the match stands, as numbers. Safe to take mid-match, and cheap enough for once a frame.
+     *
+     * Nothing is accumulated to produce this — the board already knows every one of these figures,
+     * so it is a read rather than a bookkeeping obligation the driver would have to keep correct.
+     */
+    public fun stats(): MatchStats {
+        val outcome = board.outcome
+        val winner = outcome?.winner
+        return MatchStats(
+            setup = setup,
+            turnsPlayed = board.turnIndex,
+            outcome = outcome,
+            slots = List(setup.slotCount) { slot ->
+                val snake = board.snake(SnakeId(slot))
+                SlotStats(
+                    slot = SnakeId(slot),
+                    bot = setup.slots[slot],
+                    length = snake.length,
+                    movesMade = snake.movesMade,
+                    alive = snake.alive,
+                    fate = snake.eliminationReason,
+                    winner = winner != null && winner.index == slot,
+                )
+            },
+        )
+    }
+
+    /**
      * The match so far, as a self-contained record. Safe to take mid-match, and safe to keep — the
      * move stream and the terminal table are copied out.
      */

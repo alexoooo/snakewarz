@@ -14,7 +14,7 @@ change later and cheap to get right now.
 | 3 | **done** | UI — first playable milestone |
 | 4 | **done** | Search bots — space, pressure, chase, flat Monte Carlo, UCT |
 | 5 | **done** | Contributed bots |
-| 6 | not started | Stats, batch tournaments, delete `legacy/` |
+| 6 | **done** | Stats, batch tournaments, measured budget, `legacy/` deleted |
 
 ---
 
@@ -46,7 +46,10 @@ twenty years.
 | Rendering | Kotlin/Wasm → HTML `<canvas>` 2D; hand-written HTML/CSS chrome. No Compose |
 | Bots | Kotlin classes compiled in, explicit `BotRegistry`. Fork → add file → register → PR |
 | Release 1 | Live match view (play/pause/step/speed), human vs bot, seeded matches, URL replays, per-match stats |
-| Old Java | Tagged `legacy-java-final`, moved to `legacy/java/`, deleted at release 1 |
+| Old Java | Tagged `legacy-java-final`, moved to `legacy/java/`, **deleted in Phase 6** |
+
+Every `legacy/java/…` path quoted below was live when it was written and is now reachable only at the
+tag, where the tree still has its Maven shape: `git show legacy-java-final:src/main/java/ao/…`.
 
 ---
 
@@ -537,6 +540,11 @@ runs on both targets and is the *only* thing that runs in a browser in CI.
 7. **Browser conformance (CI, one job):** conformance suite on `wasmJs`, plus one end-to-end check
    that boots the page, loads a replay from the hash, steps 100 turns and asserts final state.
 8. **Benchmarks:** rollouts/sec on both targets, to quantify the wasm gap with numbers.
+   *Phase 6:* `ThroughputTest` and `RolloutTruncationTest`, both printing `[bench]` lines and both
+   run on both targets. Their assertions are an order of magnitude looser than their measurements on
+   purpose — a benchmark that fails when the machine is busy teaches everyone to ignore it, so they
+   fail only on a regression nobody could argue with and the *printed* numbers are what tuning
+   decisions get made from.
 
 ---
 
@@ -778,6 +786,12 @@ rather than adding to them, which is worth more than anything else on the list. 
 *measurement* question, Phase 6 owns measurement, and a knob shipped off by default is dead code —
 so it waits.
 
+*Pulled in Phase 6, and it is not a lever.* Even at equal budget it is dead level over forty matches
+a depth, and it costs between one and a fifth and three times the wall-clock per turn — because a
+rollout on the mutable arena is cheap enough that a hundred simulated moves cost about what one
+board-wide sweep costs. The table is under Phase 6 below. It ships wired and off, which is the one
+case where a knob defaulted off earns its keep: the alternative is deleting the evidence.
+
 **Phase 5 — contributed bots. DONE.** `BurninHellBot` and `TomSnakeBot` in `:bots`, appended to
 `ShippedBots` as a second section after the ladder, gated by the same contract suite as everything
 else, attribution in the KDoc. `OtherSnake` was dropped rather than ported — see below. Nothing else
@@ -850,12 +864,114 @@ Two findings that were not expected going in:
   `forkShare = 0.0` is 95 of 100, which is just `PressureBot` against `RandomBot` and confirms the
   branches are wired the way round they are supposed to be.
 
-**Phase 6 — polish.** Stats panel, and **batch tournament mode** (K seeded matches → win-rate
-matrix). Nearly free once `:match` runs headless and fast, and it is the actual point of an AI
-testbed. Delete `legacy/` here. Two things Phase 4 hands it: set
-`MatchSetup.DEFAULT_BUDGET_PER_TURN` from measurement rather than from judgement, and settle rollout
-truncation with numbers. `BotLadderTest` is a hand-rolled twenty-match version of the matrix this
-phase should be producing properly.
+**Phase 6 — stats, batch tournaments, and the two measurements. DONE.** `MatchStats`/`SlotStats`
+and `Tournament`/`TournamentConfig`/`TournamentTable` in `:match`; `TournamentRunner`,
+`TournamentOptions` and `TournamentStatus` in `:ui`, with a stats panel in the sidebar and a
+tournament panel under the board; `SpaceOwnership` and `truncatedPlayout` in `:bots`, wired into
+`UctBot` and shipped off; `ThroughputTest` and `RolloutTruncationTest` as the two measuring
+instruments. `MatchSetup.DEFAULT_BUDGET_PER_TURN` goes from a guessed 10,000 to a measured 40,000.
+`legacy/` is deleted.
+
+Measured results: **311 JVM tests green** (up from 280), and green identically on `wasmJs` in Chrome.
+Production bundle **64.6 KiB gzipped** (up from 58.5 in Phase 5) against the 1.5 MiB ceiling, so
+stats, tournaments and a second search primitive cost 6 KiB between them.
+
+Checked in Chrome against the production distribution, as every phase since 3 has been. A three-bot
+tournament of thirty matches runs at a visible pace on a page that stays responsive, paints the match
+it is currently on, and prints the matrix; `uct` beats `chase` **10 of 10** on a 12x12 at the new
+allowance; a 160-turn `uct` vs `space` match on a 20x20 shares as a **129-character** fragment that
+reloads to the same position, the same lengths and the same stats, and scrubbing to turn 80 and back
+moves the stats panel with it. The tab a browser automation tool drives is *hidden*, so
+`requestAnimationFrame` never fires in it — the checks above run by replacing `requestAnimationFrame`
+and pumping the callback with synthetic timestamps, which is the same trick Phase 3 used to verify
+pacing and is worth knowing before concluding that the page is frozen.
+
+**The two numbers Phase 4 handed this phase, answered.**
+
+*The allowance.* `UctBot` timed on a 20x20 in headless Chrome, which is the slower target and the one
+people play on, against the JVM for scale:
+
+| allowance | Chrome | JVM |
+|---|---|---|
+| 10,000 | 1.2 ms/turn | 0.40 ms/turn |
+| 40,000 | 4.1 ms/turn | 1.6 ms/turn |
+| 60,000 | 5.2 ms/turn | 2.1 ms/turn |
+| 100,000 | 16.6 ms/turn | 4.1 ms/turn |
+
+The criterion is the scheduler's 8 ms frame budget, which can only be honoured *between* turns — so a
+turn that overruns the slice overruns the frame. 40,000 is half of it, and that headroom is the whole
+argument: the machine these came off is a desktop, and one four times slower still lands inside a
+single 60 Hz frame. The engine itself runs **2.7M turns/s in Chrome against 8.8M on the JVM** with
+trivial bots, a gap of about 3× and inside the band the risk section predicted.
+
+Strength was checked separately, because a timing cannot say whether the search is worth having:
+`uct` at 40,000 beats `uct` at 4,000 **17 of 20**, and the ladder still holds at the new allowance
+(17, 18, 14, 16, 15 for the five rungs). That 17 is also the ceiling on the argument for going
+further — ten times the budget is three wins in twenty, so the curve is flat enough that the frame
+budget and not strength is the right thing to set this by.
+
+*Rollout truncation, settled: **no**.* Phase 4 named it the highest-value lever left. Built as
+`SpaceOwnership` — one multi-source breadth-first sweep from every live head, first arrival wins,
+ties belong to nobody — and `truncatedPlayout`, and played against full rollouts over forty matches a
+depth on a 12x12 at the same allowance:
+
+| depth | wins of 40 | µs/turn | against full |
+|---|---|---|---|
+| 10 | 20 | 1,120 | 3.1× |
+| 25 | 22 | 630 | 1.8× |
+| 60 | 23 | 435 | 1.2× |
+| played out | — | 357 | — |
+
+Dead even on strength — one sigma over forty matches is ±3.2, so 20, 22 and 23 are the same number —
+for one and a fifth to three times the wall-clock. The reasoning behind the idea does not survive
+contact with *this* engine, and the mutable arena is exactly why: a rollout here is mutate-and-undo at
+tens of nanoseconds a move, so a hundred of them cost about what **one** board-wide sweep costs, and
+truncating at ten buys seven times as many sweeps rather than seven times as much search. Equal
+budget is the generous comparison too — buying more iterations per simulated move is the entire point
+of truncating — so losing there *and* costing more leaves no allowance at which it is the better use
+of a millisecond. It ships wired and off rather than deleted: a measured "no" is worth more with the
+thing still there to re-measure.
+
+Five decisions worth recording:
+
+- **`Tournament.step` plays one turn, not one match.** The only caller that matters is a browser, and
+  a match at the shipped allowance is most of a second. Stepping by turn lets `:ui` slice a
+  tournament across frames on an 8 ms guard, so a batch of search bots runs at whatever the machine
+  gives on a page that never stops answering the mouse — with no worker, no threads, and no
+  asynchrony anywhere in the driver. It is the same reasoning that made `Match.step` one turn, and it
+  is what the risk section meant by "design for a worker by keeping `:match` headless": the seam is
+  already in the right place.
+- **The tournament's contestants are the slot pickers.** There is no second list of bots on the page.
+  The sidebar already says who is playing; a tournament is that question asked a few hundred times
+  instead of once. A human seat and a bot picked twice drop out on the way through, and the panel
+  says so plainly when fewer than two are left.
+- **The matrix is text, and `:match` renders it.** `TournamentTable.toString` lays the win-rate
+  matrix out — the same shape as the tables in this document — and `:ui` writes it into one `<pre>`.
+  So the one panel most likely to have broken the rule that the chrome never constructs DOM does not
+  break it, and the same rendering serves a browser panel and a test log.
+- **`MatchStats` is derived, never accumulated.** The board already knows every figure worth
+  reporting — lengths, moves survived, who is left and why the rest are not — so the driver counts
+  nothing extra. A statistic the engine has to be modified to collect is one that has to stay correct
+  forever after. It also replaced `:ui`'s own `SlotStatus`: the scoreboard and the stats panel now
+  read one set of numbers rather than two that could disagree.
+- **A tournament owns the arena while it runs.** The board paints whichever match the batch is on,
+  and the scoreboard and stats describe *that* match, so one snapshot drives the whole frame. The
+  moment the player touches the transport the arena goes back to their own match with a full repaint
+  — the renderer paints one square at a time, and stepping a match onto a board still showing
+  somebody else's game would leave that game underneath it.
+
+Two findings that were not expected going in:
+
+- **The 10,000 shipped since Phase 4 was four times too cautious.** The guess was made against a
+  legacy `UctAi` that built a persistent board per node; the arena rewrite made a simulated move so
+  cheap that a whole turn's search cost a millisecond in the browser, and nobody had measured it. The
+  general lesson is the one this phase exists to make: a constant chosen by judgement in Phase 4 is
+  worth re-deriving once the thing it describes has been rewritten underneath it.
+- **Karma disconnects a browser that is working perfectly.** A test method is one synchronous call
+  into wasm, so nothing — not the reporter, not Karma's own heartbeat — gets a turn on the event loop
+  until it returns. Quadrupling the ladder's allowance pushed it past `pingTimeout`, and the failure
+  reports as `reconnect failed before timeout of 2000ms (ping timeout)`, which reads as flaky
+  infrastructure and is not. Mocha's timeout, raised in Phase 4, is not the one that bites first.
 
 **Deleted outright, no port:** `SnakesRunner`, `SnakesContest`, `SimpleSnakesGame`, `SnakesGame2`,
 `SnakeHistory`, `GameGraphics*`, `SnakesGameDisplay`, `MoveTracker`, the whole `MoveSpecifier` family
@@ -912,6 +1028,12 @@ layer that would leak into `Bot` — destroying the synchronous property that fi
 right *first* use of a worker is batch tournament mode, which is naturally message-shaped: send a
 `MatchConfig`, get a `MatchRecord`. Design for it now by keeping `:match` fully headless. `Bot` never
 becomes async; the *match* becomes async at the worker boundary.
+
+*Phase 6 built batch tournaments without one, and the shape held.* `Tournament.step` advances one
+turn and returns, so `:ui` slices a batch across frames on the same 8 ms guard the match scheduler
+uses and the page stays responsive throughout — no worker, no threads, and not one `suspend` anywhere
+below `:ui`. What a worker would buy now is a second core rather than a responsive page, which is a
+smaller and much later prize. The seam is still where it was designed to be if that day comes.
 
 **Cross-target determinism drift** (`log`/`exp` not bit-identical): mitigated by recording move
 streams, reducing it to a CI concern — `verify()` may need a same-target assertion, or a fixed-point

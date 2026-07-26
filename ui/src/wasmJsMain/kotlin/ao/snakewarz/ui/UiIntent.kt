@@ -29,6 +29,15 @@ internal sealed interface UiIntent {
 
     class SetSpeed(val turnsPerSecond: Double) : UiIntent
 
+    /**
+     * Run a batch of matches, or stop the one running.
+     *
+     * One intent rather than two, like [TogglePlay]: the button has one place on the page and one
+     * meaning — "the batch", start or stop — and which of those it is belongs to the session that
+     * knows whether anything is running.
+     */
+    data object ToggleTournament : UiIntent
+
     /** Wind a recorded match to a turn. Replay only; a live match has no future to seek into. */
     class SeekTo(val turnIndex: Int) : UiIntent
 

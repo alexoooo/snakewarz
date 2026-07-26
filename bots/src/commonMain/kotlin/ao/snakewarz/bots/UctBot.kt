@@ -4,6 +4,7 @@ import ao.snakewarz.botapi.BoardScratch
 import ao.snakewarz.botapi.Bot
 import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
+import ao.snakewarz.botapi.Playout
 import ao.snakewarz.botapi.Turn
 import ao.snakewarz.core.Direction
 import ao.snakewarz.core.MatchOutcome
@@ -42,6 +43,13 @@ public class UctBot(setup: BotSetup) : Bot {
     private val exploration = setup.params.double("exploration", EXPLORATION)
     private val tree = UctTree(setup.params.int("maxNodes", UctTree.MAX_NODES))
     private val path = IntArray(MAX_DEPTH)
+
+    /** Moves a rollout is cut short at, or [ROLLOUT_TO_THE_END] to play every one of them out. */
+    private val rolloutDepth = setup.params.int("rolloutDepth", ROLLOUT_DEPTH)
+
+    /** Allocated only when a rollout is going to be cut short, since that is the only reader. */
+    private val space =
+        if (rolloutDepth == ROLLOUT_TO_THE_END) null else SpaceOwnership(setup.grid, setup.opponentCount + 1)
 
     /** Nodes in the tree after the last decision. Diagnostic only. */
     internal val nodesSearched: Int get() = tree.size
@@ -104,12 +112,12 @@ public class UctBot(setup: BotSetup) : Bot {
             }
             if (child == UctTree.NO_NODE || depth == path.size) {
                 // The pool or the path array is full. Simulate from here rather than deepening.
-                result = randomPlayout(playout, rng)
+                result = simulate(playout)
                 break
             }
             if (!tree.isOpen(child)) {
                 tree.open(child, playout.board.legalMoves(playout.toAct))
-                result = randomPlayout(playout, rng)
+                result = simulate(playout)
                 break
             }
 
@@ -128,11 +136,58 @@ public class UctBot(setup: BotSetup) : Bot {
         return true
     }
 
+    /**
+     * One simulation from the leaf, played to the end or cut short and judged.
+     *
+     * Which it is, is a *measurement* rather than a preference — see [ROLLOUT_DEPTH].
+     */
+    private fun simulate(playout: Playout): MatchOutcome {
+        val judge = space ?: return randomPlayout(playout, rng)
+        return truncatedPlayout(playout, rng, rolloutDepth, judge)
+    }
+
     override fun toString(): String = "UctBot"
 
-    private companion object {
+    internal companion object {
         /** Legacy's `5` at `Node.java:423` — an exploration constant of `sqrt(1/5)`. */
         const val EXPLORATION = 5.0
+
+        /** [ROLLOUT_DEPTH] for a bot that plays every rollout out in full. */
+        const val ROLLOUT_TO_THE_END: Int = 0
+
+        /**
+         * Rollouts run to the end, and that is a **measured** decision rather than an omission.
+         *
+         * `docs/MIGRATION.md` came out of Phase 4 naming truncation — cut the rollout at a depth,
+         * judge the position by reachable-space share — as the highest-value lever left, on the
+         * usual reasoning that a hundred-move rollout is an expensive way to buy one bit. Phase 6
+         * built it ([truncatedPlayout], [SpaceOwnership]) and played it against this over forty
+         * matches a depth, at the same allowance, on a 12x12:
+         *
+         * | depth | wins of 40 | µs/turn | against full |
+         * |---|---|---|---|
+         * | 10 | 20 | 1,120 | 3.1× |
+         * | 25 | 22 | 630 | 1.8× |
+         * | 60 | 23 | 435 | 1.2× |
+         * | played out | — | 357 | — |
+         *
+         * Dead even on strength — one sigma over forty matches is ±3.2, so 20, 22 and 23 are the
+         * same number — for one and a fifth to three times the wall-clock. The reasoning does not
+         * survive contact with *this* engine: a rollout here is mutate-and-undo over a flat arena at
+         * tens of nanoseconds a move, so a hundred of them cost about what **one** board-wide
+         * ownership sweep costs, and truncating at ten buys seven times as many sweeps rather than
+         * seven times as much search. The shape of the table is the tell — truncation gets cheaper
+         * and very slightly better as the cut moves *out* toward not truncating at all.
+         *
+         * Equal budget is the generous comparison, too — a budget is simulated moves, and buying
+         * more iterations per move is the entire point of truncating. Losing there and costing more
+         * leaves no allowance at which it is the better use of a millisecond.
+         *
+         * It ships wired and off rather than deleted, because a measured "no" is worth more with the
+         * thing still there to re-measure: set `rolloutDepth` in [ao.snakewarz.botapi.BotParams] to
+         * turn it on, and `RolloutTruncationTest` re-runs the table above.
+         */
+        const val ROLLOUT_DEPTH: Int = ROLLOUT_TO_THE_END
 
         /**
          * Deeper than the tree can grow at any sane allowance: one node is added per iteration, so

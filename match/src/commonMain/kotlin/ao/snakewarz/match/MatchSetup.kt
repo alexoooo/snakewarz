@@ -107,22 +107,35 @@ public class MatchSetup(
 
     public companion object {
         /**
-         * Enough iterations for a search bot to be interesting and few enough that a turn stays
-         * under a frame.
+         * Simulated moves a bot may spend on one turn — **measured, not guessed**.
          *
-         * Still a guess, but no longer a blind one: Phase 4 measured it at roughly **137 tree nodes
-         * — so 137 rollouts — per turn** for `UctBot` on a 20x20, which is the same order the legacy
-         * `UctAi` ran at, and enough that its tree beats the same rollouts with no tree 16 times in
-         * 20. A tenth of it is not: at 1,000 the tree never gets past its own first layer and the
-         * two are indistinguishable. Every shipped bot degrades gracefully below this rather than
-         * assuming it, down to and including zero.
+         * The criterion is the scheduler's frame budget. `:ui` gives a frame 8 ms of stepping and
+         * then stops, but it can only stop *between* turns, so a turn that overruns the slice
+         * overruns the frame. Phase 6 timed `UctBot` on a 20x20 in headless Chrome — the slower of
+         * the two targets, and the one people play on:
          *
-         * **Phase 6 replaces it with a measured number**, alongside the throughput figures that
-         * would justify one. Deferring costs nothing, because `budgetPerTurn` is recorded in the
-         * replay header: a record carries the allowance it was played under and `verify` re-runs
-         * against that, never against whatever this constant happens to say today.
+         * | allowance | Chrome | JVM |
+         * |---|---|---|
+         * | 10,000 | 1.2 ms/turn | 0.40 ms/turn |
+         * | 40,000 | 4.1 ms/turn | 1.6 ms/turn |
+         * | 60,000 | 5.2 ms/turn | 2.1 ms/turn |
+         * | 100,000 | 16.6 ms/turn | 4.1 ms/turn |
+         *
+         * 40,000 is **half** the 8 ms slice rather than all of it, and that headroom is the whole
+         * argument: the machine those numbers came off is a desktop, and one four times slower still
+         * lands inside a single 60 Hz frame. Going to 60,000 would spend the headroom to buy a bot
+         * that `BotLadderTest` cannot tell apart from this one.
+         *
+         * Four times the Phase 4 guess, and worth it: `uct` at this allowance beats `uct` at a tenth
+         * of it, which is the assertion in `BotLadderTest` that says the extra iterations are real
+         * playing strength rather than a bigger number. Every shipped bot still degrades gracefully
+         * below it, down to and including zero.
+         *
+         * Raising it invalidates no replay. `budgetPerTurn` is in the header, so a record carries the
+         * allowance it was played under and `verify` re-runs against that, never against whatever
+         * this constant says today.
          */
-        public const val DEFAULT_BUDGET_PER_TURN: Int = 10_000
+        public const val DEFAULT_BUDGET_PER_TURN: Int = 40_000
 
         /**
          * The RNG stream setup draws from.

@@ -3,8 +3,11 @@ package ao.snakewarz.ui
 import ao.snakewarz.botapi.BotId
 import ao.snakewarz.botapi.BotRegistry
 import ao.snakewarz.core.Direction
+import ao.snakewarz.core.EliminationReason
 import ao.snakewarz.match.MatchSetup
+import ao.snakewarz.match.MatchStats
 import ao.snakewarz.match.PlayableRegistry
+import ao.snakewarz.match.SlotStats
 import kotlinx.browser.document
 import kotlinx.browser.window
 import org.w3c.dom.Element
@@ -28,7 +31,7 @@ import org.w3c.dom.events.KeyboardEvent
  * exists to keep cheap. Options are content; the structure around them is not.
  */
 internal class Chrome(
-    registry: BotRegistry,
+    private val registry: BotRegistry,
     private val dispatch: (UiIntent) -> Unit,
 ) {
     val canvas: HTMLCanvasElement = elementById("board")
@@ -46,11 +49,21 @@ internal class Chrome(
     private val status: HTMLElement = elementById("status")
     private val rows: List<SlotRow> = List(SCOREBOARD_ROWS) { SlotRow(elementById("slot-$it")) }
 
+    private val turnsPlayed: HTMLElement = elementById("stat-turns")
+    private val roundsPlayed: HTMLElement = elementById("stat-rounds")
+    private val boardFilled: HTMLElement = elementById("stat-filled")
+    private val longestSnake: HTMLElement = elementById("stat-longest")
+
     private val sizeSelect: HTMLSelectElement = elementById("size")
     private val seedInput: HTMLInputElement = elementById("seed")
     private val reseedButton: HTMLButtonElement = elementById("reseed")
     private val botSelects: List<HTMLSelectElement> = List(SCOREBOARD_ROWS) { elementById("bot-$it") }
     private val startButton: HTMLButtonElement = elementById("new-match")
+
+    private val roundsSelect: HTMLSelectElement = elementById("rounds")
+    private val tournamentButton: HTMLButtonElement = elementById("run-tournament")
+    private val tournamentProgress: HTMLElement = elementById("tournament-progress")
+    private val tournamentTable: HTMLElement = elementById("tournament-table")
 
     private val shareButton: HTMLButtonElement = elementById("share")
     private val shareUrlInput: HTMLInputElement = elementById("share-url")
@@ -66,6 +79,7 @@ internal class Chrome(
         stepButton.addEventListener("click") { dispatch(UiIntent.StepOnce) }
         restartButton.addEventListener("click") { dispatch(UiIntent.Restart) }
         startButton.addEventListener("click") { dispatch(UiIntent.StartMatch(readOptions())) }
+        tournamentButton.addEventListener("click") { dispatch(UiIntent.ToggleTournament) }
         shareButton.addEventListener("click") { dispatch(UiIntent.Share) }
         reseedButton.addEventListener("click") { seedInput.value = freshSeed().toString() }
 
@@ -105,6 +119,25 @@ internal class Chrome(
     }
 
     /**
+     * The tournament form: the bots seated in the pickers, on the board and from the seed beside
+     * them, over however many rounds a pairing.
+     *
+     * Deliberately no second list of contestants. The sidebar already says who is playing, and a
+     * tournament is that question asked a few hundred times — so a seat filled by a person, or by a
+     * bot already picked, drops out and the rest are the field.
+     */
+    fun readTournamentOptions(): TournamentOptions {
+        val match = readOptions()
+        return TournamentOptions(
+            rows = match.rows,
+            cols = match.cols,
+            seed = match.seed,
+            contestants = match.slots.filter { it != PlayableRegistry.HUMAN_ID }.distinct(),
+            rounds = roundsSelect.value.toIntOrNull() ?: DEFAULT_ROUNDS,
+        )
+    }
+
+    /**
      * Points the new-match form at [setup], so that loading somebody's replay leaves you one click
      * away from a rematch under the same conditions.
      */
@@ -123,10 +156,15 @@ internal class Chrome(
         status.textContent = "Turn ${model.turnIndex} · ${model.status}"
 
         // A match with a person in it advances on their key and on nothing else, so there is no
-        // clock here to start or step. Greyed rather than hidden: the buttons come back the moment
-        // they are out and the survivors play on, and a control that moves is worse than one that dims.
-        playButton.disabled = model.interactive
-        stepButton.disabled = model.interactive
+        // clock here to start or step. A running batch owns the board for the same reason: there is
+        // one match on screen and the tournament is the thing driving it. Greyed rather than hidden
+        // in both cases -- the buttons come back, and a control that moves is worse than one that dims.
+        val noTransport = model.interactive || model.batchRunning
+        playButton.disabled = noTransport
+        stepButton.disabled = noTransport
+        restartButton.disabled = model.batchRunning
+        startButton.disabled = model.batchRunning
+        shareButton.disabled = model.batchRunning
 
         scrub.hidden = !model.replay
         if (model.replay) {
@@ -136,8 +174,12 @@ internal class Chrome(
         }
 
         for (slot in rows.indices) {
-            rows[slot].render(model.slots.getOrNull(slot))
+            val state = model.stats.slots.getOrNull(slot)
+            rows[slot].render(state, if (state == null) "" else nameOf(state.bot))
         }
+
+        renderStats(model.stats)
+        renderTournament(model.tournament)
 
         val url = model.shareUrl
         shareUrlInput.hidden = url == null
@@ -160,6 +202,34 @@ internal class Chrome(
     }
 
     // -- internals ------------------------------------------------------------------------------
+
+    /**
+     * The four numbers a match is worth reporting, which the scoreboard beside them cannot show.
+     *
+     * The scoreboard is per snake and this is per match: how long it has gone on, how much of the
+     * board has stopped being playable, and who is biggest — which is not always who is winning, and
+     * is most interesting when it is not.
+     */
+    private fun renderStats(stats: MatchStats) {
+        turnsPlayed.textContent = stats.turnsPlayed.toString()
+        roundsPlayed.textContent = stats.rounds.toString()
+        boardFilled.textContent = "${percent(stats.fillRate)}% of ${stats.playableCells}"
+
+        val longest = stats.longest
+        longestSnake.textContent = "${nameOf(longest.bot)} (${longest.length})"
+    }
+
+    private fun renderTournament(status: TournamentStatus?) {
+        tournamentButton.textContent = if (status?.running == true) "Stop" else "Run tournament"
+        tournamentProgress.textContent = status?.progress ?: ""
+
+        tournamentTable.hidden = status == null || status.table.isEmpty()
+        if (status != null) {
+            tournamentTable.textContent = status.table
+        }
+    }
+
+    private fun nameOf(bot: BotId): String = registry[bot]?.displayName ?: bot.slug
 
     private fun fillPickers(registry: BotRegistry) {
         val everyone = registry.entries
@@ -253,7 +323,7 @@ internal class Chrome(
         private val length: HTMLElement = root.child(".length")
         private val fate: HTMLElement = root.child(".fate")
 
-        fun render(state: SlotStatus?) {
+        fun render(state: SlotStats?, name: String) {
             if (state == null) {
                 root.hidden = true
                 return
@@ -261,12 +331,12 @@ internal class Chrome(
 
             root.hidden = false
             root.className = if (state.alive) "slot" else "slot out"
-            swatch.style.backgroundColor = Palette.bodyColour(state.slot)
-            who.textContent = state.name
+            swatch.style.backgroundColor = Palette.bodyColour(state.slot.index)
+            who.textContent = name
             length.textContent = state.length.toString()
             fate.textContent = when {
                 state.winner -> "winner"
-                !state.alive -> state.fate
+                !state.alive -> fateText(state.fate)
                 else -> ""
             }
         }
@@ -280,6 +350,21 @@ internal class Chrome(
         const val SCOREBOARD_ROWS = 4
 
         const val DEFAULT_SIZE = 20
+
+        /** Must be one of the options on `#rounds` in index.html, and even. */
+        const val DEFAULT_ROUNDS = 20
+
+        /** How a snake left, in plain words. The engine's vocabulary stops here. */
+        fun fateText(reason: EliminationReason?): String = when (reason) {
+            EliminationReason.TRAPPED -> "trapped"
+            EliminationReason.SUICIDE -> "crashed"
+            EliminationReason.RESIGNED -> "resigned"
+            EliminationReason.FORFEIT -> "forfeited"
+            null -> ""
+        }
+
+        /** Rounded half-up without `kotlin.math`, which is more than a percentage needs. */
+        fun percent(rate: Double): Int = ((rate * 1000).toInt() + 5) / 10
 
         /** Must line up with the `max` on `#speed` in index.html. */
         val SPEEDS = doubleArrayOf(1.0, 2.0, 4.0, 8.0, 12.0, 20.0, 40.0, 80.0)
