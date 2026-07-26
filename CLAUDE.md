@@ -13,16 +13,17 @@ Everything else exists to serve that.
 
 ## Current state — read this first
 
-Mid-rewrite. **Phase 3 of 6 is complete**, which means the game is **playable**: the rules engine,
-the bot contract, the match driver, the replay codec, the canvas renderer and the DOM chrome all
-exist and are verified. You can play against the shipped bots, watch bots fight, scrub a recording
-and share a match as a URL. What is missing is a bot worth losing to — that is Phase 4.
+Mid-rewrite. **Phase 4 of 6 is complete**, which means the game is playable *and* worth playing: the
+rules engine, the bot contract, the match driver, the replay codec, the canvas renderer, the DOM
+chrome and a seven-bot ladder topped by an MCTS bot all exist and are verified. You can play against
+the shipped bots, watch bots fight, scrub a recording and share a match as a URL. What is left is
+contributed bots (Phase 5) and stats plus batch tournaments (Phase 6).
 
 | Path | Status |
 |---|---|
 | `core/` | `:core` module. Padded-grid primitives plus the rules engine: `Occupancy`, `Board`, `MatchState`, `SplitMix64`, `Budget` |
 | `bot-api/` | `:bot-api` module. `Bot`, `Decision`, `Turn`, `BotSetup`, `BotRegistry`, plus `Scratch`/`Playout` — the search arena that makes the budget structural |
-| `bots/` | `:bots` module. `RandomBot`, `WallHugBot`, and `ShippedBots`, the `BotRegistry` implementation |
+| `bots/` | `:bots` module. Seven bots and `ShippedBots`, the `BotRegistry` implementation, over the `internal` search primitives `FloodFill`, `ShortestPaths`, `nearestOpponent`, `randomPlayout`, `portableLog` and `UctTree` |
 | `match/` | `:match` module. `Match` driver, `MatchSetup`, `MatchRecord`, `ReplayCodec`, spawn placement, and human input — `InputBuffer`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM |
 | `ui/` | `:ui` module. `GameSession` — the only public class — over `BoardRenderer`, `TurnScheduler`, `Chrome` and `Palette` |
 | `app/` | `:app` module. `main()`, registry injection and `#r=` replay routing. Sixty lines, and that is the point |
@@ -30,14 +31,19 @@ and share a match as a URL. What is missing is a bot worth losing to — that is
 | `legacy/java/ao/**` | The original Java, reference only. Not in the build. Deleted at release 1 |
 | `docs/MIGRATION.md` | The design doc and phase plan. **Read this before changing architecture** |
 
-There is still **no search bot**: `RandomBot` and `WallHugBot` are the whole roster, and neither
-touches `Turn.scratch`. Do not assume anything else exists; check the tree.
+The roster is a ladder, registered weakest first because `:ui` seats the second slot from
+`entries.first()` and that should stay `random`: `random`, `wallhug`, `space`, `pressure`, `chase`,
+`flat-monte-carlo`, `uct`. Each rung beats the one below it over twenty matches — `BotLadderTest` is
+the gate, and it is the only test in the suite a *correct but useless* bot would fail. The first four
+consume no budget at all; only `flat-monte-carlo` and `uct` touch `Turn.scratch`.
+
+Do not assume anything else exists; check the tree.
 
 The pre-rewrite tree is one command away: `git show legacy-java-final:<path>`.
 
 **Phase tracker** — update this line as phases land, and mirror it in `docs/MIGRATION.md`:
 
-> Current phase: **4 — not started** (`AStar`, flood fill, then `UctBot` on flat node pools)
+> Current phase: **5 — not started** (contributed bots: `Burninhell`, `OtherSnake`, `TomSnakeAi`)
 
 ## Where the project is going
 
@@ -140,6 +146,12 @@ could diverge between the JVM test target and the browser. Recording moves also 
 constant. The seed is kept as provenance and as a CI verification input, never as the playback source of
 truth.
 
+At the *bot* level this is closed rather than merely contained: `UctBot` takes its logarithm from
+`portableLog`, which is built from `+ - * /` only, so UCB1 picks the same move on both targets and
+the UCT golden hash reproduces bit-for-bit in Chrome. **Nothing in `:bots` may call `kotlin.math.ln`,
+`exp` or `pow`** — the failure it buys is a golden hash that passes on the JVM and fails in the
+browser, which reads as a codegen bug and is not one.
+
 **4. Legality is evaluated *before* the tail retracts.** A snake may not move into the square its own tail
 is about to leave, even on a turn when that square is certain to clear. This is the legacy rule —
 `SimpleSnakesGame` tested the destination against a board built before the retraction — and letting the
@@ -222,9 +234,24 @@ class MyBot(setup: BotSetup) : Bot {
 register("my-bot", "My Bot", ::MyBot)
 ```
 
-A bot instance is created once per slot per match, so instance fields persist across turns — that is how
-MCTS keeps its tree with no extra API. Get randomness from `setup.rng`, never `Random.Default`. Poll
-`turn.budget` in any search loop.
+A bot instance is created once per slot per match, so instance fields persist across turns — which is
+where every search buffer belongs: allocate from `setup.grid.cellCount` in the constructor and reuse
+it forever. Get randomness from `setup.rng`, never `Random.Default`. Poll `turn.budget` in any search
+loop.
+
+Three rules that are not obvious until they bite:
+
+- **`turn.legalMoves.isEmpty` is the first branch of every bot.** The contract suite opens on a 1x1
+  board where nothing is legal on turn one, and an unguarded `legalMoves.nth(0)` takes it down.
+- **Re-read `playout.outcome` after every `advance`, never carry it.** An exhausted budget makes the
+  playout over, and `advance` on an over playout throws — so a stale reading is an exception that
+  only fires when the allowance lands on that exact move.
+- **A bot handed a budget of zero must spend exactly zero and still play well.** That is a contract
+  test, and the shipped answer is to fall back on `SpaceBot`, whose flood fill charges nothing.
+
+The `internal` primitives in `:bots` are there to be used: `FloodFill` for room, `ShortestPaths` for
+distances and first steps, `nearestOpponent` for `PvpAi`'s reduction, `randomPlayout` for a rollout,
+`UctTree` for a flat-array search tree.
 
 Every registry entry is run against the shared contract suite in CI (`bots/src/commonTest/.../BotContractTest`):
 never returns an illegal move when a legal one exists, survives a budget of zero, is deterministic given
@@ -269,14 +296,34 @@ writes text, values and `hidden`; do not start constructing structure there.
 ## Working with the legacy Java
 
 Treat it as a **specification to read, not code to translate**. It has two competing board representations
-and the wrong performance shape; `:core` is a from-scratch rewrite. Port algorithms semantically
-(`AStar`, `WallHugAi`, `ForkAi`, `ForkPathAi`, the UCB1 formula, `PvpAi`'s nearest-opponent reduction,
-`BoardOccupancy.mostDistant` spawn placement) and delete the scaffolding.
+and the wrong performance shape; `:core` is a from-scratch rewrite. Port algorithms semantically and
+delete the scaffolding.
+
+All of the sample AI is now ported: `WallHugAi`, `RandomAi`, `ForkAi`, `ForkPathAi`, `PathAi`,
+`AStar`, `MonteCarloAi`, `UctAi`/`Node`/`BiState`, `PvpAi`'s reduction and
+`BoardOccupancy.mostDistant`. What remains for Phase 5 is the three contributed bots in `ai/da/` —
+`Burninhell`, `OtherSnake`, `TomSnakeAi`.
 
 Known legacy bugs — **do not faithfully reproduce these**:
 
 - `RelLocation.directionTo` is dead-broken: `closestDist = Double.MIN_VALUE` (smallest *positive* double)
   compared with `dist < closestDist`, so it always returns `FOREWARD`. The class is unreferenced; drop it.
+- `PvpAi` picks the **walled-off** opponent every time. `AStar.pathBetween` returns an *empty list*
+  for an unreachable target, `PvpAi` reads its `size()` as the distance, and `0` beats every real
+  distance. `nearestOpponent` uses `ShortestPaths.UNREACHABLE`, and there is a named test for it.
+- `AStar` is not A\*: `Path.compareTo` orders by cost-so-far and uses the heuristic only as a
+  tie-break, so the frontier comes off in `g` order and the heuristic prunes nothing. On a unit-cost
+  4-neighbour grid that is breadth-first search, which is what `ShortestPaths` is.
+- `AiUtil.availableArea` checks its `stopAt` cap only *between* search layers, so it overshoots by up
+  to a whole frontier — `ForkAi(6)` never meant six squares.
+- `ForkPathAi` keys a `TreeMap` on the move appraisal, so two equally-rated directions collapse into
+  one entry and one of them silently stops being a candidate; its `Math.random() < 0.5` tie-break is
+  non-uniform; and with no opponents left its mean distance is `0 / 0`.
+- `MonteCarloAi` divides by `numRuns` having run `numRuns / |legal|` rollouts, and drains one
+  candidate at a time — so a budget that expires part-way biases the argmax toward the first
+  direction.
+- `Node.propagateValue` complements the reward at every step up the path. That is correct for two
+  players alternating and wrong the moment a third exists.
 - `MoveTracker.retrieveOrCreateSpecifier` seeds a bot's first move with *the first available direction*, so
   a bot that never sets one plays a move it never chose — and then repeats it forever.
 - `SnakesRunner.setupGame` wraps `PlayerAvatar` and then `SnakesGame2.addPlayer` wraps it again, burning two

@@ -1,12 +1,12 @@
 package ao.snakewarz.bots
 
 import ao.snakewarz.botapi.BoardScratch
+import ao.snakewarz.botapi.BotId
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Turn
 import ao.snakewarz.core.Board
 import ao.snakewarz.core.Budget
 import ao.snakewarz.core.Direction
-import ao.snakewarz.core.Grid
 import ao.snakewarz.core.SnakeId
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -70,7 +70,7 @@ class WallHugBotTest {
         assertEquals(true, match.moves().size > 40, "two wall huggers on a 12x12 lasted ${match.moves().size} moves")
     }
 
-    private fun wallHug() = ShippedBots.entryOf(ao.snakewarz.botapi.BotId("wallhug"))
+    private fun wallHug() = ShippedBots.entryOf(BotId("wallhug"))
 
     private fun ask(bot: WallHugBot, board: Board): Direction {
         val id = board.toAct
@@ -78,10 +78,5 @@ class WallHugBotTest {
             Turn(board, id, board.legalMoves(id), Budget(0), BoardScratch(board, Budget(0))),
         )
         return (decision as Decision.Move).direction
-    }
-
-    private fun boardOf(rows: Int, cols: Int, vararg spawns: Pair<Int, Int>): Board {
-        val grid = Grid(rows, cols)
-        return Board(grid, IntArray(spawns.size) { grid.cellAt(spawns[it].first, spawns[it].second).index })
     }
 }

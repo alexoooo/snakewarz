@@ -21,6 +21,11 @@ public object ShippedBots : BotRegistry {
     override val entries: List<BotEntry> = buildList {
         register("random", "Random", ::RandomBot)
         register("wallhug", "Wall Hugger") { WallHugBot() }
+        register("space", "Space Filler", ::SpaceBot)
+        register("pressure", "Pressure", ::PressureBot)
+        register("chase", "Chaser", ::ChaseBot)
+        register("flat-monte-carlo", "Flat Monte Carlo", ::FlatMonteCarloBot)
+        register("uct", "UCT", ::UctBot)
     }
 
     private val byId: Map<BotId, BotEntry> = entries.associateByTo(LinkedHashMap()) { it.id }

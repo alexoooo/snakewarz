@@ -9,13 +9,25 @@ Java/Swing into Kotlin/Wasm as a web app.
 
 ## Status
 
-Rewrite in progress — **Phase 3 of 6 complete, and the game is playable**. Play against the shipped
-bots with the arrow keys, or sit out and watch up to four of them fight; pause, step a turn at a
-time, change the speed, scrub back through a finished match, and share the whole thing as a link. A
-165-turn three-way game is 131 characters of URL, and no server is involved at any point.
+Rewrite in progress — **Phase 4 of 6 complete, and there is now something worth losing to**. Play
+against the shipped bots with the arrow keys, or sit out and watch up to four of them fight; pause,
+step a turn at a time, change the speed, scrub back through a finished match, and share the whole
+thing as a link. A 165-turn three-way game is 131 characters of URL, and no server is involved at
+any point.
 
-What is missing is an opponent worth losing to: the roster is a random mover and a wall hugger.
-Search bots are Phase 4.
+The roster is a ladder, weakest first, and each rung beats the one below it over twenty matches:
+
+| Bot | How it plays |
+|---|---|
+| Random | Uniformly among the moves that do not kill it |
+| Wall Hugger | Straight while it can, then left, then right |
+| Space Filler | Flood-fills each way and takes the side with the most room |
+| Pressure | Room first, then crowds an opponent with what is left over |
+| Chaser | Walks the shortest path to the nearest opponent, then hands over to Pressure |
+| Flat Monte Carlo | Plays each move out to the end at random, many times, and takes the best |
+| UCT | Monte Carlo tree search with UCB1 |
+
+Contributed bots are Phase 5; batch tournaments are Phase 6.
 
 See [docs/MIGRATION.md](docs/MIGRATION.md) for the design and the phase plan.
 

@@ -12,7 +12,7 @@ change later and cheap to get right now.
 | 1 | **done** | Core rules, rewritten from scratch |
 | 2 | **done** | Driver, replay codec, two trivial bots |
 | 3 | **done** | UI — first playable milestone |
-| 4 | not started | Search bots (A*, flood fill, MCTS) |
+| 4 | **done** | Search bots — space, pressure, chase, flat Monte Carlo, UCT |
 | 5 | not started | Contributed bots |
 | 6 | not started | Stats, batch tournaments, delete `legacy/` |
 
@@ -366,6 +366,16 @@ interactive, and the alternative was to weaken the gate that makes accepting a c
 Also port `PvpAi`'s nearest-opponent reduction as an abstract `DuelBot` base class — every MCTS bot
 depends on it — while keeping `Bot` itself N-player-capable.
 
+*Superseded in Phase 4, and the reasoning above is what dates it.* That sentence was written before
+`Playout` existed, when the only model of a search state was legacy's two-snake `BiState`. `Playout`
+sequences however many snakes are alive and rotates the turn order itself, so a duel reduction buys
+an MCTS bot nothing and costs it a third snake's worth of accuracy — `UctBot` and
+`FlatMonteCarloBot` search the real N-player game. The reduction ships as `internal fun
+nearestOpponent` with exactly **one** consumer, `ChaseBot`; a base class would have had one subclass.
+Reading the legacy again while porting confirms it: `ForkPathAi` never used the reduction either, as
+it takes the *mean* distance over all opponents rather than picking one. What the drop does cost is
+that credit assignment can no longer alternate — see the Phase 4 notes.
+
 ---
 
 ## Match driver and pacing
@@ -510,11 +520,20 @@ runs on both targets and is the *only* thing that runs in a browser in CI.
    classic failure — iteration order over a `HashMap`. Legacy `GameStateImpl` iterated a `HashMap`
    and was only *accidentally* stable because `PlayerAvatar.hashCode()` returned a monotonic index.
    **Ban `HashMap`/`HashSet` iteration in `:core` and `:bots`.**
+   *Phase 4:* one per shipped bot. The two that simulate are hashed on **12×12 at a budget of 500**
+   rather than 20×20 at 1,000 — still hundreds of thousands of simulated moves, and the suite also
+   runs in a real browser, where the engine is slower. Nothing in `:bots` may use `kotlin.math.ln`,
+   `exp` or `pow`, or these hashes stop meaning the same thing on the two targets.
 5. **Replay verification:** `record.verify(registry)` for each golden record.
 6. **Bot contract suite:** a shared `botContract(factory)` run against *every* registry entry —
    never returns an illegal move when a legal one exists, respects the budget, deterministic given an
    identical seed, retains no cross-match state. This is the CI gate that makes "fork → add a bot →
    PR" safe to accept.
+   *Phase 4 added two things to it.* `HeadlessMatch` now asserts `board.hash` is unchanged across
+   every `chooseMove`, so a bot that thought on the driver's arena rather than on `turn.scratch`
+   fails immediately and for every bot at once. And `BotLadderTest` checks that each rung beats the
+   one below it — the only assertion in the suite that a bot which is correct, deterministic and
+   *useless* would fail.
 7. **Browser conformance (CI, one job):** conformance suite on `wasmJs`, plus one end-to-end check
    that boots the page, loads a replay from the hash, steps 100 turns and asserts final state.
 8. **Benchmarks:** rollouts/sec on both targets, to quantify the wasm gap with numbers.
@@ -668,20 +687,106 @@ the survivors finish the game at the speed on the slider. And `Match.interactive
 partial recording parks rather than forfeits; playback is therefore excluded explicitly, by the flag
 `Match.playback` sets. Every one of those is a JVM test in `MatchTest`.
 
-**Phase 4 — search bots.** `AStar`/`Path` semantic ports. `ForkAi`/`ForkPathAi` with flood-fill
-rewritten onto the padded array. Then MCTS: `Reward` **deleted** (a `double` wrapper that allocates
-per rollout); `Rollout` folded into return values; `BiState` **rewritten** onto `Playout`; `Node`
-**rewritten** (454 lines, roughly half commented-out experiments) keeping only the live path — UCB1
-with the `sqrt(log(v)/(5*cv))` variant at `Node.java:423`, the `10000 + 1000 * Rand.nextDouble()`
-first-visit tiebreak at `:398`, variance ceiling behind a flag. `UctAi` → `UctBot(iterations)`.
-**`AdaptiveUct` dropped** — thread-based, and its value is subsumed by a larger `UctBot` budget.
+**Phase 4 — search bots. DONE.** Five bots and six `internal` primitives, all of it inside `:bots`.
+`FloodFill` and `ShortestPaths` on the padded array; `nearestOpponent`; `randomPlayout`;
+`portableLog`; `UctTree`. Then `SpaceBot` (`ForkAi`), `PressureBot` (`ForkPathAi`), `ChaseBot`
+(`PathAi` over `AStar`), `FlatMonteCarloBot` (`MonteCarloAi`) and `UctBot` (`UctAi`/`Node`/
+`BiState`). `Reward` deleted, `Rollout` folded into return values, `AdaptiveUct` dropped. `:bot-api`
+did not change at all, which is the promise Phase 2 made when it shipped `Scratch`/`Playout` early.
+
+Measured results: **263 JVM tests green, and green identically on `wasmJs` in Chrome** — which for
+this phase is the headline rather than a formality, because UCB1 is the one place in the program
+where the two targets could legitimately disagree, and the UCT golden move-stream hash reproduces
+bit-for-bit in the browser. Production bundle **58.0 KiB gzipped** (up from 50.5 in Phase 3) against
+the 1.5 MiB ceiling, so the whole search layer costs 7.5 KiB.
+
+Checked in Chrome against the production distribution rather than the dev server, as Phase 3 was:
+all seven bots appear in the sidebar pickers with no HTML change, `uct` against `space` on 20x20 at
+seed 424242 ran to `LAST_SNAKE_STANDING` in **133 turns** with both snakes at length 34, and it
+encoded to a **101-character** URL fragment that reloads to exactly that final position. The board
+shows the search doing something recognisable rather than merely legal: UCT folds the open half of
+the board into a staircase and leaves its opponent nowhere to go.
+
+The ladder, at 12x12 over twenty matches per pairing, each seed played from both seats, at the
+shipped allowance of 10,000. Each rung beats the one below it and the order is the registration
+order:
+
+| | random | wallhug | space | pressure | chase | flat-mc | uct |
+|---|---|---|---|---|---|---|---|
+| **wallhug** | 16 | — | 3 | 0 | 0 | 1 | 0 |
+| **space** | 17 | 17 | — | 2 | 7 | 1 | 1 |
+| **pressure** | 18 | 20 | 18 | — | 6 | 6 | 7 |
+| **chase** | 19 | 20 | 13 | 14 | — | 6 | 5 |
+| **flat-mc** | 20 | 19 | 19 | 14 | 14 | — | 4 |
+| **uct** | 20 | 20 | 19 | 13 | 15 | 16 | — |
+
+Six decisions worth recording, because each closed off a plausible alternative:
+
+- **No `DuelBot`** — see the superseded note under the bot contract above. `UctBot` searches the real
+  N-player game, and the reduction is a function with one caller.
+- **Per-actor credit assignment, not negamax.** Dropping the duel reduction is exactly what forces
+  it. `Node.propagateValue` complemented the reward at every step up the path, which is right for two
+  players alternating and wrong the moment there is a third: "bad for A" is not "good for B" when
+  there is a C, and the bot ends up helping whichever opponent is not on the current line. Each node
+  instead stores its reward from the point of view of *the snake that moved into it*, one `ByteArray`
+  column, and backs up `1.0`/`0.5`/`0.0` with no complementing anywhere. Because a child's actor is
+  the snake to act at its parent, maximising a child's average maximises the mover's own payoff at
+  every node — correct for any number of snakes, and identical to the legacy behaviour when there are
+  two. `UctTreeTest` pins it with the assertion negamax would fail.
+- **`portableLog` instead of `kotlin.math.ln`.** The risk section below says `log`/`exp` are not
+  bit-identical across targets and floats "a fixed-point `log` for UCB1" as the mitigation. It is
+  twenty lines — IEEE exponent, mantissa folded into `[1/√2, √2)`, `atanh` as a polynomial, `+ - * /`
+  throughout — and it is what lets `UctBot` carry a golden move-stream hash that runs in the browser
+  conformance job. Without it that hash would pass on the JVM and fail in Chrome, which reads as a
+  codegen bug and is not one. Recording the move stream remains the answer at the *format* level;
+  this closes it at the *bot* level.
+- **`playout()` per iteration, not `undo()` back to the root.** `Playout.reset` is one `ByteArray`
+  copy of the occupancy plus the live body lengths — about the cost of five `apply` calls — while
+  unwinding costs one `undo` per simulated move, and the rollout is the long part. So resetting is
+  both cheaper and structurally safe: an off-by-one unwind would quietly poison every later
+  iteration, and there is no unwind to get wrong.
+- **No tree reuse, and the arithmetic is why.** `Bot`'s KDoc anticipates it and `BoardView.hash`
+  makes finding last turn's subtree a `Long` compare, so it was implemented last and measured first.
+  A turn builds **137 nodes on a 20x20 at the shipped allowance** — so 137 rollouts — spread over
+  four openings and then over the opponent's replies, which puts roughly **8 visits** in the subtree
+  that would survive into the next turn. Six percent, in exchange for a `hash` column and a copying
+  compaction of the pool, because node ids are positional and "keep only this subtree" is not a free
+  operation on a flat array. Not worth it. There is also a soundness wrinkle worth writing down:
+  `hash` covers occupancy, heads, growth phases, liveness and whose turn it is, but **not**
+  `turnIndex` — and `turnIndex` is what `maxTurns` terminates on, so statistics gathered at a
+  shallower turn describe a position with a longer horizon than the one they get grafted onto.
+- **Variance ceiling dropped rather than put behind a flag.** UCB1-Tuned needs a second `DoubleArray`
+  of squared rewards and a second logarithm per child, and legacy's only caller passed the flag off.
+  A knob that ships permanently off is dead code with extra steps.
+
+Two findings that were not expected going in:
+
+- **The tree is worth nothing at a thousand simulated moves a turn, and a lot at ten thousand.** A
+  rollout runs a hundred-odd moves, so a thousand buys about fifteen iterations — four of which go on
+  giving each opening its first visit. Against flat Monte Carlo, which shares the rollout policy and
+  the allowance and differs only in remembering what it learned, `UctBot` wins **9 of 20 at a
+  thousand and 16 of 20 at ten thousand**. Both numbers are pinned in `BotLadderTest`, because the
+  first one is the reason strength must not be measured at the contract suite's smaller allowance.
+- **Mocha's per-test timeout is two seconds**, which is a unit-test budget, and `BotLadderTest` plays
+  two hundred complete matches on purpose. Raised to two minutes in `bots/karma.config.d/`, rather
+  than shrinking the sample, because the sample size is the point. Found by running the browser job,
+  which is the only place it can be found.
+
+**The lever for later, identified and deliberately not pulled:** truncating the rollout at a depth
+and evaluating the cut-off position by reachable-space share would multiply iterations per turn
+rather than adding to them, which is worth more than anything else on the list. It is a
+*measurement* question, Phase 6 owns measurement, and a knob shipped off by default is dead code —
+so it waits.
 
 **Phase 5 — contributed bots.** `Burninhell`, `OtherSnake`, `TomSnakeAi`, each gated by the contract
 suite, attribution preserved in KDoc. Lowest priority, droppable.
 
 **Phase 6 — polish.** Stats panel, and **batch tournament mode** (K seeded matches → win-rate
 matrix). Nearly free once `:match` runs headless and fast, and it is the actual point of an AI
-testbed. Delete `legacy/` here.
+testbed. Delete `legacy/` here. Two things Phase 4 hands it: set
+`MatchSetup.DEFAULT_BUDGET_PER_TURN` from measurement rather than from judgement, and settle rollout
+truncation with numbers. `BotLadderTest` is a hand-rolled twenty-match version of the matrix this
+phase should be producing properly.
 
 **Deleted outright, no port:** `SnakesRunner`, `SnakesContest`, `SimpleSnakesGame`, `SnakesGame2`,
 `SnakeHistory`, `GameGraphics*`, `SnakesGameDisplay`, `MoveTracker`, the whole `MoveSpecifier` family
@@ -690,8 +795,13 @@ testbed. Delete `legacy/` here.
 `MatrixBoardArrangement`, `BoardLocation`, `Action`, `RelLocation`, `WeightedMoveSpecifier`.
 
 **Semantic ports (algorithm preserved, API and performance reshaped):** `AStar`/`Path`, `WallHugAi`,
-`RandomAi`, `ForkAi`, `ForkPathAi`, `MonteCarloAi`, the UCB1 formula, `PvpAi`'s reduction, and
-`BoardOccupancy.mostDistant` (spawn placement — keep, but make it explicitly deterministic).
+`RandomAi`, `ForkAi`, `ForkPathAi`, `PathAi`, `MonteCarloAi`, `UctAi`/`Node`/`BiState`, `PvpAi`'s
+reduction, and `BoardOccupancy.mostDistant` (spawn placement — keep, but make it explicitly
+deterministic). *All done as of Phase 4*, with `AStar`/`Path` landing as `ShortestPaths` — legacy's
+`Path.compareTo` ordered by cost-so-far and used the heuristic only as a tie-break, so the class was
+Dijkstra under an A\* name, and on a unit-cost four-neighbour grid that is breadth-first search.
+Every consumer wants distances to several opponents in one turn anyway, which a single sweep answers
+and a goal-directed search does not.
 
 ---
 
@@ -733,6 +843,11 @@ becomes async; the *match* becomes async at the worker boundary.
 **Cross-target determinism drift** (`log`/`exp` not bit-identical): mitigated by recording move
 streams, reducing it to a CI concern — `verify()` may need a same-target assertion, or a fixed-point
 `log` for UCB1 if cross-target verification is wanted.
+
+*Resolved in Phase 4, by taking the second option.* `portableLog` computes UCB1's logarithm from
+`+ - * /` alone, so `UctBot` picks the same move on both targets and its golden move-stream hash
+reproduces bit-for-bit in headless Chrome. `verify()` needs no same-target caveat. The standing rule
+that falls out: **nothing in `:bots` may call `kotlin.math.ln`, `exp` or `pow`.**
 
 **Replay URL length** is bounded by `maxTurns`; if a match still exceeds comfortable hash length,
 offer a downloadable record file instead of a link.

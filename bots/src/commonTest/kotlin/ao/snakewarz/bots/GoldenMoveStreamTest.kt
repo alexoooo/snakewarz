@@ -35,6 +35,42 @@ class GoldenMoveStreamTest {
     }
 
     @Test
+    fun `the space filler against random on 20x20`() {
+        assertEquals(-2269829668146017894L, hashOf("space", "random", seed = 2005))
+    }
+
+    @Test
+    fun `the pressure bot against random on 20x20`() {
+        assertEquals(-8093726933972115299L, hashOf("pressure", "random", seed = 2005))
+    }
+
+    @Test
+    fun `the chaser against random on 20x20`() {
+        assertEquals(-836205036734502335L, hashOf("chase", "random", seed = 2005))
+    }
+
+    @Test
+    fun `flat Monte Carlo against random on 12x12`() {
+        // A smaller board and a smaller allowance than the rest, on purpose: this one simulates,
+        // and the suite it belongs to also runs in a real browser, where the engine is slower. It
+        // is still hundreds of thousands of simulated moves, which is plenty to pin.
+        assertEquals(
+            135969093263537927L,
+            hashOf("flat-monte-carlo", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = 500),
+        )
+    }
+
+    @Test
+    fun `UCT against random on 12x12`() {
+        // The one that would catch a cross-target divergence in UCB1, which is why its logarithm
+        // comes from `portableLog` and not from `kotlin.math`. This suite runs in Chrome too.
+        assertEquals(
+            4890617335203011984L,
+            hashOf("uct", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = 500),
+        )
+    }
+
+    @Test
     fun `the growth cadence reaches the bots, not just the engine`() {
         // Classic Tron is a materially different game; a bot suite that cannot tell the two apart
         // would not notice `growEveryNthMove` being wired up wrong.
@@ -55,6 +91,7 @@ class GoldenMoveStreamTest {
         seed: Long,
         rows: Int = 20,
         cols: Int = 20,
+        budgetPerTurn: Int = 1_000,
         rules: ao.snakewarz.core.RulesConfig = ao.snakewarz.core.RulesConfig(),
     ): Long {
         val match = HeadlessMatch(
@@ -62,6 +99,7 @@ class GoldenMoveStreamTest {
             rows = rows,
             cols = cols,
             seed = seed,
+            budgetPerTurn = budgetPerTurn,
             rules = rules,
         )
         match.run()

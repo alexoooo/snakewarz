@@ -108,7 +108,19 @@ public class MatchSetup(
     public companion object {
         /**
          * Enough iterations for a search bot to be interesting and few enough that a turn stays
-         * under a frame. Phase 4 replaces this guess with a measured number.
+         * under a frame.
+         *
+         * Still a guess, but no longer a blind one: Phase 4 measured it at roughly **137 tree nodes
+         * — so 137 rollouts — per turn** for `UctBot` on a 20x20, which is the same order the legacy
+         * `UctAi` ran at, and enough that its tree beats the same rollouts with no tree 16 times in
+         * 20. A tenth of it is not: at 1,000 the tree never gets past its own first layer and the
+         * two are indistinguishable. Every shipped bot degrades gracefully below this rather than
+         * assuming it, down to and including zero.
+         *
+         * **Phase 6 replaces it with a measured number**, alongside the throughput figures that
+         * would justify one. Deferring costs nothing, because `budgetPerTurn` is recorded in the
+         * replay header: a record carries the allowance it was played under and `verify` re-runs
+         * against that, never against whatever this constant happens to say today.
          */
         public const val DEFAULT_BUDGET_PER_TURN: Int = 10_000
 

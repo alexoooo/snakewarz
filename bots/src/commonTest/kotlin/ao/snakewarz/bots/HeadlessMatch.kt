@@ -68,7 +68,18 @@ internal class HeadlessMatch(
             budget.reset()
 
             val legal = board.legalMoves(id)
+            val before = board.hash
             val decision = bots[id.index].chooseMove(Turn(board, id, legal, budget, scratches[id.index]))
+
+            // A bot thinks on `turn.scratch`, never on the live board, and the whole search-arena
+            // design rests on that. Checking it here rather than in one test covers every bot in
+            // every test at the price of a Long compare -- and the bug it guards against, a search
+            // that reached the driver's arena, would otherwise surface as an unreproducible match
+            // long after the commit that caused it.
+            check(board.hash == before) {
+                "${bots[id.index]} moved the live board while deciding"
+            }
+
             decisions += RecordedDecision(id, legal, decision, budget.consumed)
 
             when (decision) {
