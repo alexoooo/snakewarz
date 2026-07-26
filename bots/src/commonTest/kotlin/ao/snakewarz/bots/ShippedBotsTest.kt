@@ -12,7 +12,12 @@ class ShippedBotsTest {
         // Slugs live in shared replay URLs. Renaming one breaks every link ever posted for it, so
         // this assertion is the reminder, and failing it is the point rather than an inconvenience.
         assertEquals(
-            listOf("random", "wallhug", "space", "pressure", "chase", "flat-monte-carlo", "uct"),
+            listOf(
+                // The ladder.
+                "random", "wallhug", "space", "pressure", "chase", "flat-monte-carlo", "uct",
+                // Contributed.
+                "burninhell", "tomsnake",
+            ),
             ShippedBots.entries.map { it.id.slug },
         )
     }
@@ -21,6 +26,7 @@ class ShippedBotsTest {
     fun `lookup finds what is registered and admits what is not`() {
         assertEquals(BotId("random"), ShippedBots[BotId("random")]?.id)
         assertEquals(BotId("uct"), ShippedBots[BotId("uct")]?.id, "Phase 4 landed")
+        assertEquals(BotId("tomsnake"), ShippedBots[BotId("tomsnake")]?.id, "Phase 5 landed")
         assertNull(ShippedBots[BotId("no-such-bot")])
         assertFailsWith<IllegalArgumentException> { ShippedBots.entryOf(BotId("no-such-bot")) }
     }
@@ -35,7 +41,10 @@ class ShippedBotsTest {
     @Test
     fun `every entry has a name a human can read`() {
         assertEquals(
-            listOf("Random", "Wall Hugger", "Space Filler", "Pressure", "Chaser", "Flat Monte Carlo", "UCT"),
+            listOf(
+                "Random", "Wall Hugger", "Space Filler", "Pressure", "Chaser", "Flat Monte Carlo", "UCT",
+                "Burnin Hell", "Tom Snake",
+            ),
             ShippedBots.entries.map { it.displayName },
         )
     }

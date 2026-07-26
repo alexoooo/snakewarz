@@ -13,7 +13,7 @@ change later and cheap to get right now.
 | 2 | **done** | Driver, replay codec, two trivial bots |
 | 3 | **done** | UI — first playable milestone |
 | 4 | **done** | Search bots — space, pressure, chase, flat Monte Carlo, UCT |
-| 5 | not started | Contributed bots |
+| 5 | **done** | Contributed bots |
 | 6 | not started | Stats, batch tournaments, delete `legacy/` |
 
 ---
@@ -778,8 +778,77 @@ rather than adding to them, which is worth more than anything else on the list. 
 *measurement* question, Phase 6 owns measurement, and a knob shipped off by default is dead code —
 so it waits.
 
-**Phase 5 — contributed bots.** `Burninhell`, `OtherSnake`, `TomSnakeAi`, each gated by the contract
-suite, attribution preserved in KDoc. Lowest priority, droppable.
+**Phase 5 — contributed bots. DONE.** `BurninHellBot` and `TomSnakeBot` in `:bots`, appended to
+`ShippedBots` as a second section after the ladder, gated by the same contract suite as everything
+else, attribution in the KDoc. `OtherSnake` was dropped rather than ported — see below. Nothing else
+changed: no new file outside `:bots`, no `:bot-api` surface, no HTML.
+
+Measured results: **280 JVM tests green** (up from 263), and green identically on `wasmJs` in Chrome.
+Production bundle **58.5 KiB gzipped** (up from 58.0 in Phase 4) against the 1.5 MiB ceiling — the
+two bots cost half a kilobyte between them, which is what porting into primitives that already exist
+is supposed to look like.
+
+The three files were 202 lines and about 49 of live code, and reading them is what set the shape of
+the phase. All three extended `PvpAi`, so all three paid for a path search per opponent every turn
+to reduce the field to a single `opp` — and **not one of them ever read `opp`**. The reduction is
+dropped from all of them, which also disposes of the inherited walled-off-opponent bug.
+
+Where the two land, on the same terms as the Phase 4 ladder table — 12x12, twenty matches a pairing,
+each seed played from both seats, at the shipped allowance of 10,000:
+
+| | random | wallhug | space | pressure | chase | flat-mc | uct |
+|---|---|---|---|---|---|---|---|
+| **burninhell** | 17 | 20 | 4 | 0 | 10 | 0 | 0 |
+| **tomsnake** | 11 | 5 | 7 | 1 | 3 | 0 | 0 |
+
+So `burninhell` sits between `wallhug` and `space`, and `tomsnake` sits between `random` and
+`wallhug` — neither is a ladder rung, which is why they are registered as a separate section rather
+than spliced in. The two rows worth resampling were resampled at a hundred: `burninhell` beats
+`random` 79 and `wallhug` 100, and `tomsnake` beats `random` 56 — see the second finding below for
+why that last one is not the number to quote.
+
+Four decisions worth recording:
+
+- **`OtherSnake` is not ported, because it is already on the ladder.** Its whole body is
+  `Rand.fromList(Direction.availableFrom(board, you.head()))`, which is `RandomAi`'s body, which is
+  `RandomBot`. Registering it would have added a second slug for one policy: a duplicate row in every
+  sidebar picker, a second golden hash pinning behaviour already pinned, and nothing a player could
+  tell apart. The alternative — port it for completeness — buys a count and costs clarity. Its 27
+  commented-out lines are a broken earlier draft, four unguarded `if`s that overwrite each other so
+  the *last* available direction wins; that is an inverted `Burninhell` and it is not ported either.
+- **`TomSnakeAi` ships faithful, at 0.2, and not as what it nearly was.** Directly above its random
+  branch sits `new UctAi(256)`, commented out — evidently the author's intent, and presumably
+  unaffordable when a legacy rollout built a whole persistent game per iteration. Shipping that line
+  would have produced a stronger and more interesting bot that the contributed file never ran. It is
+  recorded in the KDoc as a thing to measure instead. The `9.0/10` in its commented `else` is a red
+  herring; the branch is exhaustive, so 0.2 is the whole ratio.
+- **The registry is two sections now, and the docs say so.** Appending after `uct` keeps
+  `entries.first() == random`, which `:ui` relies on for the default second seat, and needs no UI
+  change at all — the pickers are filled from `BotRegistry.entries`. What it costs is the claim that
+  registration order is strength order, so that claim is now scoped to the ladder explicitly.
+  Splicing them in by measured strength was the alternative, and it would have interleaved
+  contributed bots into a ladder whose rungs `BotLadderTest` asserts.
+- **`burninhell` is written against an explicit priority array, not `legalMoves.nth(0)`.** They pick
+  the same move today, because `DirectionSet` iterates by ordinal and `Direction` is declared
+  `NORTH, SOUTH, EAST, WEST`. Spelling it out costs one shared array and stops the bot's entire
+  identity from being a silent consequence of an enum's declaration order.
+
+Two findings that were not expected going in:
+
+- **`burninhell` beats `wallhug` 100 times out of 100, and draws dead even with `chase`.** "First of
+  four, always in the same order" reads like a null bot and is not one: because the reverse direction
+  is always your own neck, the fixed order becomes a serpentine column sweep — north to the wall,
+  east one column, south to the wall, east again. A spiral eventually encloses itself and a column
+  sweep does not, which is the entire 100-0. The 50-50 against `chase` is the more interesting half:
+  a chaser walks toward the sweeper and dies inside the corridor the sweep just laid down, which is
+  the failure mode `ChaseBot`'s hand-off to `PressureBot` exists to avoid and does not fully.
+- **The 20% appraisal share in `tomsnake` is worth less than it looks, and the honest comparison is
+  against itself.** Against the shipped `random` it wins 56 of 100 — about 1.2 sigma, which is not
+  evidence of anything. Against its own `forkShare = 0.0` variant, which holds the board, the seeds
+  and the class fixed and changes only the ratio, it wins 68 of 100. That is the number the test
+  pins, because it is the one that isolates the thing being claimed. `forkShare = 1.0` against
+  `forkShare = 0.0` is 95 of 100, which is just `PressureBot` against `RandomBot` and confirms the
+  branches are wired the way round they are supposed to be.
 
 **Phase 6 — polish.** Stats panel, and **batch tournament mode** (K seeded matches → win-rate
 matrix). Nearly free once `:match` runs headless and fast, and it is the actual point of an AI
@@ -792,12 +861,16 @@ phase should be producing properly.
 `SnakeHistory`, `GameGraphics*`, `SnakesGameDisplay`, `MoveTracker`, the whole `MoveSpecifier` family
 (all three collapse into `Decision`), `PlayerAvatar`/`PlayerWrapper`/`PlayerDisplay`/
 `BasicPlayerDisplay`, both Swing inputs, `BoardArrangement`/`Matrix`/`BitSetMatrix`/
-`MatrixBoardArrangement`, `BoardLocation`, `Action`, `RelLocation`, `WeightedMoveSpecifier`.
+`MatrixBoardArrangement`, `BoardLocation`, `Action`, `RelLocation`, `WeightedMoveSpecifier`. Joined
+in Phase 5 by **`OtherSnake`**, which is not deleted for being scaffolding but for being a duplicate:
+its body is `RandomAi`'s body, and `RandomAi` is already shipped as `random`.
 
 **Semantic ports (algorithm preserved, API and performance reshaped):** `AStar`/`Path`, `WallHugAi`,
 `RandomAi`, `ForkAi`, `ForkPathAi`, `PathAi`, `MonteCarloAi`, `UctAi`/`Node`/`BiState`, `PvpAi`'s
 reduction, and `BoardOccupancy.mostDistant` (spawn placement — keep, but make it explicitly
-deterministic). *All done as of Phase 4*, with `AStar`/`Path` landing as `ShortestPaths` — legacy's
+deterministic) — *all done as of Phase 4* — then `Burninhell` and `TomSnakeAi` in Phase 5, which
+completes the port: **nothing under `legacy/java/ao/ai/` is now unaccounted for.** `AStar`/`Path`
+landed as `ShortestPaths` — legacy's
 `Path.compareTo` ordered by cost-so-far and used the heuristic only as a tie-break, so the class was
 Dijkstra under an A\* name, and on a unit-cost four-neighbour grid that is breadth-first search.
 Every consumer wants distances to several opponents in one turn anyway, which a single sweep answers

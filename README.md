@@ -9,13 +9,14 @@ Java/Swing into Kotlin/Wasm as a web app.
 
 ## Status
 
-Rewrite in progress — **Phase 4 of 6 complete, and there is now something worth losing to**. Play
+Rewrite in progress — **Phase 5 of 6 complete, and there is now something worth losing to**. Play
 against the shipped bots with the arrow keys, or sit out and watch up to four of them fight; pause,
 step a turn at a time, change the speed, scrub back through a finished match, and share the whole
 thing as a link. A 165-turn three-way game is 131 characters of URL, and no server is involved at
 any point.
 
-The roster is a ladder, weakest first, and each rung beats the one below it over twenty matches:
+Seven of the nine bots are a ladder, weakest first, and each rung beats the one below it over twenty
+matches:
 
 | Bot | How it plays |
 |---|---|
@@ -27,7 +28,15 @@ The roster is a ladder, weakest first, and each rung beats the one below it over
 | Flat Monte Carlo | Plays each move out to the end at random, many times, and takes the best |
 | UCT | Monte Carlo tree search with UCB1 |
 
-Contributed bots are Phase 5; batch tournaments are Phase 6.
+The other two were contributed to the original 2005 project and are not rungs — they are here for
+what they are, and they play the same contract suite as everything else:
+
+| Bot | How it plays |
+|---|---|
+| Burnin Hell | First open direction, always north, south, east, west — which comes out as a serpentine sweep of the board |
+| Tom Snake | Pressure one turn in five, Random the other four |
+
+Batch tournaments are Phase 6.
 
 See [docs/MIGRATION.md](docs/MIGRATION.md) for the design and the phase plan.
 

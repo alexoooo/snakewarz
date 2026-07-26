@@ -13,17 +13,17 @@ Everything else exists to serve that.
 
 ## Current state — read this first
 
-Mid-rewrite. **Phase 4 of 6 is complete**, which means the game is playable *and* worth playing: the
+Mid-rewrite. **Phase 5 of 6 is complete**, which means the game is playable *and* worth playing: the
 rules engine, the bot contract, the match driver, the replay codec, the canvas renderer, the DOM
-chrome and a seven-bot ladder topped by an MCTS bot all exist and are verified. You can play against
-the shipped bots, watch bots fight, scrub a recording and share a match as a URL. What is left is
-contributed bots (Phase 5) and stats plus batch tournaments (Phase 6).
+chrome and a seven-bot ladder topped by an MCTS bot all exist and are verified, and the legacy AI is
+fully ported. You can play against the shipped bots, watch bots fight, scrub a recording and share a
+match as a URL. What is left is stats plus batch tournaments (Phase 6), which also deletes `legacy/`.
 
 | Path | Status |
 |---|---|
 | `core/` | `:core` module. Padded-grid primitives plus the rules engine: `Occupancy`, `Board`, `MatchState`, `SplitMix64`, `Budget` |
 | `bot-api/` | `:bot-api` module. `Bot`, `Decision`, `Turn`, `BotSetup`, `BotRegistry`, plus `Scratch`/`Playout` — the search arena that makes the budget structural |
-| `bots/` | `:bots` module. Seven bots and `ShippedBots`, the `BotRegistry` implementation, over the `internal` search primitives `FloodFill`, `ShortestPaths`, `nearestOpponent`, `randomPlayout`, `portableLog` and `UctTree` |
+| `bots/` | `:bots` module. Nine bots and `ShippedBots`, the `BotRegistry` implementation, over the `internal` search primitives `FloodFill`, `ShortestPaths`, `nearestOpponent`, `randomPlayout`, `portableLog` and `UctTree` |
 | `match/` | `:match` module. `Match` driver, `MatchSetup`, `MatchRecord`, `ReplayCodec`, spawn placement, and human input — `InputBuffer`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM |
 | `ui/` | `:ui` module. `GameSession` — the only public class — over `BoardRenderer`, `TurnScheduler`, `Chrome` and `Palette` |
 | `app/` | `:app` module. `main()`, registry injection and `#r=` replay routing. Sixty lines, and that is the point |
@@ -31,11 +31,16 @@ contributed bots (Phase 5) and stats plus batch tournaments (Phase 6).
 | `legacy/java/ao/**` | The original Java, reference only. Not in the build. Deleted at release 1 |
 | `docs/MIGRATION.md` | The design doc and phase plan. **Read this before changing architecture** |
 
-The roster is a ladder, registered weakest first because `:ui` seats the second slot from
-`entries.first()` and that should stay `random`: `random`, `wallhug`, `space`, `pressure`, `chase`,
-`flat-monte-carlo`, `uct`. Each rung beats the one below it over twenty matches — `BotLadderTest` is
-the gate, and it is the only test in the suite a *correct but useless* bot would fail. The first four
-consume no budget at all; only `flat-monte-carlo` and `uct` touch `Turn.scratch`.
+`ShippedBots` has **two sections, and only the first is a ladder**. The ladder is registered weakest
+first: `random`, `wallhug`, `space`, `pressure`, `chase`, `flat-monte-carlo`, `uct`. Each rung beats
+the one below it over twenty matches — `BotLadderTest` is the gate, and it is the only test in the
+suite a *correct but useless* bot would fail. Then come the bots contributed to the original project,
+ordered by slug and claiming nothing about strength: `burninhell`, `tomsnake`. They are gated by the
+same contract suite as everything else.
+
+`random` must stay `entries.first()`, because `:ui` seats the second slot from it. Append new bots;
+do not prepend. Of the nine, only `flat-monte-carlo` and `uct` touch `Turn.scratch` — the other seven
+consume no budget at all.
 
 Do not assume anything else exists; check the tree.
 
@@ -43,7 +48,7 @@ The pre-rewrite tree is one command away: `git show legacy-java-final:<path>`.
 
 **Phase tracker** — update this line as phases land, and mirror it in `docs/MIGRATION.md`:
 
-> Current phase: **5 — not started** (contributed bots: `Burninhell`, `OtherSnake`, `TomSnakeAi`)
+> Current phase: **6 — not started** (stats, batch tournaments, delete `legacy/`)
 
 ## Where the project is going
 
@@ -299,10 +304,15 @@ Treat it as a **specification to read, not code to translate**. It has two compe
 and the wrong performance shape; `:core` is a from-scratch rewrite. Port algorithms semantically and
 delete the scaffolding.
 
-All of the sample AI is now ported: `WallHugAi`, `RandomAi`, `ForkAi`, `ForkPathAi`, `PathAi`,
-`AStar`, `MonteCarloAi`, `UctAi`/`Node`/`BiState`, `PvpAi`'s reduction and
-`BoardOccupancy.mostDistant`. What remains for Phase 5 is the three contributed bots in `ai/da/` —
-`Burninhell`, `OtherSnake`, `TomSnakeAi`.
+**The AI is now fully ported and nothing under `ai/` is outstanding.** The sample bots landed in
+Phase 4 — `WallHugAi`, `RandomAi`, `ForkAi`, `ForkPathAi`, `PathAi`, `AStar`, `MonteCarloAi`,
+`UctAi`/`Node`/`BiState`, `PvpAi`'s reduction and `BoardOccupancy.mostDistant` — and the contributed
+`ai/da/` bots in Phase 5, as `BurninHellBot` and `TomSnakeBot`. `OtherSnake` is the one deliberate
+omission: its body is `RandomAi`'s body, so it is already shipped as `random`, and a second slug for
+one policy is a duplicate picker row and nothing else. Do not "finish the port" by adding it.
+
+All three `ai/da/` bots extended `PvpAi` and **none of them ever read the `opp` it computed**, so the
+nearest-opponent reduction is dropped from all three rather than ported.
 
 Known legacy bugs — **do not faithfully reproduce these**:
 
