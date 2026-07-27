@@ -3,17 +3,20 @@ package ao.snakewarz.match
 import ao.snakewarz.core.RulesConfig
 
 /**
- * What a batch tournament is: who is playing, on what, how many times, and from where.
+ * What a batch tournament is: who is playing, in what [format], on what, how many times, and from
+ * where.
  *
- * Every pair of [contestants] meets over [rounds] matches, so the schedule is
- * `contestants * (contestants - 1) / 2 * rounds` matches long and is fixed the moment this exists.
+ * Head to head, every pair of [contestants] meets over [rounds] matches, so the schedule is
+ * `contestants * (contestants - 1) / 2 * rounds` matches long. Free for all, every match seats
+ * everybody, so the schedule is [rounds] matches long. Either way it is fixed the moment this
+ * exists.
  *
  * Two things about the schedule are deliberate and both are about not measuring the wrong thing.
- * [rounds] is **even** because each seed is played from both seats: acting first is a real advantage
- * on this board, and a pairing that never swaps seats measures the seating as much as the bots. And
- * every pairing draws from the *same* seeds, so contestants are compared on the same set of games
- * rather than on independent samples of them — a paired comparison, which is a great deal tighter for
- * the same amount of compute.
+ * [rounds] is **even** because each seed is played from more than one seating: acting first is a
+ * real advantage on this board, and a schedule that never moves anybody measures the seating as
+ * much as the bots. And every pairing draws from the *same* seeds, so contestants are compared on
+ * the same set of games rather than on independent samples of them — a paired comparison, which is
+ * a great deal tighter for the same amount of compute.
  */
 public class TournamentConfig(
     /**
@@ -23,8 +26,9 @@ public class TournamentConfig(
     public val contestants: List<Contestant>,
     public val rows: Int,
     public val cols: Int,
-    /** Matches per pairing. Even, because each seed is played from both seats. */
+    /** Matches per pairing head to head, matches in total free for all. Even — see the class doc. */
     public val rounds: Int = DEFAULT_ROUNDS,
+    public val format: TournamentFormat = TournamentFormat.HEAD_TO_HEAD,
     /** The first seed. The rest are [seed] onwards, one per pair of seat-swapped matches. */
     public val seed: Long = 1L,
     public val rules: RulesConfig = RulesConfig(),
@@ -40,16 +44,28 @@ public class TournamentConfig(
         require(budgetPerTurn >= 0) { "budgetPerTurn must not be negative, was $budgetPerTurn" }
     }
 
+    /** Snakes on the board per match: everybody free for all, two otherwise. */
+    public val seatsPerMatch: Int
+        get() = if (format == TournamentFormat.FREE_FOR_ALL) contestants.size else HEAD_TO_HEAD_SEATS
+
     /** Unordered pairs, so two contestants meet in one pairing rather than two. */
     public val pairingCount: Int get() = contestants.size * (contestants.size - 1) / 2
 
-    public val matchCount: Int get() = pairingCount * rounds
+    public val matchCount: Int
+        get() = if (format == TournamentFormat.FREE_FOR_ALL) rounds else pairingCount * rounds
 
-    /** How many distinct boards each pairing is played on. Half of [rounds], the other half swaps seats. */
-    public val seedCount: Int get() = rounds / 2
+    /**
+     * How many matches share a seed before the schedule moves on to the next one.
+     *
+     * Head to head a seed is played twice, once from each seat; free for all it is played once per
+     * contestant, the seating rotated a step each time, so everybody starts from every corner of the
+     * same board. For two contestants the two schemes are the same schedule.
+     */
+    public val seedGroup: Int
+        get() = if (format == TournamentFormat.FREE_FOR_ALL) contestants.size else HEAD_TO_HEAD_SEATS
 
     override fun toString(): String =
-        "TournamentConfig(${contestants.size} bots, ${rows}x$cols, $rounds rounds, $matchCount matches)"
+        "TournamentConfig(${contestants.size} bots, $format, ${rows}x$cols, $rounds rounds, $matchCount matches)"
 
     public companion object {
         /**
@@ -61,5 +77,8 @@ public class TournamentConfig(
          * panel says so rather than implying a precision it does not have.
          */
         public const val DEFAULT_ROUNDS: Int = 20
+
+        /** Head to head is a statement about pairs, so a match of it seats a pair. */
+        private const val HEAD_TO_HEAD_SEATS = 2
     }
 }

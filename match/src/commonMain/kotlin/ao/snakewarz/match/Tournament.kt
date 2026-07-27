@@ -48,9 +48,9 @@ public class Tournament(
     private var latest: Match? = null
 
     /** Which contestant sits in which slot of [active]. */
-    private val seating = IntArray(SEATS)
+    private val seating = IntArray(config.seatsPerMatch)
 
-    /** Every unordered pair, lowest index first, in a fixed order. The schedule, in order. */
+    /** Every unordered pair, lowest index first — the head-to-head schedule, in order. */
     private val pairings: List<Pair<Int, Int>> = buildList {
         for (one in config.contestants.indices) {
             for (other in one + 1 until config.contestants.size) {
@@ -98,7 +98,7 @@ public class Tournament(
 
         val outcome = match.outcome ?: return Progress.PLAYED_TURN
 
-        record(outcome)
+        record(match, outcome)
         active = null
         matchesPlayed++
         return if (finished) Progress.FINISHED else Progress.FINISHED_MATCH
@@ -127,20 +127,19 @@ public class Tournament(
     public fun setupFor(index: Int): MatchSetup {
         require(index in 0 until matchCount) { "match $index is not in a schedule of $matchCount" }
 
-        val seats = IntArray(SEATS)
+        val seats = IntArray(config.seatsPerMatch)
         seat(index, seats)
-        val home = config.contestants[seats[0]]
-        val away = config.contestants[seats[1]]
+        val seated = seats.map { config.contestants[it] }
 
         return MatchSetup.create(
             rows = config.rows,
             cols = config.cols,
-            slots = listOf(home.bot, away.bot),
-            seed = config.seed + (index % config.rounds) / 2,
+            slots = seated.map { it.bot },
+            seed = config.seed + (index % config.rounds) / config.seedGroup,
             rules = config.rules,
             budgetPerTurn = config.budgetPerTurn,
-            budgets = intArrayOf(home.budgetIn(config.budgetPerTurn), away.budgetIn(config.budgetPerTurn)),
-            slotParams = listOf(home.params, away.params),
+            budgets = IntArray(seated.size) { seated[it].budgetIn(config.budgetPerTurn) },
+            slotParams = seated.map { it.params },
         )
     }
 
@@ -177,28 +176,71 @@ public class Tournament(
     /**
      * Works out who sits where in match [index].
      *
-     * Pairing `p` plays rounds `0 until config.rounds`; each pair of rounds shares a seed and swaps
-     * seats, so an odd round is the even one before it played from the other side of the board.
+     * Head to head, pairing `p` plays rounds `0 until config.rounds`; each pair of rounds shares a
+     * seed and swaps seats, so an odd round is the even one before it played from the other side of
+     * the board. Free for all, each group of `contestants` matches shares a seed and rotates the
+     * seating a step, so everybody starts from every corner of the same board — the seat swap,
+     * generalized. (A group is cut short when the field does not divide [TournamentConfig.rounds];
+     * the matches that were played still counted fairly, there are just fewer of that seed.)
      */
     private fun seat(index: Int, into: IntArray) {
-        val pairing = pairings[index / config.rounds]
-        val swapped = (index % config.rounds) % 2 == 1
-        into[0] = if (swapped) pairing.second else pairing.first
-        into[1] = if (swapped) pairing.first else pairing.second
-    }
+        when (config.format) {
+            TournamentFormat.HEAD_TO_HEAD -> {
+                val pairing = pairings[index / config.rounds]
+                val swapped = (index % config.rounds) % 2 == 1
+                into[0] = if (swapped) pairing.second else pairing.first
+                into[1] = if (swapped) pairing.first else pairing.second
+            }
 
-    private fun record(outcome: MatchOutcome) {
-        val winner = outcome.winner
-        if (winner.isNone) {
-            table.recordDraw(seating[0], seating[1])
-        } else {
-            val winnerSeat = winner.index
-            table.recordWin(seating[winnerSeat], seating[1 - winnerSeat])
+            TournamentFormat.FREE_FOR_ALL -> {
+                val rotation = index % into.size
+                for (seat in into.indices) {
+                    into[seat] = (seat + rotation) % into.size
+                }
+            }
         }
     }
 
-    private companion object {
-        /** Head to head. A win-rate matrix is a statement about pairs, so a match here is a pair. */
-        const val SEATS = 2
+    private fun record(match: Match, outcome: MatchOutcome) {
+        when (config.format) {
+            TournamentFormat.HEAD_TO_HEAD -> {
+                val winner = outcome.winner
+                if (winner.isNone) {
+                    table.recordDraw(seating[0], seating[1])
+                } else {
+                    val winnerSeat = winner.index
+                    table.recordWin(seating[winnerSeat], seating[1 - winnerSeat])
+                }
+            }
+
+            TournamentFormat.FREE_FOR_ALL -> recordOutlasting(match.stats())
+        }
+    }
+
+    /**
+     * Scores a free-for-all pairwise by who outlasted whom, so the one matrix serves both formats.
+     *
+     * A cell is still "how often did the row do better than the column" — the measure just changes
+     * from *beat* to *outlasted*, because a four-way game does not produce one loser per winner. The
+     * winner outlasted the whole field, snakes eliminated on the same move drew with each other, and
+     * survivors of a turn-limit game drew among themselves. For two contestants this is exactly the
+     * head-to-head scoring.
+     */
+    private fun recordOutlasting(stats: MatchStats) {
+        for (one in seating.indices) {
+            for (other in one + 1 until seating.size) {
+                val a = stats.slots[one]
+                val b = stats.slots[other]
+                when {
+                    a.alive == b.alive && (a.alive || a.movesMade == b.movesMade) ->
+                        table.recordDraw(seating[one], seating[other])
+
+                    a.alive || (!b.alive && a.movesMade > b.movesMade) ->
+                        table.recordWin(seating[one], seating[other])
+
+                    else -> table.recordWin(seating[other], seating[one])
+                }
+            }
+        }
     }
 }

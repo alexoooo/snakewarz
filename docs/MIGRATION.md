@@ -1175,3 +1175,45 @@ random bot — on a 20x20 board, which is the weakest opponent in the registry o
 the picker offers. `:ui` cannot depend on `:bots` and must not start to, so `Chrome.DEFAULT_OPPONENT`
 names `uct` as a **slug** and falls back to `entries.first()` when a registry does not offer one, and
 `DEFAULT_SIZE` moves with the `selected` option on `#size`.
+
+## After release 1 — free-for-all tournaments and watching your own replay
+
+Two answers to the same observation: somebody seats four bots, and the page then only lets them see
+two at a time.
+
+**A tournament now has a format, and it is a config property rather than a second driver.**
+`TournamentFormat.HEAD_TO_HEAD` is the schedule that always existed — every unordered pair, each
+seed from both seats — and was never a regression to fix: a win-rate matrix is a statement about
+pairs, and a match of it is one. `FREE_FOR_ALL` seats *every* contestant in every match, so four
+snakes fight on one board and the schedule is simply `rounds` matches long. The driver branches on
+the config the way `Match.interactive` branches the clocks; `Tournament.step`, the runner, the
+arena handover and the panel all run unchanged.
+
+Two generalizations carry the whole thing. The seat swap becomes a seat *rotation*: each group of
+`contestants` matches shares a seed and rotates the seating a step, so everybody starts from every
+corner of the same board — and for two contestants, rotating is swapping, which
+`TournamentTest.“a free-for-all of two is the head-to-head schedule”` pins as an identity on the
+`MatchSetup`s themselves. And the scoring becomes *outlasting*: a four-way game does not produce
+one loser per winner, so each match is recorded pairwise — alive beats eliminated, more
+`SlotStats.movesMade` beats fewer, the rest draw — and the one matrix, `scoreRate` and the ranking
+serve both formats without `TournamentTable` changing a line. The measure is honest about what it
+is: `wins(a, b)` free-for-all counts matches `a` outlasted `b` *with everybody else interfering*,
+which is a different question from head to head, and the panel note says which one each format
+answers. `MatchStats` staying derived is what made this free — the moves-survived figure was
+already in the board, so the driver still counts nothing.
+
+**Watch replay is `load()`, fed from the board instead of the address bar.** The in-page switch to
+playback existed the whole time — `GameSession.load` is public, and the `hashchange` listener calls
+it — but the only way to reach it was to copy the share link and open it somewhere else. A button
+in the Replay section now dispatches `UiIntent.WatchReplay`, which is a guard and one line:
+`load(match.record())`. Everything after that was already built — the scrub bar reveals itself off
+`UiModel.replay`, Restart replays from the top, Share publishes the recording being watched, and
+Start match is the way back to live play, because `newMatch` was always the thing that cleared
+`replay`.
+
+The button is offered only for the player's own *finished* match — `replay == null &&
+match.outcome != null`, guarded in the session and not just by the disabled flag, for the same
+reason the space bar is. Mid-match it stays grey because a partial recording parks at "end of the
+recording", which reads as broken rather than as a replay; and while a batch owns the arena it
+stays grey because the matches finishing on screen are the tournament's, not the player's — the
+model flag is computed from `match`, never from `shown`.

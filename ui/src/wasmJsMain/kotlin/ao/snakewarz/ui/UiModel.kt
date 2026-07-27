@@ -32,6 +32,11 @@ internal class UiModel(
     val labels: SlotLabels,
     /** The snake under the pointer, or `null` when the pointer is not over one. */
     val hover: HoverInfo?,
+    /**
+     * The player's own match is finished and can be watched again. About *their* match, never the
+     * one a batch has on the board — that one is the tournament's to drive, not theirs to rewind.
+     */
+    val canWatchReplay: Boolean,
     /** Non-null once the player has asked for a link. */
     val shareUrl: String?,
     /** Non-null once a batch has been run, whether or not it is still running. */

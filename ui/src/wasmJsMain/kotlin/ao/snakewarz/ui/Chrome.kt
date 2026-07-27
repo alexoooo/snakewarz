@@ -8,6 +8,7 @@ import ao.snakewarz.match.Contestant
 import ao.snakewarz.match.MatchSetup
 import ao.snakewarz.match.PlayableRegistry
 import ao.snakewarz.match.SlotStats
+import ao.snakewarz.match.TournamentFormat
 import kotlinx.browser.document
 import kotlinx.browser.window
 import org.w3c.dom.Element
@@ -68,11 +69,13 @@ internal class Chrome(
     private val seats: List<SlotForm> = List(SCOREBOARD_ROWS) { SlotForm(it, registry, botSelects[it]) }
     private val startButton: HTMLButtonElement = elementById("new-match")
 
+    private val formatSelect: HTMLSelectElement = elementById("format")
     private val roundsSelect: HTMLSelectElement = elementById("rounds")
     private val tournamentButton: HTMLButtonElement = elementById("run-tournament")
     private val tournamentProgress: HTMLElement = elementById("tournament-progress")
     private val tournamentTable: HTMLElement = elementById("tournament-table")
 
+    private val watchReplayButton: HTMLButtonElement = elementById("watch-replay")
     private val shareButton: HTMLButtonElement = elementById("share")
     private val shareUrlInput: HTMLInputElement = elementById("share-url")
 
@@ -94,6 +97,7 @@ internal class Chrome(
         restartButton.addEventListener("click") { dispatch(UiIntent.Restart) }
         startButton.addEventListener("click") { dispatch(UiIntent.StartMatch(readOptions())) }
         tournamentButton.addEventListener("click") { dispatch(UiIntent.ToggleTournament) }
+        watchReplayButton.addEventListener("click") { dispatch(UiIntent.WatchReplay) }
         shareButton.addEventListener("click") { dispatch(UiIntent.Share) }
         reseedButton.addEventListener("click") { seedInput.value = freshSeed().toString() }
 
@@ -173,6 +177,11 @@ internal class Chrome(
                 }
                 .distinct(),
             rounds = roundsSelect.value.toIntOrNull() ?: DEFAULT_ROUNDS,
+            format = if (formatSelect.value == FREE_FOR_ALL_VALUE) {
+                TournamentFormat.FREE_FOR_ALL
+            } else {
+                TournamentFormat.HEAD_TO_HEAD
+            },
         )
     }
 
@@ -212,6 +221,7 @@ internal class Chrome(
         restartButton.disabled = model.batchRunning
         startButton.disabled = model.batchRunning
         shareButton.disabled = model.batchRunning
+        watchReplayButton.disabled = !model.canWatchReplay
 
         scrub.hidden = !model.replay
         if (model.replay) {
@@ -457,6 +467,9 @@ internal class Chrome(
 
         /** Must be one of the options on `#rounds` in index.html, and even. */
         const val DEFAULT_ROUNDS = 20
+
+        /** Must be the value of the free-for-all option on `#format` in index.html. */
+        const val FREE_FOR_ALL_VALUE = "free-for-all"
 
         /** How a snake left, in plain words. The engine's vocabulary stops here. */
         fun fateText(reason: EliminationReason?): String = when (reason) {

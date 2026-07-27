@@ -56,8 +56,11 @@ notes are that, one directory level shifted.
 > remainder of a plan. Landed since: **visual bot configuration** — `BotKnob`, per-slot allowances
 > and parameters, configured tournament contestants — then **reading the board**: seats named apart
 > by their configuration, a board of fixed physical size, hover-to-inspect a snake, and arrow keys
-> that no longer scroll the page — and then **the thread coming off the pointer**: every body
-> threaded on every turn, and a page that opens on Human vs UCT at 8x8. See the last two sections of
+> that no longer scroll the page — then **the thread coming off the pointer**: every body
+> threaded on every turn, and a page that opens on Human vs UCT at 8x8 — and then **free-for-all
+> tournaments and watching your own replay**: a `TournamentFormat` that seats every contestant in
+> every match, scored pairwise by outlasting into the same matrix, and a Watch replay button that
+> winds a finished match back without leaving the page. See the closing sections of
 > `docs/MIGRATION.md`.
 
 ## What it is built on
@@ -160,6 +163,13 @@ assert the seat-swapping without catching the driver between two steps.
 
 The contestants are the **slot pickers**, not a second list of bots: a tournament is the question the
 sidebar already asks, over a few hundred matches. A human seat and a duplicate both drop out.
+
+A tournament has a **format**, and it is a config property rather than a second driver.
+`TournamentFormat.HEAD_TO_HEAD` is the pairwise round-robin, each seed played from both seats.
+`FREE_FOR_ALL` seats every contestant in every match — the seat swap generalizes to a seat rotation
+per seed, and the scoring to *outlasting*, recorded pairwise off `SlotStats.movesMade` so the one
+`TournamentTable` serves both formats. For two contestants the formats are the same schedule, and
+there is a test pinning that identity.
 
 A `Contestant` is a **configured** seat — a `BotId`, an optional allowance and a `BotParams` — and its
 identity is all three. That is what lets `uct` enter twice at two allowances, which is the first

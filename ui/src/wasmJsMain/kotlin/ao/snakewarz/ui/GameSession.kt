@@ -166,6 +166,8 @@ public class GameSession(
 
             UiIntent.Share -> share()
 
+            UiIntent.WatchReplay -> watchReplay()
+
             is UiIntent.StartMatch -> newMatch(intent.options)
 
             UiIntent.ToggleTournament -> if (batch.running) stopBatch() else startBatch()
@@ -336,6 +338,21 @@ public class GameSession(
     }
 
     /**
+     * Switches to watching the recording of the match just played — [load], fed from the board
+     * instead of the address bar.
+     *
+     * Guarded here and not only by the button's disabled flag, for the same reason the space bar
+     * is: only a *finished* match of the player's own is offered, because a partial recording parks
+     * at "end of the recording", which reads as broken rather than as a replay.
+     */
+    private fun watchReplay() {
+        if (replay != null || match.outcome == null) {
+            return
+        }
+        load(match.record())
+    }
+
+    /**
      * The whole of what the sidebar gets to say about a match, and deliberately the only place that
      * says it: everything upstream of here is a form, everything downstream is a match.
      */
@@ -383,6 +400,7 @@ public class GameSession(
                     cols = options.cols,
                     rounds = options.rounds,
                     seed = options.seed,
+                    format = options.format,
                 ),
                 registry,
             ),
@@ -459,7 +477,7 @@ public class GameSession(
     private fun seatingText(playing: Match?): String {
         val seated = playing ?: return ""
         val labels = labelsFor(seated)
-        return " — ${labels[0]} vs ${labels[1]}"
+        return (0 until seated.setup.slotCount).joinToString(separator = " vs ", prefix = " — ") { labels[it] }
     }
 
     // -- one turn -------------------------------------------------------------------------------
@@ -563,6 +581,9 @@ public class GameSession(
                 stats = shown.stats(),
                 labels = labelsFor(shown),
                 hover = hoverInfo(shown),
+                // The *player's* match, deliberately not `shown`: while a batch owns the board its
+                // finished matches must not light the button up.
+                canWatchReplay = replay == null && match.outcome != null && !batch.running,
                 shareUrl = shareUrl,
                 tournament = batchStatus(),
             ),

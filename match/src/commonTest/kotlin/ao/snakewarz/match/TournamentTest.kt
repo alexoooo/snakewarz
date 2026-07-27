@@ -277,6 +277,89 @@ class TournamentTest {
     }
 
     @Test
+    fun `a free-for-all seats everybody in every match`() {
+        val tournament = tournamentOf(
+            listOf("cycle", "last", "north"),
+            rounds = 4,
+            format = TournamentFormat.FREE_FOR_ALL,
+        )
+
+        assertEquals(4, tournament.matchCount, "a round is a match when everybody is in it")
+
+        val schedule = List(tournament.matchCount) { tournament.setupFor(it) }
+        val everybody = listOf(BotId("cycle"), BotId("last"), BotId("north"))
+        for (setup in schedule) {
+            assertEquals(everybody.toSet(), setup.slots.toSet(), "every contestant is on the board")
+        }
+
+        // A seed is shared by a group of three matches, the seating rotated a step each time...
+        assertEquals(schedule[0].seed, schedule[1].seed)
+        assertEquals(schedule[0].seed, schedule[2].seed)
+        assertEquals(listOf(everybody[1], everybody[2], everybody[0]), schedule[1].slots)
+        assertEquals(listOf(everybody[2], everybody[0], everybody[1]), schedule[2].slots)
+
+        // ...and four rounds do not divide by three, so the last group is one match, cut short.
+        assertEquals(schedule[0].seed + 1, schedule[3].seed)
+        assertEquals(everybody, schedule[3].slots)
+    }
+
+    @Test
+    fun `a free-for-all scores pairwise by outlasting`() {
+        // "north" walks into the wall while the other two are still going, so both outlast it in
+        // every match; and a turn limit the survivors both reach is a draw *between them* only.
+        val table = tournamentOf(
+            listOf("cycle", "last", "north"),
+            rounds = 4,
+            rules = RulesConfig(maxTurns = 30),
+            format = TournamentFormat.FREE_FOR_ALL,
+        ).runToCompletion()
+
+        assertEquals(4, table.wins(0, 2), "cycle outlasted north every match")
+        assertEquals(4, table.wins(1, 2), "last outlasted north every match")
+        assertEquals(0, table.wins(2, 0))
+        assertEquals(0, table.wins(2, 1))
+        assertEquals(4, table.draws(0, 1), "the survivors drew with each other")
+
+        for (one in 0 until table.size) {
+            for (other in one + 1 until table.size) {
+                assertEquals(4, table.played(one, other), "every pair is in every match")
+            }
+        }
+        assertEquals(listOf(0, 1, 2).toSet(), table.ranking().toSet())
+        assertEquals(2, table.ranking().last(), "and the one that keeps dying ranks last")
+    }
+
+    @Test
+    fun `a free-for-all of two is the head-to-head schedule`() {
+        // Rotating two seats is swapping them, so the generalization has to land on the same
+        // matches — same seeds, same seatings — as the format it grew out of.
+        val contestants = listOf("cycle", "last")
+        val headToHead = tournamentOf(contestants, rounds = 4)
+        val freeForAll = tournamentOf(contestants, rounds = 4, format = TournamentFormat.FREE_FOR_ALL)
+
+        assertEquals(headToHead.matchCount, freeForAll.matchCount)
+        for (index in 0 until headToHead.matchCount) {
+            assertEquals(headToHead.setupFor(index), freeForAll.setupFor(index))
+        }
+    }
+
+    @Test
+    fun `the same free-for-all config plays the same tournament twice`() {
+        val contestants = listOf("cycle", "last", "north")
+        val first = tournamentOf(contestants, rounds = 4, format = TournamentFormat.FREE_FOR_ALL)
+            .runToCompletion()
+        val second = tournamentOf(contestants, rounds = 4, format = TournamentFormat.FREE_FOR_ALL)
+            .runToCompletion()
+
+        for (one in 0 until first.size) {
+            for (other in 0 until first.size) {
+                assertEquals(first.wins(one, other), second.wins(one, other))
+                assertEquals(first.draws(one, other), second.draws(one, other))
+            }
+        }
+    }
+
+    @Test
     fun `an unplayed contestant scores zero rather than dividing by nothing`() {
         val table = TournamentTable(listOf(Contestant(BotId("cycle")), Contestant(BotId("north"))))
 
@@ -289,12 +372,14 @@ class TournamentTest {
         contestants: List<String>,
         rounds: Int,
         rules: RulesConfig = RulesConfig(),
-    ): Tournament = fieldOf(contestants.map { Contestant(BotId(it)) }, rounds, rules)
+        format: TournamentFormat = TournamentFormat.HEAD_TO_HEAD,
+    ): Tournament = fieldOf(contestants.map { Contestant(BotId(it)) }, rounds, rules, format)
 
     private fun fieldOf(
         contestants: List<Contestant>,
         rounds: Int,
         rules: RulesConfig = RulesConfig(),
+        format: TournamentFormat = TournamentFormat.HEAD_TO_HEAD,
     ): Tournament = Tournament(
         TournamentConfig(
             contestants = contestants,
@@ -303,6 +388,7 @@ class TournamentTest {
             rounds = rounds,
             rules = rules,
             budgetPerTurn = 0,
+            format = format,
         ),
         TestRegistry.ALL,
     )

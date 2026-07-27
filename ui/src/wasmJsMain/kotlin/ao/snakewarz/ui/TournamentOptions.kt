@@ -1,6 +1,7 @@
 package ao.snakewarz.ui
 
 import ao.snakewarz.match.Contestant
+import ao.snakewarz.match.TournamentFormat
 
 /**
  * The tournament form, read off the DOM once and handed on as a value.
@@ -19,6 +20,7 @@ internal class TournamentOptions(
     val seed: Long,
     val contestants: List<Contestant>,
     val rounds: Int,
+    val format: TournamentFormat,
 ) {
     val ready: Boolean get() = contestants.size >= MINIMUM_CONTESTANTS
 

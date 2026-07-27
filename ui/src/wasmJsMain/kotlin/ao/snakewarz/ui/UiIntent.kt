@@ -25,6 +25,9 @@ internal sealed interface UiIntent {
     /** Publish the match so far as a link. */
     data object Share : UiIntent
 
+    /** Switch to watching the recording of the match just played, right here on this board. */
+    data object WatchReplay : UiIntent
+
     class StartMatch(val options: MatchOptions) : UiIntent
 
     class SetSpeed(val turnsPerSecond: Double) : UiIntent

@@ -81,7 +81,12 @@
                 <h2>Tournament</h2>
                 <div class="transport">
                     <button id="run-tournament" type="button">Run tournament</button>
-                    <label for="rounds">Rounds a pairing</label>
+                    <label for="format">Format</label>
+                    <select id="format">
+                        <option value="head-to-head" selected>Head-to-head</option>
+                        <option value="free-for-all">Free-for-all</option>
+                    </select>
+                    <label for="rounds">Rounds</label>
                     <select id="rounds">
                         <option value="10">10</option>
                         <option value="20" selected>20</option>
@@ -92,8 +97,10 @@
                 </div>
                 <pre id="tournament-table" hidden></pre>
                 <p class="note">
-                    Every pair of the bots in the slots opposite, on that board and from that seed,
-                    each seed played from both seats. Rows beat columns.
+                    The bots in the slots opposite, on that board and from that seed. Head-to-head
+                    plays every pair that many times, each seed from both seats &mdash; rows beat
+                    columns. Free-for-all seats all of them in every match &mdash; rows outlasted
+                    columns.
                 </p>
             </section>
         </section>
@@ -202,11 +209,13 @@
 
             <section>
                 <h2>Replay</h2>
+                <button id="watch-replay" type="button" class="wide" disabled>Watch replay</button>
                 <button id="share" type="button" class="wide">Copy replay link</button>
                 <input id="share-url" type="text" readonly hidden aria-label="Replay link">
                 <p class="note">
-                    The link carries the whole match, move by move &mdash; no server involved.
-                    Open one and it plays back here.
+                    Watch replay winds a finished match back and plays it again right here &mdash;
+                    Start match returns to live play. The link carries the whole match, move by
+                    move, no server involved; open one and it plays back here too.
                 </p>
             </section>
         </aside>
