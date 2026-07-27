@@ -14,7 +14,7 @@ import kotlin.time.TimeSource
 /**
  * The truncation experiment, kept because a measured "no" is only worth having if it can be re-run.
  *
- * `docs/MIGRATION.md` came out of Phase 4 naming rollout truncation — stop the rollout after a few
+ * `docs/Migration.md` came out of Phase 4 naming rollout truncation — stop the rollout after a few
  * moves and judge where it got to by reachable-space share — as the single highest-value lever left,
  * and deferring it to Phase 6 on the grounds that it is a measurement question. This is the
  * measurement: [UctBot] with `rolloutDepth` set, against the same bot playing its rollouts out in

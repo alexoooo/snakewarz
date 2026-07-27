@@ -33,7 +33,7 @@ ktlint_standard_argument-list-wrapping = disabled
 
 # A file holds one public top-level declaration and is named after it -- so a file whose declaration
 # is a function is named for a function: nearestOpponent.kt, portableLog.kt, mix64.kt. See SW-06 and
-# CC-15 in docs/CODING_STANDARDS.md.
+# CC-15 in docs/Coding-Standards.md.
 ktlint_standard_filename = disabled
 
 # A `when` branch carrying a why-comment counts as multiline, so this rule blank-line-separates every

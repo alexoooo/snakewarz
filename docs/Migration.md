@@ -4,6 +4,11 @@ This is the design document for the rewrite. It is the reasoning behind the modu
 forbidden dependency edges, and the engine's data representation — the things that are expensive to
 change later and cheap to get right now.
 
+It is also a **chronological record**, so on any point of *current* fact it is superseded by
+[`../CLAUDE.md`](../CLAUDE.md) and the files it routes to. What it holds that nothing else does is
+the reasoning, the alternatives that were rejected, and the measurements behind the tuning constants.
+This is also the single home of the phase log: it is not mirrored anywhere else.
+
 **Phase tracker**
 
 | Phase | Status | Summary |
@@ -103,24 +108,10 @@ Multi-module Gradle, not package layering in one module. The compiler is the onl
 cannot be bypassed, and at 150k LOC "the engine physically cannot reference the DOM" should be a
 build fact. The KMP-config-per-module friction is solved once in a convention plugin.
 
-| Module | Responsibility | May depend on | Targets |
-|---|---|---|---|
-| `:core` | Grid, occupancy, bodies, rules, transition, terminal detection, PRNG, budget | **stdlib only** | wasmJs + jvm |
-| `:bot-api` | The contract bot authors read. Small, stable | `:core` | wasmJs + jvm |
-| `:bots` | Shipped bots + `BotRegistry` impl | `:core`, `:bot-api` | wasmJs + jvm |
-| `:match` | Turn sequencing, slot wiring, human input, replay codec, stats. No time, no DOM | `:core`, `:bot-api` | wasmJs + jvm |
-| `:ui` | Canvas renderer, DOM chrome, rAF scheduler | `:core`, `:match`, `kotlinx-browser` | wasmJs |
-| `:app` | `main()`, wiring, URL hash routing | all | wasmJs |
-
-### Forbidden edges
-
-- `:core` → *any* project dependency, ever. Notably **not** `:bot-api` — the engine does not know bots exist.
-- `:core`, `:bot-api`, `:bots`, `:match` → `kotlinx-browser`, `org.w3c.*`, any wasm-only API.
-- `:match` → `:bots`. The driver resolves bots through the `BotRegistry` *interface*; `:app` injects
-  the implementation. This is what keeps the replay codec free of bot classes.
-- `:bots` → `:match`, `:ui`, `:app`. A bot cannot see the driver, so it cannot reach the clock or
-  another slot's RNG.
-- `:ui` → `:bots`.
+The current graph and the current edge list are in [`../CLAUDE.md`](../CLAUDE.md#module-graph). They
+are **not** restated here: this section records *why* the graph is shaped that way, and the copy that
+used to sit here went stale the day `:lab` landed — it never grew the module, the convention plugin
+or the edge that keeps a measuring instrument out from under everything else.
 
 Enforced by `snakewarz.pure` (both targets, `explicitApi()`) and `snakewarz.browser` (wasmJs only),
 plus aggressive `internal`. Both wire a `checkModulePurity` task into `check` that walks the resolved
@@ -1261,7 +1252,7 @@ standing in for a mode because a number was what there was. The rejected alterna
 months: a knob's value goes into the replay URL of every match somebody configured, so it is frozen by
 exactly the argument that freezes the knob's *name*. `eval=expert` survives somebody reordering the
 list of evaluations and `eval=2` does not, with nothing in the codec able to tell. The other rejected
-alternative was three slugs, one per evaluation, which CLAUDE.md already turns down by name for
+alternative was three slugs, one per evaluation, which `Legacy.md` already turns down by name for
 `OtherSnake`: a second slug for one policy is a duplicate picker row and nothing else. Reading stays
 total, per the sealed class's own contract — a value from a mangled fragment reads as the default
 rather than throwing in a field initializer with nothing above it to catch it. `:ui` had no choice
@@ -1284,9 +1275,9 @@ golden stand.
 **`PuctTree` is a sibling of `UctTree` and not a refactor of it**, and the sixty lines of allocator
 they share are not the argument. `GoldenMoveStreamTest."UCT against random on 12x12"` is a pinned
 hash, re-run in real Chrome, and refactoring the tree UCT selects through risks reordering a
-floating-point expression and moving that hash for no reason anybody could name afterwards — CLAUDE.md
-says a golden failure is always a question that has to be answered, and this would have been a
-question with no answer. A mode flag would have been worse: a branch in the hottest loop in the
+floating-point expression and moving that hash for no reason anybody could name afterwards — SW-01 in
+`Coding-Standards.md` says a golden failure is a question rather than a hash to update, and this
+would have been a question with no answer. A mode flag would have been worse: a branch in the hottest loop in the
 program plus a prior array allocated for every UCT match that never reads a word of it. Four things
 differ anyway. Selection is PUCT rather than UCB1 and takes a per-edge prior; backup takes a *value*
 per actor rather than a win, which is why `LeafEval` answers per slot at all; an unvisited child is

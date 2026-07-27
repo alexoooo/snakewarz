@@ -15,9 +15,10 @@ Every rule has an id, so a review or a commit can cite one ("violates SW-01").
   that inverts outright, because Kotlin's visibility model makes the module, not the package, the
   boundary that matters.
 
-The architecture these rules serve is in [`../CLAUDE.md`](../CLAUDE.md); the reasoning behind that
-architecture is in [`MIGRATION.md`](MIGRATION.md). Where a rule is enforced by a test or a Gradle
-task rather than by review, that is named in the rule.
+The architecture these rules serve is in [`../CLAUDE.md`](../CLAUDE.md), which holds the module graph
+and the forbidden edges and routes to the per-module detail in this directory; the reasoning behind
+that architecture is in [`Migration.md`](Migration.md). Where a rule is enforced by a test or a
+Gradle task rather than by review, that is named in the rule.
 
 | Id | Rule |
 |---|---|
@@ -231,7 +232,7 @@ if (frameElapsed > FRAME_BUDGET_MS) return
 
 **A bot's tunables are not constants at all.** Anything worth tuning is declared as a `BotKnob` and
 passed to `register`, so the default on the sidebar form and the default in the field initializer are
-the same literal and cannot drift. See *Declaring a knob* in [`../CLAUDE.md`](../CLAUDE.md#declaring-a-knob).
+the same literal and cannot drift. See *Declaring a knob* in [`Bots.md`](Bots.md#declaring-a-knob).
 
 **Why:** A bare `8` forces the reader to guess units (ms? turns? rollouts?) and intent (budget?
 threshold? index?). A named binding makes both obvious at the call site — and a knob makes the value
@@ -281,7 +282,7 @@ diff, no conversation, no memory of what the code used to look like. Concretely:
   constraint.
 - **Never compare against something that was just deleted.** A comparison is only useful when the
   referent is *live*. In this repo the legacy Java **is** live in that sense — it is at the
-  `legacy-java-final` tag and `CLAUDE.md` says how to read it — so "the legacy rule tested the
+  `legacy-java-final` tag and [`Legacy.md`](Legacy.md) says how to read it — so "the legacy rule tested the
   destination against a board built before the retraction" is a legitimate comparison, while
   "unlike the helper I removed above" is not.
 - **Less is more.** Padding buries the load-bearing detail and taxes every future reader. Say the

@@ -47,7 +47,7 @@ public object ShippedBots : BotRegistry {
         register("tomsnake", "Tom Snake", ::TomSnakeBot, TomSnakeBot.KNOBS)
 
         // Experimental. A rung asserts that it beats the one below it, and where this one belongs
-        // against `uct` is a measurement rather than a preference -- see docs/MIGRATION.md and the
+        // against `uct` is a measurement rather than a preference -- see docs/Migration.md and the
         // `:lab` runs it records. Promote it into the ladder when the number is in, or leave it here
         // and say why, but do not let it assert something nobody checked.
         register("puct", "PUCT", ::PuctBot, PuctBot.KNOBS)

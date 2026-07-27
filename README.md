@@ -89,7 +89,7 @@ It runs on the animation frame in slices of a few milliseconds, so the page stay
 throughout and the board shows whichever match the batch is currently on. No server, no worker, and
 nothing to install.
 
-See [docs/MIGRATION.md](docs/MIGRATION.md) for the design, the phase log, and the measurements behind
+See [docs/Migration.md](docs/Migration.md) for the design, the phase log, and the measurements behind
 the tuning constants.
 
 The original Java implementation is at the `legacy-java-final` git tag —
@@ -187,5 +187,6 @@ a URL.
 
 ## Contributing
 
-Read [CLAUDE.md](CLAUDE.md) first — it documents the conventions, the forbidden dependency edges, and
-the four non-obvious engine facts that a rewrite tends to get wrong.
+Read [CLAUDE.md](CLAUDE.md) first — it documents the module graph, the forbidden dependency edges,
+and the four non-obvious engine facts that a rewrite tends to get wrong, and it routes to the rest of
+[`docs/`](docs): the rules a change is reviewed against, and one file per module.

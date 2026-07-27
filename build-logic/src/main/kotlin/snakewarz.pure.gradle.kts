@@ -51,7 +51,7 @@ applyKtlint()
 // ModulePurity.kt, because snakewarz.browser enforces the same table for :ui.
 // ---------------------------------------------------------------------------------------------
 
-// The forbidden-edge table from docs/MIGRATION.md, encoded where it can actually be enforced.
+// The forbidden-edge table from CLAUDE.md, encoded where it can actually be enforced.
 // A module may depend only on the ones above it, so each entry lists everything below.
 val forbiddenByModule = mapOf(
     ":core" to setOf(":bot-api", ":bots", ":match", ":ui", ":app", ":lab"),

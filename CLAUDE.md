@@ -11,7 +11,27 @@ There is no food and no score. Inception 2005, imported from the Google Code arc
 The point of the project is the **pluggable AI**: writing search bots and pitting them against each other.
 Everything else exists to serve that.
 
-## Current state — read this first
+## Before you touch anything
+
+This file is the graph and the tripwires — what depends on what, what may never, and the handful of
+facts that break a match without breaking a test. The detail of each module lives in `docs/`, one
+file per audience. **Read the row that matches before you edit, not after the first review.**
+
+| About to… | Read | What goes wrong if you don't |
+|---|---|---|
+| write any code at all | [`docs/Coding-Standards.md`](docs/Coding-Standards.md) | Twenty-six rules a review cites by id; several break a match *silently* |
+| add or change a bot, or touch `bot-api/` | [`docs/Bots.md`](docs/Bots.md) | A slug or knob name you rename sits in the replay URL of every match somebody shared |
+| touch `match/` — human input, stats, tournaments | [`docs/Match.md`](docs/Match.md) | A match with a person in it has no clock; add a counter to `Match` and the scoreboard grows a second source of truth |
+| touch `ui/`, `index.html` or `styles.css` | [`docs/UI.md`](docs/UI.md) | The overlay is a second canvas painted whole; get the ordering wrong and every decoration vanishes the frame a batch repaints |
+| change the page shell, the boot path or Pages | [`docs/UI.md`](docs/UI.md#deployment) | `#app` revealed after the first measure sizes every board to the minimum cell |
+| run a build, a benchmark or `:lab` | [`docs/Workflow.md`](docs/Workflow.md) | A mistyped knob name silently measures the default and wastes however long the batch takes |
+| compare against the pre-rewrite Java | [`docs/Legacy.md`](docs/Legacy.md) | Several of its algorithms are dead-broken and look intentional |
+| change the shape of the architecture | [`docs/Migration.md`](docs/Migration.md) | It is the record of what was already tried and rejected, and why |
+
+The module graph, the forbidden edges and the four non-obvious facts are **below, not in `docs/`**:
+they are what you have to know before you know you need them.
+
+## Current state
 
 **All six phases are complete.** The rewrite is done: the rules engine, the bot contract, the match
 driver, the replay codec, the canvas renderer, the DOM chrome, a seven-bot ladder topped by an MCTS
@@ -30,51 +50,12 @@ hundred matches without the page stopping.
 | `app/` | `:app` module. `main()`, registry injection and `#r=` replay routing. Sixty lines, and that is the point |
 | `lab/` | `:lab` module. A JVM command line for running batches headlessly — the one place outside `:ui` where a clock and a `println` live |
 | `build-logic/` | Convention plugins `snakewarz.pure`, `snakewarz.browser` and `snakewarz.tool`, sharing `registerModulePurityCheck` |
-| `docs/CODING_STANDARDS.md` | The rules every change is reviewed against. **Read this before writing code** |
-| `docs/MIGRATION.md` | The design doc and phase log. **Read this before changing architecture** |
 
-`ShippedBots` has **three sections, and only the first is a ladder**. The ladder is registered weakest
-first: `random`, `wallhug`, `space`, `pressure`, `chase`, `flat-monte-carlo`, `uct`. Each rung beats
-the one below it over twenty matches — `BotLadderTest` is the gate, and it is the only test in the
-suite a *correct but useless* bot would fail. Then come the bots contributed to the original project,
-ordered by slug and claiming nothing about strength: `burninhell`, `tomsnake`. Then **experimental**:
-`puct`, which is level with `uct` per unit of *time* and behind it at an equal allowance, so it makes
-no claim a rung would make. All three sections are gated by the same contract suite.
-
-`:ui` opens slot 2 on the slug `uct` — the page should start on the game somebody came here to play
-— and falls back to `entries.first()` when a registry does not offer it, so registration order still
-shows through. Append new bots; do not prepend. Of the ten, only `flat-monte-carlo`, `uct` and `puct`
-touch `Turn.scratch` — the other seven consume no budget at all, and `BotContractTest` enforces that
-rather than merely asserting it here: a bot spends budget **if and only if** it declares a
-`BotKnob.Search`.
-
-`puct` is the one bot that **charges its own budget**. A rollout spends the allowance a move at a
-time and the engine can see it; a static evaluation sweeping the board cannot be seen that way, so
-`PuctBot.judge` calls `Turn.budget.tryConsume(eval.cost)` — *before* running the evaluation, so the
-allowance is a bound rather than a note about work already done. Without it, `budgetPerTurn` would
-quietly mean something different for every bot that declared one.
+Release 1 is feature-complete and everything since is new work rather than the remainder of a plan.
+The phase log, and a closing section for each thing landed since phase 6, are in
+[`docs/Migration.md`](docs/Migration.md).
 
 Do not assume anything else exists; check the tree.
-
-The pre-rewrite Java is one command away, in its original Maven shape:
-`git show legacy-java-final:src/main/java/ao/<path>`. Paths written as `legacy/java/ao/…` in older
-notes are that, one directory level shifted.
-
-**Phase tracker** — update this line as phases land, and mirror it in `docs/MIGRATION.md`:
-
-> Current phase: **6 — done**. Release 1 is feature-complete; further work is new work, not the
-> remainder of a plan. Landed since: **visual bot configuration** — `BotKnob`, per-slot allowances
-> and parameters, configured tournament contestants — then **reading the board**: seats named apart
-> by their configuration, a board of fixed physical size, hover-to-inspect a snake, and arrow keys
-> that no longer scroll the page — then **the thread coming off the pointer**: every body
-> threaded on every turn, and a page that opens on Human vs UCT at 8x8 — and then **free-for-all
-> tournaments and watching your own replay**: a `TournamentFormat` that seats every contestant in
-> every match, scored pairwise by outlasting into the same matrix, and a Watch replay button that
-> winds a finished match back without leaving the page — and then **a hand-written evaluation, and
-> somewhere to measure it**: `PuctBot`, PUCT with an expert appraisal of the position where a network
-> would be, selectable against a rollout control by a new `BotKnob.Choice`, and `:lab`, a JVM command
-> line that runs a real `Tournament` over the real registry so the comparison can actually be run.
-> See the closing sections of `docs/MIGRATION.md`.
 
 ## What it is built on
 
@@ -86,7 +67,7 @@ registered in an explicit `BotRegistry`.
 Release 1, all of it shipped: live match view with play/pause/step/speed, human vs bot, deterministic
 seeded matches, shareable replays encoded in the URL hash, per-match stats, and batch tournaments.
 
-### Module graph
+## Module graph
 
 | Module | Responsibility | May depend on | Targets |
 |---|---|---|---|
@@ -108,7 +89,7 @@ the match driver. It may, for the same reason `:app` may: it *injects* `ShippedB
 rather than a new edge — `:match` still has never seen a bot class. It is never deployed and is not
 on `:app`'s classpath.
 
-### Forbidden dependency edges
+## Forbidden dependency edges
 
 These are the load-bearing constraint of the architecture. Do not add any of them, even temporarily.
 
@@ -126,83 +107,6 @@ Every one of these is enforced by `checkModulePurity`, which is wired into `chec
 convention plugins and walks every `*CompileClasspath` — case-insensitively, because a Kotlin/JVM
 module spells its main one `compileClasspath` while a multiplatform one prefixes the target — and
 test source sets included.
-
-### Where the human lives
-
-`InteractiveBot` is in **`:match`**, not `:bots`, and is deliberately **not** in `ShippedBots`. The
-bot contract suite requires that no registry entry claims to be interactive — a search bot that
-stalls has malfunctioned — so the human seat is composed *on the outside* of the shipped registry by
-`PlayableRegistry`, which `:app` wraps around `ShippedBots`. `:match` already owns human input in the
-module table, and keeping the pieces there makes them JVM-testable.
-
-`PlayableRegistry.HUMAN_ID` is the slug `"human"`, and it is **frozen** like every released bot id:
-it goes into the header of every replay of a game somebody played themselves. Such a replay plays
-back perfectly — playback substitutes a scripted stand-in for every slot regardless of slug — but it
-will not survive `MatchRecord.verify`, because re-running a person is not a thing a registry can do.
-
-Every interactive slot reads the same `InputBuffer`, because there is one keyboard. A match takes at
-most one human, and `:ui` offers the seat for slot 1 only.
-
-**A match with a person in it is turn-based.** `StallPolicy.WAIT_FOR_INPUT` is the default of both
-`InteractiveBot` and `PlayableRegistry`, so a human slot answers `Pending` on every turn it has no
-key for, and `:ui` does not start `TurnScheduler` at all while `Match.interactive` — one keypress
-plays exactly the round it belongs to, and the transport is disabled because there is no clock to
-drive. When the player is eliminated `interactive` goes false, the scheduler takes over and the
-survivors finish the match on the clock. `Match.interactive` is deliberately not
-`bots.any { it.interactive }`: `ScriptedBot` claims to be interactive so that a partial recording
-parks rather than forfeits, so playback is excluded by a flag `Match.playback` sets.
-
-**A held key repeats on our clock, not the operating system's.** `Chrome` drops
-`KeyboardEvent.repeat` — a text-editing rate, half a second of nothing then thirty a second, and
-different on every machine — and `KeyRepeat` (in `:ui`, on `requestAnimationFrame`) turns a held key
-into one move every 250ms. A tap is exactly one move. A second key pressed while the first is down
-takes the repeat over, and `blur` cancels it, because a key released while the page is not looking
-never sends `keyup`.
-
-**A trapped player plays a fatal move instead of waiting.** `InputBuffer.take` filters illegal
-input, so once nothing is legal no key the player could press would ever come back from it, and
-`WAIT_FOR_INPUT` would park that match for good. Every direction from there is the same death — the
-engine records `TRAPPED` whichever is played — so this is a move in the sense that a snake has to
-make one, not a choice, and it is not the `MoveTracker` bug (which invented a *survivable* move
-nobody chose).
-
-### Stats and tournaments
-
-`MatchStats` is **derived, never accumulated**. The board already knows every figure worth reporting
-— lengths, moves survived, who is left and why the rest are not — so `Match.stats()` is a read, taken
-at most once a frame, and the driver counts nothing extra as it goes. Do not add a counter to `Match`
-for a statistic; work out whether the board can already answer it. It also serves the scoreboard, so
-`:ui` has one set of per-slot numbers rather than two that could disagree.
-
-`Tournament.step()` advances **one turn**, not one match, for the same reason `Match.step()` does: a
-match at the shipped allowance is most of a second, and `:ui` has to be able to stop between any two
-units of work. `TournamentRunner` slices it across frames on an 8ms guard, exactly as `TurnScheduler`
-paces a match. That is what lets a batch of search bots run on a page that stays responsive, with no
-worker and nothing `suspend` below `:ui`.
-
-`Tournament.current` keeps reporting the **last** match after the batch ends, because somebody is
-usually looking at it. `Tournament.setupFor(index)` exposes the whole schedule as a pure function of
-the config — that is how `:ui` paints the opening position before a turn is played, and how the tests
-assert the seat-swapping without catching the driver between two steps.
-
-The contestants are the **slot pickers**, not a second list of bots: a tournament is the question the
-sidebar already asks, over a few hundred matches. A human seat and a duplicate both drop out.
-
-A tournament has a **format**, and it is a config property rather than a second driver.
-`TournamentFormat.HEAD_TO_HEAD` is the pairwise round-robin, each seed played from both seats.
-`FREE_FOR_ALL` seats every contestant in every match — the seat swap generalizes to a seat rotation
-per seed, and the scoring to *outlasting*, recorded pairwise off `SlotStats.movesMade` so the one
-`TournamentTable` serves both formats. For two contestants the formats are the same schedule, and
-there is a test pinning that identity.
-
-A `Contestant` is a **configured** seat — a `BotId`, an optional allowance and a `BotParams` — and its
-identity is all three. That is what lets `uct` enter twice at two allowances, which is the first
-question a testbed of search bots should be able to answer and the one a list of ids could not even
-express. Two *identically* configured entries are still a duplicate and still refused. The allowance
-is `null` rather than pre-filled, so `TournamentConfig.budgetPerTurn` still has something to do.
-`TournamentTable` heads its columns with `Contestant.label` — `uct` beside `uct@4k` — numbers a
-repeated label `·2`, and spells the settings out in a legend under the grid rather than in the
-headings, which have a narrow panel to fit in.
 
 ## Four non-obvious facts
 
@@ -229,7 +133,7 @@ truth.
 At the *bot* level this is closed rather than merely contained: `UctBot` takes its logarithm from
 `portableLog`, built from `+ - * /` only, so UCB1 picks the same move on both targets and the UCT
 golden hash reproduces bit-for-bit in Chrome. `PuctBot` needs no logarithm at all. That is rule
-**SW-02** in [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md), which is where the reasoning and
+**SW-02** in [`docs/Coding-Standards.md`](docs/Coding-Standards.md), which is where the reasoning and
 the exact prohibition live.
 
 **4. Legality is evaluated *before* the tail retracts.** A snake may not move into the square its own tail
@@ -240,13 +144,12 @@ tail clear first is a materially different game, one where a snake can chase its
 
 ## Coding standards
 
-**[`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md) is the rule set every change is reviewed
+**[`docs/Coding-Standards.md`](docs/Coding-Standards.md) is the rule set every change is reviewed
 against — determinism, the hot path, naming, comments, tests, module purity.** Read it before the
 first change, not after the first review. Each rule carries an id so a review can cite one: `SW-NN`
 are this project's own, `CC-NN` share their numbering and intent with the sibling kzen project.
 
-These five are the ones that break something *silently* when missed, so they are worth knowing before
-you open the document:
+These five break something *silently* when missed, so they are worth knowing before you open it:
 
 - **SW-01 Determinism** — RNG injected per slot and forked from the match seed, `SplitMix64` rather
   than `kotlin.random.Random`, no `HashMap`/`HashSet` iteration in `:core` or `:bots`, no wall clock
@@ -273,45 +176,21 @@ Naming, file layout, comment style, fail-fast, test colocation and the rest are 
 ./gradlew allTests -PbrowserTests=true       # browser suite (needs Chrome; off by default)
 ./gradlew :app:wasmJsBrowserDevelopmentRun   # local dev server — yours. See below before an agent runs this
 ./gradlew :app:wasmJsBrowserDistribution     # production bundle -> app/build/dist/wasmJs/productionExecutable
-
-# The measuring instruments. Both print `[bench]` lines and run on either target.
-./gradlew :bots:jvmTest --tests '*ThroughputTest*' -i | grep '\[bench\]'
-./gradlew :bots:wasmJsBrowserTest -PbrowserTests=true --rerun -i | grep '\[bench\]'
-
-# And the lab, for the questions a batch answers rather than a test. `play` prints the same win
-# matrix the sidebar does; `time` costs one bot's turn against an opponent handed no allowance.
 ./gradlew :lab:run --args="play puct:eval=expert puct:eval=rollout --rounds 40 --budget 40000"
-./gradlew :lab:run --args="time puct:eval=expert --budget 40000"
 ```
 
-A lab entrant is `<slug>[:name=value,...]`, where `budget` is that entrant's own allowance and every
-other name is one of that bot's declared knobs — so one bot enters twice at two configurations, which
-is the question a testbed of search bots exists to answer. Parsing is **strict**, unlike
-`BotKnob.Param.read`: a `main` has something to catch a throw, and a mistyped knob name would
-otherwise quietly measure the default and waste however many minutes the batch takes. A `play` of
-`uct` against `flat-monte-carlo` reproduces `BotLadderTest`'s conclusion, which is how you tell the
-tool is still honest.
-
-Browser tests are disabled unless `-PbrowserTests=true`, because Karma startup dominates the runtime
-of small suites. Anything provable on the JVM should be proven there instead.
-
-**A ktlint failure you fix by *deleting* the offending file can survive the fix.** The check task
-compares against its last *successful* run, so removing a file restores the inputs it already knows
-and it reports the old violation again without looking. Fixing the code in place is fine; deleting
-needs `--rerun-tasks` on that module. It is a ktlint-gradle behaviour, not something this build
-configures, and the build cache usually hides it.
+`:bots` tests take a couple of minutes because `BotLadderTest` plays several hundred complete matches;
+narrow with `--tests` while working on something else. The `[bench]` throughput runs, the `:lab`
+entrant grammar, why browser tests are off, and a ktlint trap that survives deleting the offending
+file are in [`docs/Workflow.md`](docs/Workflow.md).
 
 ### Never background `wasmJsBrowserDevelopmentRun` — serve the distribution instead
 
-The dev server is **not** a child of the `gradlew` you launched. Gradle runs the build inside its
-**daemon**, a detached process that outlives the client, and the daemon is what forks the webpack
-`serve` process. Kill the shell — close the terminal, stop the background job, hit Ctrl-C on a pipe —
-and the client dies while the daemon happily keeps a webpack server listening on 8080, or 8081, or
-whatever port was free. It is not in anybody's process tree and nothing reaps it. This has stranded a
-server more than once.
-
-`./gradlew --stop` is **not** the fix: it kills every daemon on the machine, including the one hosting
-a dev server somebody is deliberately using.
+The dev server is **not** a child of the `gradlew` you launched: Gradle runs the build inside a
+detached **daemon**, and the daemon is what forks the webpack `serve` process. Kill the shell and the
+client dies while a webpack server keeps listening on 8080 — in nobody's process tree, and nothing
+reaps it. `./gradlew --stop` is **not** the fix; it kills every daemon on the machine, including the
+one hosting a dev server somebody is deliberately using.
 
 So an agent that needs to see the app in a browser builds a static bundle and serves it itself:
 
@@ -322,323 +201,10 @@ py -m http.server 8099 --bind 127.0.0.1 \
 ```
 
 **8099 is reserved for this** and for nothing else, which is what makes "kill whatever is on 8099"
-unambiguous — a human's dev server and an agent's look identical on the command line, because they are
-the same command in the same project. Python maps `.wasm` to `application/wasm`, so
-`instantiateStreaming` is happy; there is no live reload, which is the whole point — rebuild and
-reload by hand.
-
-Kill it when finished, and do not rely on the task runner to do it:
+unambiguous — a human's dev server and an agent's look identical on the command line. Kill it when
+finished, and do not rely on the task runner to do it:
 
 ```powershell
 Get-NetTCPConnection -State Listen -LocalPort 8099 |
     ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 ```
-
-Prefer `jvmTest` while developing; most modules answer in seconds. **`:bots` does not** — it is a
-couple of minutes, because `BotLadderTest` and `RolloutTruncationTest` play several hundred complete
-matches with a search bot in them, which is the point of both. Narrow with `--tests` while working on
-something else. A full cold `build` takes several minutes; the wasm toolchain is slow to warm up.
-
-## Adding a bot
-
-```kotlin
-class MyBot(setup: BotSetup) : Bot {
-    private val rng = setup.rng
-
-    override fun chooseMove(turn: Turn): Decision =
-        Decision.Move(rng.pick(turn.legalMoves) ?: Direction.NORTH)
-}
-
-// bots/ShippedBots.kt
-register("my-bot", "My Bot", ::MyBot)
-```
-
-A bot instance is created once per slot per match, so instance fields persist across turns — which is
-where every search buffer belongs: allocate from `setup.grid.cellCount` in the constructor and reuse
-it forever. Get randomness from `setup.rng`, never `Random.Default`. Poll `turn.budget` in any search
-loop.
-
-Three rules that are not obvious until they bite:
-
-- **`turn.legalMoves.isEmpty` is the first branch of every bot.** The contract suite opens on a 1x1
-  board where nothing is legal on turn one, and an unguarded `legalMoves.nth(0)` takes it down.
-- **Re-read `playout.outcome` after every `advance`, never carry it.** An exhausted budget makes the
-  playout over, and `advance` on an over playout throws — so a stale reading is an exception that
-  only fires when the allowance lands on that exact move.
-- **A bot handed a budget of zero must spend exactly zero and still play well.** That is a contract
-  test, and the shipped answer is to fall back on `SpaceBot`, whose flood fill charges nothing.
-
-The `internal` primitives in `:bots` are there to be used: `FloodFill` for room, `ShortestPaths` for
-distances and first steps, `SpaceOwnership` for the board carved up between the snakes — and
-`isolated`, for whether a snake's ground still runs into anybody else's — `nearestOpponent` for
-`PvpAi`'s reduction, `randomPlayout` for a rollout, `truncatedPlayout` for a short one judged by
-ownership, `UctTree` for a flat-array search tree, `PuctTree` for one guided by a prior, and
-`LeafEval` for a hand-written value at a leaf.
-
-`truncatedPlayout` and `SpaceOwnership` ship **wired and off**, and the reason is measured rather
-than aesthetic — see `UctBot.ROLLOUT_DEPTH`. Do not turn them on without re-running
-`RolloutTruncationTest`, and do not delete them either: they are the evidence.
-
-Every registry entry is run against the shared contract suite in CI (`bots/src/commonTest/.../BotContractTest`):
-never returns an illegal move when a legal one exists, survives a budget of zero, is deterministic given
-an identical seed, retains no cross-match state, does not claim to be interactive, terminates on every
-board shape, spends budget exactly when it declares an allowance, and plays the same match at its own
-declared defaults as it does with nothing set. That suite is what makes "fork → add a bot → PR" safe
-to accept.
-
-### Declaring a knob
-
-Anything worth tuning is declared as a `BotKnob` and passed to `register`. **The declaration is the
-reader** — that is the whole design, and it is why the constructor holds no literal:
-
-```kotlin
-private val exploration = EXPLORATION.read(setup.params)
-
-internal companion object {
-    val SEARCH = BotKnob.Search(min = 0, max = 400_000, step = 10_000)
-    val EXPLORATION = BotKnob.Decimal("exploration", "Exploration", "...", default = 5.0, min = 0.1, max = 100.0, step = 0.1)
-    val KNOBS: List<BotKnob> = listOf(SEARCH, EXPLORATION)
-}
-
-// bots/ShippedBots.kt
-register("my-bot", "My Bot", ::MyBot, MyBot.KNOBS)
-```
-
-The four leaves are `Integer`, `Decimal`, `Flag` and `Choice`. **A `Choice` holds names, never
-ordinals** — its value travels in a replay URL beside its name, so `eval=expert` survives somebody
-reordering the list it offers and `eval=2` does not, with nothing in the codec able to tell. That is
-the same argument that freezes the knob's name, applied to its value.
-
-The default on the form and the default in the field initializer cannot drift apart, because there is
-only one of them. Four things about the shape:
-
-- **`BotKnob.Search` is the allowance, and is not a `BotParams` value.** The engine grants it; a bot
-  never reads one. Declaring it is how the sidebar knows to offer an allowance field at all — and the
-  contract suite checks the claim against what the bot actually spends, so it cannot become a lie.
-- **`read` is total.** An unparseable or out-of-range value falls back on the default rather than
-  throwing, which is a deliberate departure from `BotParams`' own strict readers. `Match` builds its
-  bots in a field initializer, *outside* the `try` that guards `chooseMove`, and one route in is
-  whatever somebody pasted into the address bar — a throw there has nothing above it to catch it and
-  takes the page down. Strict reading lives in `reject`, which is what the form calls.
-- Knob names are **frozen once released**, like a `BotId` and for the same reason: they travel in the
-  replay URL of every match somebody configured.
-- Nothing else has to change. No HTML, no `:ui` code, no codec work.
-
-For a rollout, take `turn.scratch.playout()` and spin on `outcome`:
-
-```kotlin
-val p = turn.scratch.playout()
-while (p.outcome == null) p.advance(policy.pick(p.board.legalMoves(p.toAct)) ?: Direction.NORTH)
-```
-
-`advance` charges the budget itself, and an exhausted budget makes `outcome` a draw — so the loop
-condition *is* the budget check and the search terminates structurally rather than on trust.
-
-**A search that does not simulate has to charge itself.** `Turn.budget.tryConsume(units)` is public
-for that, and `PuctBot` is the one bot that uses it: a board-wide sweep at a leaf costs real time the
-engine cannot see, and a bot that charged nothing for one would make `budgetPerTurn` mean something
-different for it than for everything else. Charge **before** doing the work — `tryConsume` refuses
-and charges nothing once there is not enough left, so charging afterwards makes the allowance a
-record rather than a bound. Do not tune the figure down to make your bot look better; report the
-wall-clock beside the win rate instead, which is what `:lab`'s `time` subcommand is for.
-
-Adding a bot needs **no HTML change**: the pickers in the sidebar are filled from `BotRegistry.entries`
-at startup, and each seat's settings rows are built from that entry's `knobs`. Those are the only two
-places `:ui` builds DOM, and this is why.
-
-## Working on the UI
-
-`:ui` exposes exactly two things — `GameSession` and `ReplayLink`. Everything else is `internal`, and
-should stay that way; `:app` builds a session and is otherwise sixty lines of wiring.
-
-Inside, it is a one-way data flow with no virtual DOM. State goes down through `Chrome.render(model)`,
-everything a person does comes back up as a `UiIntent` into `GameSession.dispatch`, and the board is
-painted separately per turn because painting two rectangles is nearly free while writing text is not.
-Keep those two cadences apart: `UiModel` is built once per *frame*, not once per turn.
-
-**Playing and replaying are one code path.** A replay is a match whose slots already know what they
-are going to do, so play, pause, step, restart and the scoreboard work on both without a branch. Only
-seeking is replay-specific, and it is implemented by rebuilding the playback match and stepping to the
-target — microseconds, and nothing to keep consistent.
-
-What *does* branch is which clock runs, and it branches on `Match.interactive` rather than on a mode
-flag: `TurnScheduler` paces bots and replays, while a match with a live player is stepped by
-`GameSession.playRound` straight out of the keydown. `TournamentRunner` is the third clock and the
-only one with no speed at all — a batch is not something you watch at a rate, it is something you
-wait for, so it runs flat out on an 8ms-per-frame guard and reports progress instead.
-
-While a batch runs it **owns the arena**: `GameSession` paints its current match and builds the whole
-`UiModel` from that match, so the board, the scoreboard and the stats cannot disagree. The transport
-is greyed, and `dispatch` drops transport intents outright — the space bar does not read the DOM's
-disabled flags. Touching the transport afterwards hands the arena back with a full `fit`, because the
-renderer paints one square at a time and would otherwise step a match onto somebody else's board.
-
-**Hover is answered above both of those guards**, and that placement is the whole of it: asking what
-is under the pointer changes nothing, so it neither has to be dropped while a batch owns the board
-nor is grounds for taking the board back off one. Put the branch below either guard and moving the
-mouse across a finished tournament's last position silently swaps it for the player's own game.
-
-**The board is a fixed rectangle of device pixels** — `BoardRenderer.BOARD_EXTENT`, anchored to the
-`devicePixelRatio` the page opened at. The grid decides only how finely that rectangle is divided, so
-an 8x8 and a 40x40 occupy the same frame and zooming the page moves the text around a board that
-stays put. The container and the viewport height are clamps for a window it will not fit in, not
-inputs to the size. There is deliberately **no maximum cell size**: one is what used to make a small
-board small, and it would fight the extent at every size the picker offers.
-
-**The decorations live on a second canvas, and are painted whole.** `paintMove` repaints only the two
-or three squares a turn dirtied, so a decoration sharing that bitmap would have to be understood by
-every one of those paints — and a full `repaint`, which a batch triggers every frame, would wipe it.
-The overlay is cleared with one `clearRect` and is sized off the same integers as the board, never
-measured, so the two cannot drift. `BoardRenderer` owns both, so the cell size and the grid still
-have one home.
-
-There are two decorations on it and they answer to different things. The **thread** through each
-body — plus the marker on the head — is drawn for **every snake, every turn**, because a body that
-moved one square has a thread that moved along its whole length; there is no dirty square for it, and
-nothing about it was ever a question about the pointer. The **wash** picks one snake out of the
-others, which only a pointer asks, so it stays with the pointer and goes down first, under every
-thread. That is why `BoardRenderer.paintOverlay` has to follow every `paintMove`, `paintSnake` and
-`repaint` — `GameSession.refreshOverlay` is that obligation, not a pointer handler. A corpse keeps
-`Palette.CORPSE_ALPHA` and loses its head marker, because `paintSnake` already says both.
-
-`GameSession` remembers the hovered **square**, never the snake, so a restart, a seek and a batch
-moving on to its next match all resolve to whoever holds it now — the same rule every colour on this
-board already follows.
-
-**Seats are named by `SlotLabels`, not by the registry directly.** A seat is a *configured* bot, so
-two of them can be the same bot at two allowances, and the display name alone cannot say so. The
-qualifier is `Contestant.suffix` from `:match` — the very string the win-rate matrix uses — so the
-sidebar, the hover label, the winner line and the table cannot start disagreeing about what `@4k`
-means. The numbering does differ on purpose: `TournamentTable` leaves the first of a repeated column
-bare because it has a legend under it, while a list of four rows reads better as `Random ·1` and
-`Random ·2`.
-
-The static skeleton lives in `app/.../index.html`. Kotlin looks elements up by id once and then only
-writes text, values and `hidden`; do not start constructing structure there. The win-rate matrix is
-the case that most invites breaking that rule and does not: `TournamentTable.toString()` lays it out
-in `:match` and the chrome writes the text into one `<pre>`.
-
-**There are exactly two exceptions, and both come off `BotRegistry.entries`**: the `<option>` list in
-each picker, and the knob rows inside each seat's `<details class="knobs">`. Both exist to keep
-"fork, add a file, register it, open a PR" from also meaning "and edit the markup". A pre-written pool
-of rows would have been the doctrinal answer and is the wrong one — the day a bot declares one knob
-more than the pool holds, it silently loses it, which is the exact coupling the rule is there to
-prevent. The *containers* are still static, and adding a third exception needs a better reason than
-either of these had. The overlay canvas and the hover label are **not** a third one — they are static
-markup like everything else, and Kotlin only ever writes their size, text and position.
-
-`SlotForm` owns all of that, one per seat, and nothing in it dispatches a `UiIntent`. Which bot is
-picked and what its knobs are set to is **form state**, like the reseed button writing `#seed`; it
-becomes app state only when Start match calls `read()`. Two things there are load-bearing:
-
-- **A value is corrected in the field, not just in the read.** `SlotForm` runs `BotKnob.reject`
-  first, falls back to the declared default, and writes the correction back — a match that quietly
-  played at a number nobody typed would be worse than one that refused to start.
-- **Values equal to the declared default are omitted**, so an untouched seat yields
-  `BotParams.EMPTY`, `MatchSetup.configured` stays false, and the replay URL of a stock match is
-  byte-identical to the one the codec produced before any of this existed.
-
-## Working with the legacy Java
-
-**The port is finished and `legacy/` is deleted.** What follows is a record of what was found there,
-kept because it is the reasoning behind several decisions in the live code and because somebody will
-eventually read the old Java and wonder why the rewrite disagrees with it. The tree is at
-`git show legacy-java-final:src/main/java/ao/…`; nothing in it is outstanding work.
-
-It was always a **specification to read, not code to translate**. It has two competing board
-representations and the wrong performance shape; `:core` is a from-scratch rewrite. Algorithms were
-ported semantically and the scaffolding deleted.
-
-**The AI is fully ported and nothing under `ai/` is outstanding.** The sample bots landed in
-Phase 4 — `WallHugAi`, `RandomAi`, `ForkAi`, `ForkPathAi`, `PathAi`, `AStar`, `MonteCarloAi`,
-`UctAi`/`Node`/`BiState`, `PvpAi`'s reduction and `BoardOccupancy.mostDistant` — and the contributed
-`ai/da/` bots in Phase 5, as `BurninHellBot` and `TomSnakeBot`. `OtherSnake` is the one deliberate
-omission: its body is `RandomAi`'s body, so it is already shipped as `random`, and a second slug for
-one policy is a duplicate picker row and nothing else. Do not "finish the port" by adding it.
-
-All three `ai/da/` bots extended `PvpAi` and **none of them ever read the `opp` it computed**, so the
-nearest-opponent reduction is dropped from all three rather than ported.
-
-Known legacy bugs — **do not faithfully reproduce these**:
-
-- `RelLocation.directionTo` is dead-broken: `closestDist = Double.MIN_VALUE` (smallest *positive* double)
-  compared with `dist < closestDist`, so it always returns `FOREWARD`. The class is unreferenced; drop it.
-- `PvpAi` picks the **walled-off** opponent every time. `AStar.pathBetween` returns an *empty list*
-  for an unreachable target, `PvpAi` reads its `size()` as the distance, and `0` beats every real
-  distance. `nearestOpponent` uses `ShortestPaths.UNREACHABLE`, and there is a named test for it.
-- `AStar` is not A\*: `Path.compareTo` orders by cost-so-far and uses the heuristic only as a
-  tie-break, so the frontier comes off in `g` order and the heuristic prunes nothing. On a unit-cost
-  4-neighbour grid that is breadth-first search, which is what `ShortestPaths` is.
-- `AiUtil.availableArea` checks its `stopAt` cap only *between* search layers, so it overshoots by up
-  to a whole frontier — `ForkAi(6)` never meant six squares.
-- `ForkPathAi` keys a `TreeMap` on the move appraisal, so two equally-rated directions collapse into
-  one entry and one of them silently stops being a candidate; its `Math.random() < 0.5` tie-break is
-  non-uniform; and with no opponents left its mean distance is `0 / 0`.
-- `MonteCarloAi` divides by `numRuns` having run `numRuns / |legal|` rollouts, and drains one
-  candidate at a time — so a budget that expires part-way biases the argmax toward the first
-  direction.
-- `Node.propagateValue` complements the reward at every step up the path. That is correct for two
-  players alternating and wrong the moment a third exists.
-- `MoveTracker.retrieveOrCreateSpecifier` seeds a bot's first move with *the first available direction*, so
-  a bot that never sets one plays a move it never chose — and then repeats it forever.
-- `SnakesRunner.setupGame` wraps `PlayerAvatar` and then `SnakesGame2.addPlayer` wraps it again, burning two
-  colour-pool slots and two indices per player.
-- `Node`'s static 2-thread `ExecutorService` is entirely dead — its only caller is commented out.
-- `NestedSwingInput.queue` is a plain `ArrayList` written from the Swing EDT and read from the game thread
-  with no synchronization.
-- The 13 `assert` statements are inert (`-ea` is not set), so `Reward`'s `[0,1]` invariant was never enforced.
-
-The single external dependency, `ao.util:util-lang:2.0.0`, is served from a `raw.githubusercontent.com`
-Maven repo and drags in log4j 1.2.14. Only `Rand` was ever used. Drop it entirely.
-
-## Deployment
-
-GitHub Pages, static files, no backend. GitHub Pages serves `.wasm` with the correct `application/wasm`
-MIME type on live sites. A `.nojekyll` file is required. Replays travel in the URL **hash** (`#r=<payload>`)
-because Pages has no server-side routing and a hash change causes no reload.
-
-Kotlin/Wasm is Beta and needs WasmGC: Chrome 119+, Firefox 120+, Safari 18.2+. `index.html` already
-handles this by watching for a boot *failure* (a thrown error, a rejected promise, a failed script
-load, or a 15s timeout) rather than probing wasm features — a byte-level WasmGC probe is easy to get
-subtly wrong and would then lock out perfectly good browsers. Kotlin signals success by adding
-`booted` to `<body>`.
-
-Keep the four pure modules platform-free so that adding a Kotlin/JS fallback target later is a
-build-config change, not a rewrite.
-
-### Browser gotchas already hit — don't rediscover these
-
-- **Reveal `#app` before the first paint.** It starts `display: none`, and a hidden element reports
-  `clientWidth == 0`, so measuring the board container first sizes every board to the minimum cell
-  size. `document.body.classList.add("booted")` must stay ahead of `session.start()` in `Main.kt`.
-- **The board container's width must not depend on the canvas.** The canvas measures the container to
-  find out how much room it has; with `flex: 1 1 auto` that was circular and the board came out a
-  different size on each load. `.arena` is a CSS grid with `minmax(0, 1fr)` so the track width is
-  definite, and `.board-wrap` is a one-cell grid that centres the canvas without shrink-wrapping it.
-  Don't switch either back to flexbox, and don't put a shrink-to-fit box around the canvas.
-- **`#board` carries an `outline`, not a `border`, and that is load-bearing twice.**
-  `box-sizing: border-box` makes a border eat into the width Kotlin wrote, so a backing store of N
-  device pixels was being squeezed into N-2 pixels' worth of CSS and every gridline resampled; and
-  `getBoundingClientRect` reports the *border* box, which the hover hit-test would then be a pixel out
-  on at every ratio. An outline is painted outside the box and changes neither.
-- **`[hidden] { display: none !important; }` is load-bearing.** The chrome hides things by setting
-  `hidden`, and an author `display: flex`/`grid` outranks the user agent's `[hidden]` rule — so
-  hidden rows stayed on screen while reporting `hidden == true`. Kotlin cannot see that; the fix
-  belongs in `styles.css` and it is already there.
-- **`BoardRenderer` draws in device pixels and never scales the context.** The backing store is
-  `cellSize * cols + 1` device pixels with a *fractional* CSS size, rather than a CSS-pixel size with
-  `context.scale(dpr, dpr)`. On a fractional `devicePixelRatio` — 1.25, 1.35 and 1.5 are all ordinary
-  on Windows — the scaled version puts every coordinate between two device pixels and a 1px gridline
-  antialiases into a two-pixel smear. Verified: sampling the backing store now yields exactly two
-  colours across a row. If you do re-introduce `scale`, note that setting `canvas.width` resets the
-  transform, so it must come *after* the resize.
-- In `wasmJs`, `fillStyle`/`strokeStyle` take `JsAny?`, so a Kotlin `String` needs `.toJsString()`.
-  `snakewarz.browser` opts into `kotlin.js.ExperimentalWasmJsInterop` once so this is not a warning
-  at every call site.
-- **There is no `console` in Kotlin/Wasm.** Use `println`, which lands in the browser console.
-- **`requestAnimationFrame` does not fire in a hidden tab at all** — which is exactly why the
-  scheduler uses it. Automated checks against a backgrounded tab will see a frozen match; drive
-  `Step`, or replace `window.requestAnimationFrame` and pump the callback with synthetic timestamps.
-- A harmless configure-time warning — `Kotlin does not yet support 26 JDK target, falling back to
-  Kotlin JVM_25` — comes from `:app`, which emits no JVM bytecode. `:core` correctly compiles to Java
-  21 bytecode via `jvmToolchain`.

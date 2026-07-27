@@ -66,7 +66,7 @@ class ThroughputTest {
     @Test
     fun `a ladder pairing is seconds rather than minutes`() {
         // The unit a tournament is actually sold in: twenty matches of one pairing, which is what
-        // the panel offers by default and what docs/MIGRATION.md quotes its tables over.
+        // the panel offers by default and what docs/Migration.md quotes its tables over.
         val uct = entry("uct")
         val space = entry("space")
 

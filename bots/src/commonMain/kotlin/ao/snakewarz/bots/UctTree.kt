@@ -13,7 +13,7 @@ import kotlin.math.sqrt
  * A node is an index. Its statistics live in parallel `IntArray`/`DoubleArray` pools, and its
  * children sit in a fixed four-wide block at `node * 4`, indexed by [Direction.ordinal] — so
  * reaching a child is one multiply-add and one load, with no pointer to chase and no per-node array
- * to allocate. `docs/MIGRATION.md` names this the highest-leverage single choice for the wasm
+ * to allocate. `docs/Migration.md` names this the highest-leverage single choice for the wasm
  * target and says to do it from the first commit; this is that.
  *
  * The pools are allocated once per match and reused every turn. [reset] is O(1): it sets the count
