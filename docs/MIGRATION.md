@@ -1144,3 +1144,34 @@ the cancel now comes first and the repeat guard second. The listener stays on `w
 lets somebody play without clicking the board first — and the same edit added a modifier guard,
 because `key` is still `"a"` under Ctrl and `"ArrowLeft"` under Alt, so the page had been steering on
 select-all and swallowing Back.
+
+## After release 1 — the thread comes off the pointer
+
+Two small things, and the first one splits a decoration that had been treated as one.
+
+**The thread is drawn always; only the wash waits for a pointer.** The overlay went on as a unit on
+hover, and that bundled two cues with different jobs. The thread traces where a body ran, which is
+genuinely hard to read off the squares when a snake has doubled back beside itself — and that is
+true of every snake on the board, on every turn, whether or not a pointer is near it. The wash picks
+*one* snake out of the others, which is a question only a pointer asks. So the thread and its head
+marker are painted for every snake every time the position moves, and the wash alone still follows
+the pointer, laid down first so hovering adds a layer under the threads rather than rearranging
+them.
+
+That makes `paintOverlay` — `highlight` as was — the second half of every paint rather than a
+response to pointer moves, which is why it is now named for the bitmap it owns. `GameSession` already
+called it after every one of them, for the *other* reason a stale square needs re-asking, so nothing
+moved: `refreshOverlay` is the same call sites under a truer name.
+
+Two consequences worth writing down. A corpse keeps the share of its colour `Palette.CORPSE_ALPHA`
+gives it on the board and loses the head marker entirely, because `paintSnake` stops marking a head
+the moment a snake is out and an overlay that disagreed would make the dead snakes the loudest thing
+on the board. And the cost is now a redraw proportional to how much of the board is occupied, once
+per turn — the same order the hovered snake already cost, times the number of snakes, and bounded
+above by a scheduler that tops out at eighty turns a second.
+
+**The page opens on Human vs UCT at 8x8.** It used to open on you against `entries.first()` — the
+random bot — on a 20x20 board, which is the weakest opponent in the registry on the emptiest board
+the picker offers. `:ui` cannot depend on `:bots` and must not start to, so `Chrome.DEFAULT_OPPONENT`
+names `uct` as a **slug** and falls back to `entries.first()` when a registry does not offer one, and
+`DEFAULT_SIZE` moves with the `selected` option on `#size`.

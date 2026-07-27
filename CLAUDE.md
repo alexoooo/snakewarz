@@ -38,10 +38,11 @@ suite a *correct but useless* bot would fail. Then come the bots contributed to 
 ordered by slug and claiming nothing about strength: `burninhell`, `tomsnake`. They are gated by the
 same contract suite as everything else.
 
-`random` must stay `entries.first()`, because `:ui` seats the second slot from it. Append new bots;
-do not prepend. Of the nine, only `flat-monte-carlo` and `uct` touch `Turn.scratch` — the other seven
-consume no budget at all, and `BotContractTest` enforces that rather than merely asserting it here:
-a bot spends budget **if and only if** it declares a `BotKnob.Search`.
+`:ui` opens slot 2 on the slug `uct` — the page should start on the game somebody came here to play
+— and falls back to `entries.first()` when a registry does not offer it, so registration order still
+shows through. Append new bots; do not prepend. Of the nine, only `flat-monte-carlo` and `uct` touch
+`Turn.scratch` — the other seven consume no budget at all, and `BotContractTest` enforces that rather
+than merely asserting it here: a bot spends budget **if and only if** it declares a `BotKnob.Search`.
 
 Do not assume anything else exists; check the tree.
 
@@ -53,9 +54,11 @@ notes are that, one directory level shifted.
 
 > Current phase: **6 — done**. Release 1 is feature-complete; further work is new work, not the
 > remainder of a plan. Landed since: **visual bot configuration** — `BotKnob`, per-slot allowances
-> and parameters, configured tournament contestants — and then **reading the board**: seats named
-> apart by their configuration, a board of fixed physical size, hover-to-inspect a snake, and arrow
-> keys that no longer scroll the page. See the last section of `docs/MIGRATION.md`.
+> and parameters, configured tournament contestants — then **reading the board**: seats named apart
+> by their configuration, a board of fixed physical size, hover-to-inspect a snake, and arrow keys
+> that no longer scroll the page — and then **the thread coming off the pointer**: every body
+> threaded on every turn, and a page that opens on Human vs UCT at 8x8. See the last two sections of
+> `docs/MIGRATION.md`.
 
 ## What it is built on
 
@@ -433,11 +436,22 @@ stays put. The container and the viewport height are clamps for a window it will
 inputs to the size. There is deliberately **no maximum cell size**: one is what used to make a small
 board small, and it would fight the extent at every size the picker offers.
 
-**The hover highlight lives on a second canvas.** `paintMove` repaints only the two or three squares
-a turn dirtied, so a decoration sharing that bitmap would have to be understood by every one of those
-paints — and a full `repaint`, which a batch triggers every frame, would wipe it. The overlay is
-cleared with one `clearRect` and is sized off the same integers as the board, never measured, so the
-two cannot drift. `BoardRenderer` owns both, so the cell size and the grid still have one home.
+**The decorations live on a second canvas, and are painted whole.** `paintMove` repaints only the two
+or three squares a turn dirtied, so a decoration sharing that bitmap would have to be understood by
+every one of those paints — and a full `repaint`, which a batch triggers every frame, would wipe it.
+The overlay is cleared with one `clearRect` and is sized off the same integers as the board, never
+measured, so the two cannot drift. `BoardRenderer` owns both, so the cell size and the grid still
+have one home.
+
+There are two decorations on it and they answer to different things. The **thread** through each
+body — plus the marker on the head — is drawn for **every snake, every turn**, because a body that
+moved one square has a thread that moved along its whole length; there is no dirty square for it, and
+nothing about it was ever a question about the pointer. The **wash** picks one snake out of the
+others, which only a pointer asks, so it stays with the pointer and goes down first, under every
+thread. That is why `BoardRenderer.paintOverlay` has to follow every `paintMove`, `paintSnake` and
+`repaint` — `GameSession.refreshOverlay` is that obligation, not a pointer handler. A corpse keeps
+`Palette.CORPSE_ALPHA` and loses its head marker, because `paintSnake` already says both.
+
 `GameSession` remembers the hovered **square**, never the snake, so a restart, a seek and a batch
 moving on to its next match all resolve to whoever holds it now — the same rule every colour on this
 board already follows.

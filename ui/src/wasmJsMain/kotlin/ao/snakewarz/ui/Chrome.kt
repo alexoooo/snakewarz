@@ -326,9 +326,11 @@ internal class Chrome(
             }
         }
 
-        // You against the first bot on the list, with the rest of the board empty.
+        // You against the best bot there is, with the rest of the board empty: the page opens on the
+        // game somebody came here to play, not on the weakest rung of the ladder.
         selectIfOffered(botSelects[0], PlayableRegistry.HUMAN_ID.slug)
-        bots.firstOrNull()?.let { selectIfOffered(botSelects[1], it.id.slug) }
+        val opponent = bots.firstOrNull { it.id.slug == DEFAULT_OPPONENT } ?: bots.firstOrNull()
+        opponent?.let { selectIfOffered(botSelects[1], it.id.slug) }
     }
 
     /**
@@ -440,7 +442,18 @@ internal class Chrome(
         /** Four seats: enough for the free-for-all matches that make this game interesting. */
         const val SCOREBOARD_ROWS = 4
 
-        const val DEFAULT_SIZE = 20
+        /** Must be the `selected` option on `#size` in index.html. */
+        const val DEFAULT_SIZE = 8
+
+        /**
+         * Who slot 2 opens on: a **slug**, and a preference rather than a requirement.
+         *
+         * `:ui` cannot depend on `:bots` and must not start to — the renderer painting a board it
+         * cannot tell a wall hugger from a human on is the point of that edge. A string names one
+         * without reaching for it, and a registry that does not offer it seats whatever is first
+         * instead, so an injected registry of one bot still opens on a playable match.
+         */
+        const val DEFAULT_OPPONENT = "uct"
 
         /** Must be one of the options on `#rounds` in index.html, and even. */
         const val DEFAULT_ROUNDS = 20

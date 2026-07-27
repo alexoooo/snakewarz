@@ -37,6 +37,14 @@ import kotlin.math.PI
  * resizing the window and painting a tournament's current match all land on the same colours as
  * playing the match forwards would have.
  *
+ * ### The board is painted per square; the overlay is painted whole
+ *
+ * Two bitmaps and two cadences. Everything above is the board, where a turn dirties two or three
+ * squares. The thread through each body and the wash over the hovered one are on a second canvas
+ * and are redrawn end to end every time the position moves — because a body that shifted by one
+ * square has a thread that shifted along its whole length, so there is no such thing as a dirty
+ * square for it. [paintOverlay] is what does that, and it has to follow every paint below.
+ *
  * The renderer knows nothing about matches, bots or time. It is handed a read-only projection of the
  * position and a list of dirty cells, and neither contains a pixel or a colour.
  */
@@ -70,7 +78,7 @@ internal class BoardRenderer(
     private var grid: Grid = Grid(1, 1)
     private var cellSize: Int = MIN_CELL
 
-    /** The square the highlight is drawn for, so a turn can redraw it without re-deciding. */
+    /** The square the wash is drawn for, so a turn can redraw it without re-deciding. */
     private var hovered: Cell = Cell.NONE
 
     /**
@@ -129,14 +137,14 @@ internal class BoardRenderer(
 
         // Sized off the same integers rather than measured, so the two bitmaps line up exactly
         // whatever the CSS around them does. Setting `width` also clears it, which is why the
-        // highlight is redrawn below rather than left to the next pointer move.
+        // overlay is redrawn below rather than left to the next turn.
         overlay.width = width
         overlay.height = height
         overlay.style.width = canvas.style.width
         overlay.style.height = canvas.style.height
 
         repaint(view)
-        drawHighlight(view)
+        drawOverlay(view)
     }
 
     /** Switches themes. The caller follows with [fit], because the gridlines change colour too. */
@@ -172,15 +180,18 @@ internal class BoardRenderer(
     }
 
     /**
-     * Picks out whoever holds [cell], and clears the overlay when nobody does.
+     * Repaints the overlay, picking out whoever holds [cell] and nobody when that is nobody.
+     *
+     * The whole overlay, because the threads on it move with the snakes: this is the one call that
+     * has to follow every [paintMove], [paintSnake] and [repaint], not merely every pointer move.
      *
      * A *square* is what is remembered here, never a snake — so a restart, a seek and a tournament
      * moving on to its next match all resolve to whoever holds that square now. That is the same
      * rule every colour on this board already follows: read it off the position, do not keep it.
      */
-    fun highlight(view: BoardView, cell: Cell) {
+    fun paintOverlay(view: BoardView, cell: Cell) {
         hovered = cell
-        drawHighlight(view)
+        drawOverlay(view)
     }
 
     fun repaint(view: BoardView) {
@@ -292,38 +303,55 @@ internal class BoardRenderer(
     }
 
     /**
-     * Paints the hovered snake onto the overlay: a wash that brightens from tail to head, a thread
-     * down the middle of it, and a marker on the head.
+     * Repaints the overlay: a thread through every snake, and a wash over the hovered one.
      *
-     * Two cues for one fact, because either alone is ambiguous. The wash says which way the snake
-     * runs but not where it ran — a body doubled back beside itself is two adjacent gradients. The
-     * thread traces the path exactly but a line has no direction, so it needs the wash to say which
-     * end is which. Together they read at a glance, which is the whole point of a hover.
+     * The split is what each cue is *for*. The thread traces where a body ran, which a coil doubled
+     * back beside itself makes genuinely hard to read off the squares alone — and that is true of
+     * every snake on the board, every turn, whether or not a pointer is anywhere near it. So the
+     * thread is drawn always. The wash picks *one* snake out of the others, which is a question only
+     * a pointer asks, so it stays with the pointer.
+     *
+     * Order matters exactly once: the wash goes down first, so hovering lays a tint under the
+     * threads rather than rearranging them, and the picked-out snake's own thread stays on top of
+     * its own wash.
      *
      * Nothing here says anything about the tail being about to clear. The board already fades that
      * square and the label already says it in words; a third telling of one fact is noise.
+     *
+     * The cost is a redraw proportional to how much of the board is occupied, once per turn rather
+     * than once per changed square — which is the same order the hovered snake already cost, times
+     * the number of snakes. It is bounded by the clock above it: [TurnScheduler] tops out at eighty
+     * turns a second and a batch repaints once a frame.
      */
-    private fun drawHighlight(view: BoardView) {
+    private fun drawOverlay(view: BoardView) {
         overlayContext.clearRect(0.0, 0.0, overlay.width.toDouble(), overlay.height.toDouble())
 
-        if (!grid.isPlayable(hovered)) {
-            return
-        }
-        val owner = view.ownerOf(hovered)
-        if (owner.isNone) {
-            return
+        val hoveredOwner = if (grid.isPlayable(hovered)) view.ownerOf(hovered) else SnakeId.NONE
+        if (!hoveredOwner.isNone) {
+            // The head colour, which is the palette's answer to "this snake, but readable against
+            // itself" — darker than the trail on a light page and lighter on a dark one, either way.
+            wash(view.snake(hoveredOwner), palette.head(hoveredOwner.index))
         }
 
-        val snake = view.snake(owner)
-        // The head colour, which is the palette's answer to "this snake, but readable against
-        // itself" — darker than the trail on a light page and lighter on a dark one, either way.
-        val tint = palette.head(owner.index)
+        for (slot in 0 until view.snakeCount) {
+            drawThread(view, SnakeId(slot))
+        }
+
+        overlayContext.globalAlpha = 1.0
+    }
+
+    /**
+     * The thread down one snake's body, and the marker where it ends.
+     *
+     * A corpse keeps the share of its colour that [Palette.CORPSE_ALPHA] gives it on the board, and
+     * loses the head marker entirely — both for the reason [paintSnake] paints it that way. A snake
+     * that is out is an obstacle, and an obstacle has no head to be watching.
+     */
+    private fun drawThread(view: BoardView, id: SnakeId) {
+        val snake = view.snake(id)
+        val tint = palette.head(id.index)
         val thread = palette.background
-
-        // cellAt(0) is the tail, so `i` runs the length of the snake in the order it was laid down.
-        for (i in 0 until snake.length) {
-            wash(snake.cellAt(i), tint, ramp(i, snake.length, WASH_TAIL, WASH_HEAD))
-        }
+        val fade = if (snake.alive) 1.0 else Palette.CORPSE_ALPHA
 
         if (snake.length > 1) {
             overlayContext.lineCap = CanvasLineCap.ROUND
@@ -331,13 +359,18 @@ internal class BoardRenderer(
             overlayContext.strokeStyle = thread.toJsString()
             overlayContext.lineWidth = (cellSize * THREAD_WIDTH).coerceAtLeast(THREAD_MIN_WIDTH)
 
+            // cellAt(0) is the tail, so `i` runs the body in the order it was laid down.
             for (i in 0 until snake.length - 1) {
-                overlayContext.globalAlpha = ramp(i, snake.length - 1, THREAD_TAIL, THREAD_HEAD)
+                overlayContext.globalAlpha = fade * ramp(i, snake.length - 1, THREAD_TAIL, THREAD_HEAD)
                 overlayContext.beginPath()
                 overlayContext.moveTo(centreX(snake.cellAt(i)), centreY(snake.cellAt(i)))
                 overlayContext.lineTo(centreX(snake.cellAt(i + 1)), centreY(snake.cellAt(i + 1)))
                 overlayContext.stroke()
             }
+        }
+
+        if (!snake.alive) {
+            return
         }
 
         // Where the thread ends, said outright: a snake coiled back on itself is ambiguous at a
@@ -363,16 +396,24 @@ internal class BoardRenderer(
     private fun ramp(i: Int, count: Int, tail: Double, head: Double): Double =
         if (count < 2) head else tail + (head - tail) * i / (count - 1)
 
-    /** A flat translucent square on the overlay. Unlike [fill] there is nothing under it to bleed. */
-    private fun wash(cell: Cell, colour: String, alpha: Double) {
-        overlayContext.globalAlpha = alpha
+    /**
+     * A translucent tint over one whole body, brightening toward the head.
+     *
+     * Flat squares straight onto the overlay — unlike [fill] there is nothing underneath them to
+     * bleed through, because the overlay was cleared a moment ago and the board is a separate bitmap.
+     */
+    private fun wash(snake: SnakeView, colour: String) {
         overlayContext.fillStyle = colour.toJsString()
-        overlayContext.fillRect(
-            (grid.colOf(cell) * cellSize + 1).toDouble(),
-            (grid.rowOf(cell) * cellSize + 1).toDouble(),
-            (cellSize - 1).toDouble(),
-            (cellSize - 1).toDouble(),
-        )
+        for (i in 0 until snake.length) {
+            val cell = snake.cellAt(i)
+            overlayContext.globalAlpha = ramp(i, snake.length, WASH_TAIL, WASH_HEAD)
+            overlayContext.fillRect(
+                (grid.colOf(cell) * cellSize + 1).toDouble(),
+                (grid.rowOf(cell) * cellSize + 1).toDouble(),
+                (cellSize - 1).toDouble(),
+                (cellSize - 1).toDouble(),
+            )
+        }
     }
 
     private fun centreX(cell: Cell): Double = grid.colOf(cell) * cellSize + 1 + (cellSize - 1) / 2.0
@@ -430,8 +471,8 @@ internal class BoardRenderer(
         const val FALLBACK_WIDTH = 640
 
         /**
-         * The hover highlight: how much of the head colour a square takes, oldest to newest, and
-         * the thread that runs down the middle of the body.
+         * The overlay: how much of the head colour a hovered square takes, oldest to newest, and
+         * the thread that runs down the middle of every body.
          *
          * The thread is drawn in the board's own colour, so it reads against all six trail hues on
          * either theme without a seventh entry in the palette.

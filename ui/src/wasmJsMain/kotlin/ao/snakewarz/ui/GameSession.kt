@@ -146,7 +146,7 @@ public class GameSession(
         if (batchBoard != null && intent != UiIntent.ToggleTournament) {
             batchBoard = null
             renderer.fit(match.view)
-            refreshHover()
+            refreshOverlay()
             // Here rather than left to whatever the intent does next: a turn-based match answers
             // Play by doing nothing at all, and the scoreboard would then still be describing the
             // tournament while the board underneath it had gone back to the player's own game.
@@ -185,32 +185,36 @@ public class GameSession(
             return
         }
         hovered = cell
-        refreshHover()
+        refreshOverlay()
         // What the label says is model state and comes down through render; only where it sits does
         // not, and the chrome has already moved it by the time this runs.
         renderChrome()
     }
 
     /**
-     * Repaints the highlight for whoever holds the hovered square *now*, and clears a stale one.
+     * Repaints the overlay: every snake's thread, and the wash over whoever holds the hovered square
+     * *now*.
      *
-     * Called after every paint, because the board moves under a pointer that is standing still. The
-     * square is re-checked against the grid on the way through, so a match on a different board
-     * size cannot be asked about a square that no longer exists.
+     * Called after every paint, and for two reasons rather than one. The threads move with the
+     * snakes, so they are out of date the instant a turn is played whether or not a pointer is
+     * anywhere near the board; and the board moves under a pointer that is standing still, so the
+     * square being asked about may have changed hands. The square is re-checked against the grid on
+     * the way through, so a match on a different board size cannot be asked about one that no longer
+     * exists.
      */
-    private fun refreshHover() {
+    private fun refreshOverlay() {
         val shown = batchBoard ?: match
         if (!shown.grid.isPlayable(hovered)) {
             hovered = Cell.NONE
         }
-        renderer.highlight(shown.view, hovered)
+        renderer.paintOverlay(shown.view, hovered)
     }
 
     /** Re-measures and repaints whichever match is on screen. Resize, and the theme changing. */
     private fun refit() {
         val shown = batchBoard ?: match
         renderer.fit(shown.view)
-        refreshHover()
+        refreshOverlay()
     }
 
     /** The snake under the pointer, worded for a person, or `null` when there is not one. */
@@ -251,7 +255,7 @@ public class GameSession(
         batch.stop()
         batchBoard = null
         renderer.fit(match.view)
-        refreshHover()
+        refreshOverlay()
 
         if (match.interactive) {
             // Play up to the player's first move and stop there: any slot ahead of them in the turn
@@ -321,7 +325,7 @@ public class GameSession(
 
         awaitingInput = false
         renderer.repaint(match.view)
-        refreshHover()
+        refreshOverlay()
         renderChrome()
     }
 
@@ -401,7 +405,7 @@ public class GameSession(
         val opening = Match(tournament.setupFor(0), registry)
         batchBoard = opening
         renderer.fit(opening.view)
-        refreshHover()
+        refreshOverlay()
     }
 
     private fun stopBatch() {
@@ -415,7 +419,7 @@ public class GameSession(
         batch.tournament?.current?.let {
             batchBoard = it
             renderer.repaint(it.view)
-            refreshHover()
+            refreshOverlay()
         }
         refreshBatchTable()
         renderChrome()
@@ -522,13 +526,13 @@ public class GameSession(
                 }
                 // The board moved under a pointer that did not, so the square being asked about may
                 // have changed hands and the highlighted body certainly changed shape.
-                refreshHover()
+                refreshOverlay()
             }
 
             is StepResult.Eliminated -> {
                 awaitingInput = false
                 renderer.paintSnake(match.view, result.id)
-                refreshHover()
+                refreshOverlay()
             }
 
             StepResult.AwaitingInput -> {
