@@ -53,7 +53,9 @@ notes are that, one directory level shifted.
 
 > Current phase: **6 — done**. Release 1 is feature-complete; further work is new work, not the
 > remainder of a plan. Landed since: **visual bot configuration** — `BotKnob`, per-slot allowances
-> and parameters, configured tournament contestants. See the last section of `docs/MIGRATION.md`.
+> and parameters, configured tournament contestants — and then **reading the board**: seats named
+> apart by their configuration, a board of fixed physical size, hover-to-inspect a snake, and arrow
+> keys that no longer scroll the page. See the last section of `docs/MIGRATION.md`.
 
 ## What it is built on
 
@@ -419,6 +421,35 @@ is greyed, and `dispatch` drops transport intents outright — the space bar doe
 disabled flags. Touching the transport afterwards hands the arena back with a full `fit`, because the
 renderer paints one square at a time and would otherwise step a match onto somebody else's board.
 
+**Hover is answered above both of those guards**, and that placement is the whole of it: asking what
+is under the pointer changes nothing, so it neither has to be dropped while a batch owns the board
+nor is grounds for taking the board back off one. Put the branch below either guard and moving the
+mouse across a finished tournament's last position silently swaps it for the player's own game.
+
+**The board is a fixed rectangle of device pixels** — `BoardRenderer.BOARD_EXTENT`, anchored to the
+`devicePixelRatio` the page opened at. The grid decides only how finely that rectangle is divided, so
+an 8x8 and a 40x40 occupy the same frame and zooming the page moves the text around a board that
+stays put. The container and the viewport height are clamps for a window it will not fit in, not
+inputs to the size. There is deliberately **no maximum cell size**: one is what used to make a small
+board small, and it would fight the extent at every size the picker offers.
+
+**The hover highlight lives on a second canvas.** `paintMove` repaints only the two or three squares
+a turn dirtied, so a decoration sharing that bitmap would have to be understood by every one of those
+paints — and a full `repaint`, which a batch triggers every frame, would wipe it. The overlay is
+cleared with one `clearRect` and is sized off the same integers as the board, never measured, so the
+two cannot drift. `BoardRenderer` owns both, so the cell size and the grid still have one home.
+`GameSession` remembers the hovered **square**, never the snake, so a restart, a seek and a batch
+moving on to its next match all resolve to whoever holds it now — the same rule every colour on this
+board already follows.
+
+**Seats are named by `SlotLabels`, not by the registry directly.** A seat is a *configured* bot, so
+two of them can be the same bot at two allowances, and the display name alone cannot say so. The
+qualifier is `Contestant.suffix` from `:match` — the very string the win-rate matrix uses — so the
+sidebar, the hover label, the winner line and the table cannot start disagreeing about what `@4k`
+means. The numbering does differ on purpose: `TournamentTable` leaves the first of a repeated column
+bare because it has a legend under it, while a list of four rows reads better as `Random ·1` and
+`Random ·2`.
+
 The static skeleton lives in `app/.../index.html`. Kotlin looks elements up by id once and then only
 writes text, values and `hidden`; do not start constructing structure there. The win-rate matrix is
 the case that most invites breaking that rule and does not: `TournamentTable.toString()` lays it out
@@ -430,7 +461,8 @@ each picker, and the knob rows inside each seat's `<details class="knobs">`. Bot
 of rows would have been the doctrinal answer and is the wrong one — the day a bot declares one knob
 more than the pool holds, it silently loses it, which is the exact coupling the rule is there to
 prevent. The *containers* are still static, and adding a third exception needs a better reason than
-either of these had.
+either of these had. The overlay canvas and the hover label are **not** a third one — they are static
+markup like everything else, and Kotlin only ever writes their size, text and position.
 
 `SlotForm` owns all of that, one per seat, and nothing in it dispatches a `UiIntent`. Which bot is
 picked and what its knobs are set to is **form state**, like the reseed button writing `#seed`; it
@@ -516,10 +548,16 @@ build-config change, not a rewrite.
 - **Reveal `#app` before the first paint.** It starts `display: none`, and a hidden element reports
   `clientWidth == 0`, so measuring the board container first sizes every board to the minimum cell
   size. `document.body.classList.add("booted")` must stay ahead of `session.start()` in `Main.kt`.
-- **The board container's width must not depend on the canvas.** The canvas sizes its backing store
-  from the container width; with `flex: 1 1 auto` that was circular and the board came out a
+- **The board container's width must not depend on the canvas.** The canvas measures the container to
+  find out how much room it has; with `flex: 1 1 auto` that was circular and the board came out a
   different size on each load. `.arena` is a CSS grid with `minmax(0, 1fr)` so the track width is
-  definite. Don't switch it back to flexbox.
+  definite, and `.board-wrap` is a one-cell grid that centres the canvas without shrink-wrapping it.
+  Don't switch either back to flexbox, and don't put a shrink-to-fit box around the canvas.
+- **`#board` carries an `outline`, not a `border`, and that is load-bearing twice.**
+  `box-sizing: border-box` makes a border eat into the width Kotlin wrote, so a backing store of N
+  device pixels was being squeezed into N-2 pixels' worth of CSS and every gridline resampled; and
+  `getBoundingClientRect` reports the *border* box, which the hover hit-test would then be a pixel out
+  on at every ratio. An outline is painted outside the box and changes neither.
 - **`[hidden] { display: none !important; }` is load-bearing.** The chrome hides things by setting
   `hidden`, and an author `display: flex`/`grid` outranks the user agent's `[hidden]` rule — so
   hidden rows stayed on screen while reporting `hidden == true`. Kotlin cannot see that; the fix

@@ -1090,3 +1090,57 @@ links.
 One thing this removed rather than added: `RolloutTruncationTest.uctWith`, which built a whole fake
 `BotEntry` around a hand-rebuilt `BotSetup` purely because the shipped registry had no way to offer a
 bot its parameters. It is a label and a `BotParams` now.
+
+## After release 1 — reading the board
+
+Also not a phase. Four things that only show up once somebody sits down with the thing.
+
+**A seat is a configured bot, so its name has to be too.** The Players list printed
+`registry[bot].displayName`, which made two seats running `uct` at two allowances the same word
+twice — the one experiment this testbed exists for, illegible in the panel that reports it. The
+matrix had already solved it, so the qualifier was split out of `Contestant.label` into
+`Contestant.suffix` and `:ui` composes `displayName + suffix` over it. `label` stays `slug + suffix`,
+byte for byte what it was, so every existing test of the table passes untouched.
+
+The one thing deliberately *not* shared is the numbering. `TournamentTable` leaves the first of a
+repeated heading bare (`uct*`, then `uct*·2`) because a column has a legend underneath it; a
+four-row sidebar reads better as `Random ·1` and `Random ·2`, where neither row is the unmarked one.
+Same qualifier, different numbering, and the difference is the panel rather than an oversight.
+
+**The board is a fixed rectangle of device pixels.** It used to be sized from the container and
+capped at `MAX_CELL = 30` CSS px, which made an 8x8 board a third of a 20x20 one and let browser zoom
+rescale the game along with the text. It is now `BOARD_EXTENT` device pixels square, anchored to the
+`devicePixelRatio` the page loaded at, and the grid chooses only how finely that square is divided —
+8x8, 20x20 and 40x40 all come out within eight device pixels of each other. Because a CSS pixel
+covers `devicePixelRatio` device pixels, pinning the device extent is exactly what makes zoom move
+the text and leave the board alone; the ratio is read once because a single reading cannot tell a
+150% zoom from a 1.5x display. `MAX_CELL` is gone rather than raised: a cap on the cell is the thing
+that made a small board small, and it would fight the extent at every size the picker offers.
+
+Two CSS consequences, both load-bearing. `#board` carries an `outline` instead of a `border`, because
+`box-sizing: border-box` had a border quietly eating two pixels out of the width Kotlin wrote —
+resampling every gridline — and because `getBoundingClientRect` reports the border box, which the new
+hit-test would have been a pixel out on. And `.board-wrap` is a one-cell grid with `justify-items:
+center` holding both canvases in the same area, so they are centred by the same algorithm rather than
+by two rules that agree to within half a pixel.
+
+**Hover is a read, and its place in `dispatch` says so.** It is answered above both existing guards:
+above the batch guard, because asking what is under the pointer while a tournament runs harms
+nothing; and above the arena handback, because otherwise moving the mouse across a finished batch's
+last position would silently swap it for the player's own game. The highlight goes on a second canvas
+— `paintMove` repaints two or three squares a turn, so a decoration in that bitmap would have to be
+understood by every one of those paints, and the full `repaint` a batch does every frame would wipe
+it. What is remembered is the hovered **square**, never the snake, so a restart, a seek and a batch
+changing match all resolve to whoever holds it now. Two cues, because either alone is ambiguous: a
+wash that brightens toward the head says which way the snake runs, and a thread through the body
+centres says where it ran, which a doubled-back coil needs. The tail being about to clear is left to
+the label — the board already fades that square, and a third telling of one fact is noise.
+
+**Holding an arrow key scrolled the page**, and the cause is worth recording because the fix looks
+like a no-op. `onKeyDown` returned on `event.repeat` *before* `preventDefault`, so the first press was
+cancelled and every auto-repeat after it fell through to the browser. Dropping those events is a
+statement about how fast the snake moves and says nothing about what the page may do with them, so
+the cancel now comes first and the repeat guard second. The listener stays on `window` — that is what
+lets somebody play without clicking the board first — and the same edit added a modifier guard,
+because `key` is still `"a"` under Ctrl and `"ArrowLeft"` under Alt, so the page had been steering on
+select-all and swallowing Back.

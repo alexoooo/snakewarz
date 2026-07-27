@@ -7,9 +7,13 @@ import ao.snakewarz.core.SnakeId
 import ao.snakewarz.core.SnakeView
 import ao.snakewarz.match.TurnEvents
 import kotlinx.browser.window
+import org.w3c.dom.CanvasLineCap
+import org.w3c.dom.CanvasLineJoin
 import org.w3c.dom.CanvasRenderingContext2D
 import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.ROUND
+import kotlin.math.PI
 
 /**
  * Paints a [BoardView] onto a 2D canvas, one changed square at a time.
@@ -36,13 +40,38 @@ import org.w3c.dom.HTMLElement
  * The renderer knows nothing about matches, bots or time. It is handed a read-only projection of the
  * position and a list of dirty cells, and neither contains a pixel or a colour.
  */
-internal class BoardRenderer(private val canvas: HTMLCanvasElement) {
+internal class BoardRenderer(
+    private val canvas: HTMLCanvasElement,
+    private val overlay: HTMLCanvasElement,
+) {
     private val context: CanvasRenderingContext2D = canvas.getContext("2d") as? CanvasRenderingContext2D
         ?: error("this browser has a canvas but no 2d context")
+
+    private val overlayContext: CanvasRenderingContext2D = overlay.getContext("2d") as? CanvasRenderingContext2D
+        ?: error("this browser has a canvas but no 2d context")
+
+    /**
+     * The ratio the board's size is anchored to: whatever the display reported when the page loaded.
+     *
+     * This is the whole of "zooming moves the text and leaves the board alone". A CSS pixel covers
+     * `devicePixelRatio` device pixels, so a board of a constant CSS size grows on the glass as you
+     * zoom in and a board of a constant *device* size does not. Reading the ratio once carries the
+     * display's own scale factor — 1.25, 1.5 and 1.75 are all ordinary on Windows — so the board
+     * comes out the same number of millimetres on every machine, and everything the player zooms
+     * afterwards is HTML doing what HTML should.
+     *
+     * Once, rather than per fit, because a single reading cannot tell a 150% zoom from a 1.5x
+     * display. Anchoring on the ratio the page opened at is the honest limit of what the platform
+     * reports; the cost is that reloading at a different zoom re-anchors.
+     */
+    private val bootRatio: Double = ratioNow()
 
     private var palette: Palette = Palette.of(prefersDark())
     private var grid: Grid = Grid(1, 1)
     private var cellSize: Int = MIN_CELL
+
+    /** The square the highlight is drawn for, so a turn can redraw it without re-deciding. */
+    private var hovered: Cell = Cell.NONE
 
     /**
      * The square each snake's head was last painted on.
@@ -55,7 +84,14 @@ internal class BoardRenderer(private val canvas: HTMLCanvasElement) {
     private var heads: IntArray = IntArray(0)
 
     /**
-     * Re-measures the container, resizes the backing store and repaints. Start, resize and seek.
+     * Resizes the backing store to the fixed board and repaints. Start, resize and seek.
+     *
+     * The board is **a fixed rectangle of device pixels**, so the grid decides only how finely that
+     * rectangle is divided: an 8x8 and a 40x40 occupy the same frame at different magnifications,
+     * and zooming the page moves the text around a board that stays where it is. Only a window with
+     * no room for it can make it smaller, and both of those clamps are measured in device pixels
+     * too — where zoom cancels out exactly, because the viewport loses CSS pixels at the same rate a
+     * CSS pixel gains device ones.
      *
      * Everything below the CSS size is in **device** pixels, and the context is never scaled. The
      * obvious alternative — a backing store of `size * devicePixelRatio` and a matching
@@ -70,12 +106,18 @@ internal class BoardRenderer(private val canvas: HTMLCanvasElement) {
     fun fit(view: BoardView) {
         grid = view.grid
 
-        val ratio = window.devicePixelRatio
-        val available = ((canvas.parentElement as? HTMLElement)?.clientWidth ?: FALLBACK_WIDTH) * ratio
-        val byWidth = (available - 1) / grid.cols
-        val byHeight = (window.innerHeight * ratio * HEIGHT_SHARE - 1) / grid.rows
-        cellSize = minOf(byWidth, byHeight).toInt()
-            .coerceIn((MIN_CELL * ratio).toInt().coerceAtLeast(1), (MAX_CELL * ratio).toInt().coerceAtLeast(1))
+        val ratio = ratioNow()
+        val room = minOf(
+            ((canvas.parentElement as? HTMLElement)?.clientWidth?.takeIf { it > 0 } ?: FALLBACK_WIDTH) * ratio,
+            window.innerHeight * ratio * HEIGHT_SHARE,
+        )
+        // Fitted by the longer side, so a 12x20 board sits inside the square a 20x20 fills. Rounded
+        // against the target and floored against the room: half a pixel a cell either way is how a
+        // 40x40 comes out the size of an 8x8, and how a board that has to shrink still fits.
+        val span = maxOf(grid.rows, grid.cols)
+        val wanted = (BOARD_EXTENT * bootRatio - 1) / span + 0.5
+        val fits = (room - 1) / span
+        cellSize = minOf(wanted, fits).toInt().coerceAtLeast((MIN_CELL * bootRatio).toInt().coerceAtLeast(1))
 
         val width = cellSize * grid.cols + 1
         val height = cellSize * grid.rows + 1
@@ -85,12 +127,60 @@ internal class BoardRenderer(private val canvas: HTMLCanvasElement) {
         canvas.style.width = "${width / ratio}px"
         canvas.style.height = "${height / ratio}px"
 
+        // Sized off the same integers rather than measured, so the two bitmaps line up exactly
+        // whatever the CSS around them does. Setting `width` also clears it, which is why the
+        // highlight is redrawn below rather than left to the next pointer move.
+        overlay.width = width
+        overlay.height = height
+        overlay.style.width = canvas.style.width
+        overlay.style.height = canvas.style.height
+
         repaint(view)
+        drawHighlight(view)
     }
 
     /** Switches themes. The caller follows with [fit], because the gridlines change colour too. */
     fun applyScheme(dark: Boolean) {
         palette = Palette.of(dark)
+    }
+
+    /**
+     * The square under a point in client coordinates, or [Cell.NONE] if that is not on the board.
+     *
+     * Measured rather than read off `offsetX`: the canvas's CSS size is deliberately fractional — a
+     * whole number of device pixels divided by the ratio — so the only honest scale from a client
+     * coordinate to a backing-store one is the box the element is actually drawn at. That box is
+     * the *border* box, which is why `#board` carries an outline instead of a border.
+     */
+    fun cellAt(clientX: Double, clientY: Double): Cell {
+        val box = canvas.getBoundingClientRect()
+        if (box.width <= 0.0 || box.height <= 0.0) {
+            return Cell.NONE
+        }
+
+        val x = (clientX - box.left) * canvas.width / box.width
+        val y = (clientY - box.top) * canvas.height / box.height
+        if (x < 0.0 || y < 0.0 || x >= canvas.width || y >= canvas.height) {
+            return Cell.NONE
+        }
+
+        // A cell of side s owns the pixels `c*s + 1` to `c*s + s` — the convention every fill uses,
+        // so the square the pointer is visibly over is the square this answers with.
+        val col = (x.toInt() - 1) / cellSize
+        val row = (y.toInt() - 1) / cellSize
+        return if (grid.contains(row, col)) grid.cellAt(row, col) else Cell.NONE
+    }
+
+    /**
+     * Picks out whoever holds [cell], and clears the overlay when nobody does.
+     *
+     * A *square* is what is remembered here, never a snake — so a restart, a seek and a tournament
+     * moving on to its next match all resolve to whoever holds that square now. That is the same
+     * rule every colour on this board already follows: read it off the position, do not keep it.
+     */
+    fun highlight(view: BoardView, cell: Cell) {
+        hovered = cell
+        drawHighlight(view)
     }
 
     fun repaint(view: BoardView) {
@@ -194,12 +284,100 @@ internal class BoardRenderer(private val canvas: HTMLCanvasElement) {
      */
     private fun tailAlpha(view: BoardView, snake: SnakeView): Double = when {
         !snake.alive -> Palette.CORPSE_ALPHA
-        view.rules.growEveryNthMove < 2 -> 1.0
-        // A one-square snake is all head, and the head is painted over this anyway.
-        snake.length < 2 -> 1.0
-        snake.growsOnNextMove -> Palette.AGING_ALPHA
-        else -> Palette.DYING_ALPHA
+        tailClearsNext(view, snake) -> Palette.DYING_ALPHA
+        // A trail that never retracts has no square about to open, and a one-square snake is all
+        // head — which is painted over this anyway.
+        view.rules.growEveryNthMove < 2 || snake.length < 2 -> 1.0
+        else -> Palette.AGING_ALPHA
     }
+
+    /**
+     * Paints the hovered snake onto the overlay: a wash that brightens from tail to head, a thread
+     * down the middle of it, and a marker on the head.
+     *
+     * Two cues for one fact, because either alone is ambiguous. The wash says which way the snake
+     * runs but not where it ran — a body doubled back beside itself is two adjacent gradients. The
+     * thread traces the path exactly but a line has no direction, so it needs the wash to say which
+     * end is which. Together they read at a glance, which is the whole point of a hover.
+     *
+     * Nothing here says anything about the tail being about to clear. The board already fades that
+     * square and the label already says it in words; a third telling of one fact is noise.
+     */
+    private fun drawHighlight(view: BoardView) {
+        overlayContext.clearRect(0.0, 0.0, overlay.width.toDouble(), overlay.height.toDouble())
+
+        if (!grid.isPlayable(hovered)) {
+            return
+        }
+        val owner = view.ownerOf(hovered)
+        if (owner.isNone) {
+            return
+        }
+
+        val snake = view.snake(owner)
+        // The head colour, which is the palette's answer to "this snake, but readable against
+        // itself" — darker than the trail on a light page and lighter on a dark one, either way.
+        val tint = palette.head(owner.index)
+        val thread = palette.background
+
+        // cellAt(0) is the tail, so `i` runs the length of the snake in the order it was laid down.
+        for (i in 0 until snake.length) {
+            wash(snake.cellAt(i), tint, ramp(i, snake.length, WASH_TAIL, WASH_HEAD))
+        }
+
+        if (snake.length > 1) {
+            overlayContext.lineCap = CanvasLineCap.ROUND
+            overlayContext.lineJoin = CanvasLineJoin.ROUND
+            overlayContext.strokeStyle = thread.toJsString()
+            overlayContext.lineWidth = (cellSize * THREAD_WIDTH).coerceAtLeast(THREAD_MIN_WIDTH)
+
+            for (i in 0 until snake.length - 1) {
+                overlayContext.globalAlpha = ramp(i, snake.length - 1, THREAD_TAIL, THREAD_HEAD)
+                overlayContext.beginPath()
+                overlayContext.moveTo(centreX(snake.cellAt(i)), centreY(snake.cellAt(i)))
+                overlayContext.lineTo(centreX(snake.cellAt(i + 1)), centreY(snake.cellAt(i + 1)))
+                overlayContext.stroke()
+            }
+        }
+
+        // Where the thread ends, said outright: a snake coiled back on itself is ambiguous at a
+        // glance, and a glance is all this gets.
+        overlayContext.globalAlpha = 1.0
+        overlayContext.fillStyle = thread.toJsString()
+        overlayContext.strokeStyle = tint.toJsString()
+        overlayContext.lineWidth = 1.0
+        overlayContext.beginPath()
+        overlayContext.arc(
+            centreX(snake.head),
+            centreY(snake.head),
+            (cellSize * HEAD_RADIUS).coerceAtLeast(THREAD_MIN_WIDTH),
+            0.0,
+            2 * PI,
+            false,
+        )
+        overlayContext.fill()
+        overlayContext.stroke()
+    }
+
+    /** [i] of [count] steps from the tail, as a value from [tail] at the oldest square to [head]. */
+    private fun ramp(i: Int, count: Int, tail: Double, head: Double): Double =
+        if (count < 2) head else tail + (head - tail) * i / (count - 1)
+
+    /** A flat translucent square on the overlay. Unlike [fill] there is nothing under it to bleed. */
+    private fun wash(cell: Cell, colour: String, alpha: Double) {
+        overlayContext.globalAlpha = alpha
+        overlayContext.fillStyle = colour.toJsString()
+        overlayContext.fillRect(
+            (grid.colOf(cell) * cellSize + 1).toDouble(),
+            (grid.rowOf(cell) * cellSize + 1).toDouble(),
+            (cellSize - 1).toDouble(),
+            (cellSize - 1).toDouble(),
+        )
+    }
+
+    private fun centreX(cell: Cell): Double = grid.colOf(cell) * cellSize + 1 + (cellSize - 1) / 2.0
+
+    private fun centreY(cell: Cell): Double = grid.rowOf(cell) * cellSize + 1 + (cellSize - 1) / 2.0
 
     private fun fill(cell: Cell, colour: String, alpha: Double) {
         val x = (grid.colOf(cell) * cellSize + 1).toDouble()
@@ -222,20 +400,51 @@ internal class BoardRenderer(private val canvas: HTMLCanvasElement) {
         }
     }
 
+    /** Guarded, because a ratio of zero would divide the CSS size by nothing. */
+    private fun ratioNow(): Double = window.devicePixelRatio.takeIf { it > 0.0 } ?: 1.0
+
     private companion object {
         /**
-         * Bounds on the cell size, in CSS pixels — [fit] converts them to device pixels, so a board
-         * comes out the same physical size whatever the display's ratio. Below the minimum a 40x40
-         * board is unreadable; above the maximum a 12x12 one is absurd.
+         * How wide and tall the board is, in CSS pixels at the ratio the page opened on — so, in
+         * millimetres. The grid chooses only how many squares fit inside it.
+         *
+         * There is deliberately no maximum cell size to go with the minimum. A cap on the cell is
+         * what used to make an 8x8 board a third of a 20x20 one, and it would fight this figure for
+         * every size the picker offers.
          */
+        const val BOARD_EXTENT = 640.0
+
+        /** Below this a 40x40 board is unreadable. Also at CSS scale, and only a floor. */
         const val MIN_CELL = 6
-        const val MAX_CELL = 30
 
-        /** How much of the viewport height the board may claim, leaving room for the transport. */
-        const val HEIGHT_SHARE = 0.68
+        /**
+         * How much of the viewport height the board may claim when [BOARD_EXTENT] will not fit.
+         *
+         * A fallback for a short window and nothing more, which is why it is close to all of it: at
+         * two thirds an ordinary desktop viewport would clamp the board and its size would quietly
+         * depend on window height again, which is the thing being fixed.
+         */
+        const val HEIGHT_SHARE = 0.9
 
-        /** Only reached if the canvas has no element parent, which the static skeleton guarantees. */
+        /** Only reached before the first layout, which `booted` ahead of `start()` already prevents. */
         const val FALLBACK_WIDTH = 640
+
+        /**
+         * The hover highlight: how much of the head colour a square takes, oldest to newest, and
+         * the thread that runs down the middle of the body.
+         *
+         * The thread is drawn in the board's own colour, so it reads against all six trail hues on
+         * either theme without a seventh entry in the palette.
+         */
+        const val WASH_TAIL = 0.10
+        const val WASH_HEAD = 0.62
+        const val THREAD_TAIL = 0.30
+        const val THREAD_HEAD = 0.95
+        const val THREAD_WIDTH = 0.16
+        const val HEAD_RADIUS = 0.24
+
+        /** So the thread survives a 40x40 board, where a cell is about fifteen device pixels. */
+        const val THREAD_MIN_WIDTH = 2.0
     }
 }
 

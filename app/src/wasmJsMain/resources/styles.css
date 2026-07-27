@@ -133,15 +133,74 @@ header h1 {
     min-width: 0;
 }
 
+/*
+ * One grid cell holding both canvases, and the box the hover label is placed against.
+ *
+ * The board is a fixed size and no longer fills the column, so it is centred -- and the overlay has
+ * to land on it exactly. Stacking them in the same grid area centres both by the same algorithm,
+ * which absolute positioning or a second centring rule could only ever approximate. The track is
+ * still definite and still comes from .arena, so nothing here lets the canvas size its own
+ * container: that is the circularity the comment above .arena is about.
+ */
 .board-wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    position: relative;
     min-width: 0;
+}
+
+#board,
+#board-overlay {
+    grid-area: 1 / 1;
 }
 
 #board {
     display: block;
     background: var(--board);
+    /*
+     * An outline rather than a border, and it is load-bearing twice. `box-sizing: border-box` makes
+     * a border eat into the width Kotlin wrote, so a backing store of N device pixels was being
+     * squeezed into N - 2 pixels' worth of CSS and every gridline resampled; and
+     * getBoundingClientRect reports the *border* box, which the hover hit-test would then be a
+     * pixel out on at every ratio. An outline is painted outside the box and changes neither.
+     */
+    outline: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+/*
+ * A second bitmap for the hover highlight, cleared in one call rather than picked back out of the
+ * board underneath it. The board is painted one square at a time, so a decoration sharing that
+ * bitmap would have to be understood by every one of those paints.
+ */
+#board-overlay {
+    display: block;
+    pointer-events: none;
+}
+
+#board-tip {
+    position: absolute;
+    z-index: 1;
+    pointer-events: none;
+    padding: 0.25rem 0.5rem;
+    background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 6px;
+    box-shadow: 0 2px 10px rgb(0 0 0 / 0.18);
+    font-size: 0.8rem;
+    line-height: 1.35;
+    white-space: nowrap;
+}
+
+#board-tip .tip-detail {
+    display: block;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+#board-tip .tip-detail:empty {
+    display: none;
 }
 
 /* Transport ---------------------------------------------------------------- */

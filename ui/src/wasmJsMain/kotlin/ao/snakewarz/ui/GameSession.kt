@@ -1,11 +1,10 @@
 package ao.snakewarz.ui
 
-import ao.snakewarz.botapi.BotId
 import ao.snakewarz.botapi.BotRegistry
+import ao.snakewarz.core.Cell
 import ao.snakewarz.core.Direction
 import ao.snakewarz.core.MatchEnd
 import ao.snakewarz.core.MatchOutcome
-import ao.snakewarz.core.SnakeId
 import ao.snakewarz.match.InputBuffer
 import ao.snakewarz.match.Match
 import ao.snakewarz.match.MatchRecord
@@ -40,7 +39,7 @@ public class GameSession(
     private val replayLink: ReplayLink,
 ) {
     private val chrome = Chrome(registry, ::dispatch)
-    private val renderer = BoardRenderer(chrome.canvas)
+    private val renderer = BoardRenderer(chrome.canvas, chrome.overlay)
     private val scheduler = TurnScheduler(::advance, ::renderChrome)
     private val batch = TournamentRunner(::batchFrame)
 
@@ -73,14 +72,32 @@ public class GameSession(
      */
     private var batchBoard: Match? = null
 
+    /**
+     * What the seats of the match on screen are called, and the setup they were worked out from.
+     *
+     * Cached against the setup *instance* rather than rebuilt per frame: a tournament changes match
+     * under this several times a second and every other frame reuses what is already here.
+     */
+    private var labelledSetup: MatchSetup = match.setup
+    private var labels: SlotLabels = SlotLabels(match.setup, registry)
+
+    /**
+     * The square the pointer is over, or [Cell.NONE].
+     *
+     * A square and not a snake, so that a restart, a seek and a batch moving on to its next match
+     * all resolve to whoever holds it *now* — the renderer's own rule about reading colour off the
+     * position, applied to the pointer.
+     */
+    private var hovered: Cell = Cell.NONE
+
     /** Opens on [record] if there is one in the URL, and on a fresh match if there is not. */
     public fun start(record: MatchRecord?) {
         scheduler.turnsPerSecond = chrome.turnsPerSecond()
 
-        window.addEventListener("resize") { renderer.fit(match.view) }
+        window.addEventListener("resize") { refit() }
         window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change") {
             renderer.applyScheme(prefersDark())
-            renderer.fit(match.view)
+            refit()
         }
 
         if (record == null) {
@@ -106,6 +123,16 @@ public class GameSession(
     // -- the one dispatch -----------------------------------------------------------------------
 
     private fun dispatch(intent: UiIntent) {
+        // Answered ahead of both guards below, and that is the point of putting it here: asking what
+        // is under the pointer changes nothing, so it neither has to be dropped while a batch owns
+        // the board nor is grounds for taking the board back off one. Moving the mouse across a
+        // finished tournament's last position must not quietly swap it for the player's own game.
+        when (intent) {
+            is UiIntent.Hover -> return hover(renderer.cellAt(intent.clientX, intent.clientY))
+            UiIntent.HoverEnded -> return hover(Cell.NONE)
+            else -> Unit
+        }
+
         // The chrome greys the transport while a batch owns the board, but the space bar and the
         // step key do not read the DOM's disabled flags. One guard covers both routes in.
         if (batch.running && intent != UiIntent.ToggleTournament) {
@@ -119,6 +146,7 @@ public class GameSession(
         if (batchBoard != null && intent != UiIntent.ToggleTournament) {
             batchBoard = null
             renderer.fit(match.view)
+            refreshHover()
             // Here rather than left to whatever the intent does next: a turn-based match answers
             // Play by doing nothing at all, and the scoreboard would then still be describing the
             // tournament while the board underneath it had gone back to the player's own game.
@@ -150,6 +178,68 @@ public class GameSession(
         }
     }
 
+    // -- the pointer ----------------------------------------------------------------------------
+
+    private fun hover(cell: Cell) {
+        if (cell == hovered) {
+            return
+        }
+        hovered = cell
+        refreshHover()
+        // What the label says is model state and comes down through render; only where it sits does
+        // not, and the chrome has already moved it by the time this runs.
+        renderChrome()
+    }
+
+    /**
+     * Repaints the highlight for whoever holds the hovered square *now*, and clears a stale one.
+     *
+     * Called after every paint, because the board moves under a pointer that is standing still. The
+     * square is re-checked against the grid on the way through, so a match on a different board
+     * size cannot be asked about a square that no longer exists.
+     */
+    private fun refreshHover() {
+        val shown = batchBoard ?: match
+        if (!shown.grid.isPlayable(hovered)) {
+            hovered = Cell.NONE
+        }
+        renderer.highlight(shown.view, hovered)
+    }
+
+    /** Re-measures and repaints whichever match is on screen. Resize, and the theme changing. */
+    private fun refit() {
+        val shown = batchBoard ?: match
+        renderer.fit(shown.view)
+        refreshHover()
+    }
+
+    /** The snake under the pointer, worded for a person, or `null` when there is not one. */
+    private fun hoverInfo(shown: Match): HoverInfo? {
+        if (!shown.grid.isPlayable(hovered)) {
+            return null
+        }
+
+        val view = shown.view
+        val owner = view.ownerOf(hovered)
+        if (owner.isNone) {
+            return null
+        }
+
+        val snake = view.snake(owner)
+        return HoverInfo(
+            who = labelsFor(shown).of(owner),
+            detail = buildString {
+                append(snake.length).append(if (snake.length == 1) " square" else " squares")
+                when {
+                    !snake.alive -> append(" · out")
+                    tailClearsNext(view, snake) -> append(" · tail clears next move")
+                    snake.growsOnNextMove -> append(" · growing next move")
+                    else -> Unit
+                }
+            },
+        )
+    }
+
     // -- match lifecycle ------------------------------------------------------------------------
 
     private fun begin() {
@@ -161,6 +251,7 @@ public class GameSession(
         batch.stop()
         batchBoard = null
         renderer.fit(match.view)
+        refreshHover()
 
         if (match.interactive) {
             // Play up to the player's first move and stop there: any slot ahead of them in the turn
@@ -230,6 +321,7 @@ public class GameSession(
 
         awaitingInput = false
         renderer.repaint(match.view)
+        refreshHover()
         renderChrome()
     }
 
@@ -309,6 +401,7 @@ public class GameSession(
         val opening = Match(tournament.setupFor(0), registry)
         batchBoard = opening
         renderer.fit(opening.view)
+        refreshHover()
     }
 
     private fun stopBatch() {
@@ -322,6 +415,7 @@ public class GameSession(
         batch.tournament?.current?.let {
             batchBoard = it
             renderer.repaint(it.view)
+            refreshHover()
         }
         refreshBatchTable()
         renderChrome()
@@ -357,10 +451,11 @@ public class GameSession(
         )
     }
 
-    /** " — space vs wallhug", or nothing at all in the instant before the first match is seated. */
+    /** " — Space vs Wall hugger", or nothing at all in the instant before the first match is seated. */
     private fun seatingText(playing: Match?): String {
-        val slots = playing?.setup?.slots ?: return ""
-        return " — ${nameOf(slots[0])} vs ${nameOf(slots[1])}"
+        val seated = playing ?: return ""
+        val labels = labelsFor(seated)
+        return " — ${labels[0]} vs ${labels[1]}"
     }
 
     // -- one turn -------------------------------------------------------------------------------
@@ -425,11 +520,15 @@ public class GameSession(
                 } else {
                     renderer.paintMove(match.view, result.id, match.events())
                 }
+                // The board moved under a pointer that did not, so the square being asked about may
+                // have changed hands and the highlighted body certainly changed shape.
+                refreshHover()
             }
 
             is StepResult.Eliminated -> {
                 awaitingInput = false
                 renderer.paintSnake(match.view, result.id)
+                refreshHover()
             }
 
             StepResult.AwaitingInput -> {
@@ -458,10 +557,22 @@ public class GameSession(
                 turnCount = replay?.turnCount ?: shown.turnIndex,
                 status = statusText(shown),
                 stats = shown.stats(),
+                labels = labelsFor(shown),
+                hover = hoverInfo(shown),
                 shareUrl = shareUrl,
                 tournament = batchStatus(),
             ),
         )
+    }
+
+    /** What [shown]'s seats are called, rebuilt only when the match on screen is a different one. */
+    private fun labelsFor(shown: Match): SlotLabels {
+        val setup = shown.setup
+        if (setup !== labelledSetup) {
+            labelledSetup = setup
+            labels = SlotLabels(setup, registry)
+        }
+        return labels
     }
 
     /** What the line under the board says about [shown], which is not always the player's match. */
@@ -487,13 +598,10 @@ public class GameSession(
     }
 
     private fun outcomeText(shown: Match, outcome: MatchOutcome): String = when (outcome.end) {
-        MatchEnd.LAST_SNAKE_STANDING -> "${nameOf(shown, outcome.winner)} wins — last snake standing"
+        MatchEnd.LAST_SNAKE_STANDING ->
+            "${labelsFor(shown).of(outcome.winner)} wins — last snake standing"
+
         MatchEnd.ALL_ELIMINATED -> "nobody left standing"
         MatchEnd.TURN_LIMIT -> "a draw — the turn limit ran out"
     }
-
-    private fun nameOf(shown: Match, id: SnakeId): String =
-        if (id.isNone) "nobody" else nameOf(shown.setup.slots[id.index])
-
-    private fun nameOf(bot: BotId): String = registry[bot]?.displayName ?: bot.slug
 }

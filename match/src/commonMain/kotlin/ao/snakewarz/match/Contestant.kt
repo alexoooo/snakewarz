@@ -38,15 +38,14 @@ public class Contestant(
     public fun budgetIn(fallback: Int): Int = budgetPerTurn ?: fallback
 
     /**
-     * What a matrix row is called: the slug, plus what makes it different when the slug is not
-     * enough.
+     * What makes this different from the bot as the batch would otherwise run it: `@4k` for an
+     * allowance of its own, `*` for anything tuned, and empty for a stock entry.
      *
-     * Kept short because the table is fixed-width text in a narrow panel — `uct` and `uct@4k` sit
-     * beside each other legibly, and the settings themselves go in a legend under the grid rather
-     * than into the column headings. Integer arithmetic only, like the rest of that table.
+     * Split out of [label] because a scoreboard has the bot's *display name* already and needs only
+     * the part that tells two seats apart. Keeping one copy of the formatting is what makes the
+     * sidebar and the matrix agree by construction rather than by somebody remembering to.
      */
-    public val label: String = buildString {
-        append(bot.slug)
+    public val suffix: String = buildString {
         if (budgetPerTurn != null) {
             append('@').append(compact(budgetPerTurn))
         }
@@ -54,6 +53,16 @@ public class Contestant(
             append('*')
         }
     }
+
+    /**
+     * What a matrix row is called: the slug, plus what makes it different when the slug is not
+     * enough.
+     *
+     * Kept short because the table is fixed-width text in a narrow panel — `uct` and `uct@4k` sit
+     * beside each other legibly, and the settings themselves go in a legend under the grid rather
+     * than into the column headings. Integer arithmetic only, like the rest of that table.
+     */
+    public val label: String = bot.slug + suffix
 
     /** The configuration spelled out, for the legend under a matrix. Empty when there is none. */
     public val summary: String = buildString {

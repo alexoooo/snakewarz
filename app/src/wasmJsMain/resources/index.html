@@ -49,8 +49,13 @@
 
     <div class="arena">
         <section class="board-panel">
-            <div class="board-wrap">
+            <div class="board-wrap" id="board-wrap">
                 <canvas id="board" aria-label="Game board"></canvas>
+                <canvas id="board-overlay" aria-hidden="true"></canvas>
+                <div id="board-tip" hidden>
+                    <span class="tip-who">&mdash;</span>
+                    <span class="tip-detail"></span>
+                </div>
             </div>
 
             <div class="transport">

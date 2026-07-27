@@ -28,6 +28,10 @@ internal class UiModel(
     /** One sentence about where the match is, already worded for a person. */
     val status: String,
     val stats: MatchStats,
+    /** What to call each seat of the match [stats] describes. Rebuilt only when that match changes. */
+    val labels: SlotLabels,
+    /** The snake under the pointer, or `null` when the pointer is not over one. */
+    val hover: HoverInfo?,
     /** Non-null once the player has asked for a link. */
     val shareUrl: String?,
     /** Non-null once a batch has been run, whether or not it is still running. */

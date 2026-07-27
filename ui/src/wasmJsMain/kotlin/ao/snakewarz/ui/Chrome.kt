@@ -1,13 +1,11 @@
 package ao.snakewarz.ui
 
-import ao.snakewarz.botapi.BotId
 import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.botapi.BotRegistry
 import ao.snakewarz.core.Direction
 import ao.snakewarz.core.EliminationReason
 import ao.snakewarz.match.Contestant
 import ao.snakewarz.match.MatchSetup
-import ao.snakewarz.match.MatchStats
 import ao.snakewarz.match.PlayableRegistry
 import ao.snakewarz.match.SlotStats
 import kotlinx.browser.document
@@ -20,6 +18,7 @@ import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.HTMLOptionElement
 import org.w3c.dom.HTMLSelectElement
 import org.w3c.dom.events.KeyboardEvent
+import org.w3c.dom.events.MouseEvent
 
 /**
  * The DOM half of the interface: reads it, writes it, and turns everything the player does into a
@@ -37,6 +36,12 @@ internal class Chrome(
     private val dispatch: (UiIntent) -> Unit,
 ) {
     val canvas: HTMLCanvasElement = elementById("board")
+    val overlay: HTMLCanvasElement = elementById("board-overlay")
+
+    private val boardWrap: HTMLElement = elementById("board-wrap")
+    private val tip: HTMLElement = elementById("board-tip")
+    private val tipWho: HTMLElement = tip.child(".tip-who")
+    private val tipDetail: HTMLElement = tip.child(".tip-detail")
 
     private val playButton: HTMLButtonElement = elementById("play")
     private val stepButton: HTMLButtonElement = elementById("step")
@@ -73,6 +78,10 @@ internal class Chrome(
 
     private val repeat = KeyRepeat { direction -> dispatch(UiIntent.Steer(direction)) }
 
+    /** Where the pointer last was, so [placeTip] can run again once the label has a width. */
+    private var tipX: Double = 0.0
+    private var tipY: Double = 0.0
+
     init {
         fillPickers(registry)
         // After the pickers are filled and seated, so each panel opens on the bot actually selected.
@@ -95,6 +104,18 @@ internal class Chrome(
         seekSlider.addEventListener("input") {
             dispatch(UiIntent.SeekTo(seekSlider.value.toIntOrNull() ?: 0))
         }
+
+        // On the canvas rather than on the window, because the board is the thing being asked
+        // about. The overlay above it declines the pointer in CSS, so the question still lands here.
+        canvas.addEventListener("pointermove") { event ->
+            val pointer = event as MouseEvent
+            tipX = pointer.clientX.toDouble()
+            tipY = pointer.clientY.toDouble()
+            placeTip()
+            dispatch(UiIntent.Hover(tipX, tipY))
+        }
+        canvas.addEventListener("pointerleave") { dispatch(UiIntent.HoverEnded) }
+        canvas.addEventListener("pointercancel") { dispatch(UiIntent.HoverEnded) }
 
         window.addEventListener("keydown") { event -> onKeyDown(event as KeyboardEvent) }
         window.addEventListener("keyup") { event -> onKeyUp(event as KeyboardEvent) }
@@ -200,11 +221,19 @@ internal class Chrome(
         }
 
         for (slot in rows.indices) {
-            val state = model.stats.slots.getOrNull(slot)
-            rows[slot].render(state, if (state == null) "" else nameOf(state.bot))
+            rows[slot].render(model.stats.slots.getOrNull(slot), model.labels[slot])
         }
 
-        renderStats(model.stats)
+        val hover = model.hover
+        tip.hidden = hover == null
+        if (hover != null) {
+            tipWho.textContent = hover.who
+            tipDetail.textContent = hover.detail
+            // Now that it is visible and says what it says, it has a width to be kept inside by.
+            placeTip()
+        }
+
+        renderStats(model)
         renderTournament(model.tournament)
 
         val url = model.shareUrl
@@ -230,19 +259,45 @@ internal class Chrome(
     // -- internals ------------------------------------------------------------------------------
 
     /**
+     * Puts the hover label beside the pointer, inside the board panel on all four sides.
+     *
+     * Placed straight out of the pointer move rather than only through [render], and deliberately:
+     * *where* a label sits is pointer state, like which option a picker is showing, and routing it
+     * through a once-a-frame model would leave it trailing the thing it points at. What the label
+     * *says* is match state and does come down through [render] — which then places it a second
+     * time, because a label that is still `hidden` measures zero wide and would clamp against
+     * nothing on the very move that reveals it.
+     */
+    private fun placeTip() {
+        val box = boardWrap.getBoundingClientRect()
+        val left = (tipX - box.left + TIP_GAP)
+            .coerceAtMost(box.width - tip.offsetWidth - TIP_GAP)
+            .coerceAtLeast(0.0)
+
+        // Flipped above the pointer rather than squeezed against the bottom edge, so a label near
+        // the foot of the board does not end up under the square it is describing.
+        val below = tipY - box.top + TIP_GAP
+        val top = if (below + tip.offsetHeight > box.height) below - tip.offsetHeight - 2 * TIP_GAP else below
+
+        tip.style.left = "${left}px"
+        tip.style.top = "${top.coerceAtLeast(0.0)}px"
+    }
+
+    /**
      * The four numbers a match is worth reporting, which the scoreboard beside them cannot show.
      *
      * The scoreboard is per snake and this is per match: how long it has gone on, how much of the
      * board has stopped being playable, and who is biggest — which is not always who is winning, and
      * is most interesting when it is not.
      */
-    private fun renderStats(stats: MatchStats) {
+    private fun renderStats(model: UiModel) {
+        val stats = model.stats
         turnsPlayed.textContent = stats.turnsPlayed.toString()
         roundsPlayed.textContent = stats.rounds.toString()
         boardFilled.textContent = "${percent(stats.fillRate)}% of ${stats.playableCells}"
 
         val longest = stats.longest
-        longestSnake.textContent = "${nameOf(longest.bot)} (${longest.length})"
+        longestSnake.textContent = "${model.labels.of(longest.slot)} (${longest.length})"
     }
 
     private fun renderTournament(status: TournamentStatus?) {
@@ -254,8 +309,6 @@ internal class Chrome(
             tournamentTable.textContent = status.table
         }
     }
-
-    private fun nameOf(bot: BotId): String = registry[bot]?.displayName ?: bot.slug
 
     private fun fillPickers(registry: BotRegistry) {
         val everyone = registry.entries
@@ -278,32 +331,47 @@ internal class Chrome(
         bots.firstOrNull()?.let { selectIfOffered(botSelects[1], it.id.slug) }
     }
 
+    /**
+     * Every key the game answers to, cancelled first and acted on second.
+     *
+     * Auto-repeat is the keyboard talking, not the player: its rate is a text-editing rate, and a
+     * different one on every machine, so a held key is repeated by [KeyRepeat] instead. But dropping
+     * those events is a statement about how fast the *snake* moves and says nothing about what the
+     * browser may do with them — so `preventDefault` comes first and the repeat guard second. The
+     * other way round, holding an arrow key steered at our rate and scrolled the page at the
+     * keyboard's.
+     */
     private fun onKeyDown(event: KeyboardEvent) {
-        // Auto-repeat is the keyboard talking, not the player: its rate is a text-editing rate, and
-        // a different one on every machine. A held key is repeated by KeyRepeat instead, which is
-        // the same everywhere and slow enough to steer by.
-        if (event.repeat) {
-            return
-        }
         // Arrows belong to a focused select or slider while it has the focus, not to the snake.
         if (document.activeElement?.tagName in EDITABLE_TAGS) {
+            return
+        }
+        // Nor does a shortcut. `key` is still "a" under Ctrl and "ArrowLeft" under Alt, so without
+        // this the page steers on select-all and swallows Back — and now that a steer key is
+        // cancelled on every event rather than only the first, it would swallow them for good.
+        if (event.ctrlKey || event.altKey || event.metaKey) {
             return
         }
 
         val steer = steerFor(event.key)
         if (steer != null) {
             event.preventDefault()
-            repeat.press(steer)
+            if (!event.repeat) {
+                repeat.press(steer)
+            }
             return
         }
 
         when (event.key) {
             " ", "Spacebar" -> {
                 event.preventDefault()
-                dispatch(UiIntent.TogglePlay)
+                if (!event.repeat) {
+                    dispatch(UiIntent.TogglePlay)
+                }
             }
 
-            "." -> dispatch(UiIntent.StepOnce)
+            // Not cancelled: a full stop is not a scroll key, and nothing else on the page wants it.
+            "." -> if (!event.repeat) dispatch(UiIntent.StepOnce)
         }
     }
 
@@ -366,9 +434,6 @@ internal class Chrome(
                 else -> ""
             }
         }
-
-        private fun HTMLElement.child(selector: String): HTMLElement =
-            querySelector(selector) as? HTMLElement ?: error("a scoreboard row is missing $selector")
     }
 
     private companion object {
@@ -399,8 +464,15 @@ internal class Chrome(
         const val DEFAULT_SPEED_INDEX = 4
 
         val EDITABLE_TAGS = setOf("INPUT", "SELECT", "TEXTAREA")
+
+        /** How far the hover label sits from the pointer, so the pointer never covers it. */
+        const val TIP_GAP = 14.0
     }
 }
+
+/** A part of a static block the chrome writes into. Absent means the skeleton lost a line. */
+private fun HTMLElement.child(selector: String): HTMLElement =
+    querySelector(selector) as? HTMLElement ?: error("the page skeleton is missing $selector")
 
 /**
  * Offers [text] to the clipboard, and shrugs if the browser declines.

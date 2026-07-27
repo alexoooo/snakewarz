@@ -239,6 +239,17 @@ class TournamentTest {
     }
 
     @Test
+    fun `a contestant's suffix is the part of its label that is not the bot`() {
+        assertEquals("", Contestant(BotId("cycle")).suffix, "a stock entry has nothing to add")
+        assertEquals("@4k", Contestant(BotId("cycle"), budgetPerTurn = 4_000).suffix)
+        assertEquals("*", Contestant(BotId("cycle"), params = BotParams(mapOf("a" to "1"))).suffix)
+
+        val both = Contestant(BotId("cycle"), budgetPerTurn = 4_000, params = BotParams(mapOf("a" to "1")))
+        assertEquals("@4k*", both.suffix)
+        assertEquals(both.bot.slug + both.suffix, both.label, "a label is the slug and then the suffix")
+    }
+
+    @Test
     fun `two contestants that describe themselves the same way still get distinct columns`() {
         val table = TournamentTable(
             listOf(
