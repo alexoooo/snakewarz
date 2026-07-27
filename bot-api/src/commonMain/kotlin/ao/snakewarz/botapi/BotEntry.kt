@@ -33,9 +33,10 @@ public class BotEntry(
     /**
      * The allowance this bot searches under, or `null` if it never spends any.
      *
-     * Which is the honest way to ask "does this bot search?" — seven of the nine shipped bots answer
-     * with a flood fill and consume nothing, so offering them an allowance would be offering a
-     * control that changes no move they ever play.
+     * Which is the honest way to ask "does this bot search?" — most shipped bots answer with a flood
+     * fill and consume nothing, so offering them an allowance would be offering a control that
+     * changes no move they ever play. Deliberately not a count: one would go stale the next time a
+     * bot lands, and this is a file bot authors read first.
      */
     public val search: BotKnob.Search? = knobs.firstNotNullOfOrNull { it as? BotKnob.Search }
 

@@ -65,9 +65,17 @@ internal class UctTree(private val maxNodes: Int = MAX_NODES) {
         edges[node] = if (legal.isEmpty) TRAPPED_EDGE else legal.bits
     }
 
-    /** The snake that moved into [node], or [NO_ACTOR] at the root, which nobody moved into. */
+    /**
+     * The snake that moved into [node], or [NO_ACTOR] at the root, which nobody moved into.
+     *
+     * A **test seam**, and stated to be one so the next reader does not go looking for the caller:
+     * the search itself reads `actor` directly in [record]. It exists so `UctTreeTest` can assert
+     * per-actor credit — the property every bot above this depends on, and the one a refactor is
+     * most likely to break without failing anything else — through a name rather than an array.
+     */
     fun actorOf(node: Int): Int = actor[node].toInt()
 
+    /** [node]'s visit count, which is UCB1's `N`. A test seam, for [actorOf]'s reason. */
     fun visitsOf(node: Int): Int = visits[node]
 
     /**

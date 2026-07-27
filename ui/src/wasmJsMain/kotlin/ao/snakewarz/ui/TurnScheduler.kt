@@ -33,7 +33,12 @@ internal class TurnScheduler(
         /** An interactive slot has nothing to play yet, and no turn was consumed. */
         AWAITING_INPUT,
 
-        /** The match is over. */
+        /**
+         * There is nothing further to play.
+         *
+         * The match ended, or a recording ran out — a partial replay parks here rather than under
+         * [AWAITING_INPUT], because no key exists that could resume a scripted slot.
+         */
         FINISHED,
     }
 
@@ -72,7 +77,13 @@ internal class TurnScheduler(
 
     override fun toString(): String = "TurnScheduler($turnsPerSecond/s, running=$running)"
 
-    private fun frame(timestamp: Double) {
+    /**
+     * `internal` rather than `private` so `TurnSchedulerTest` can drive the clock.
+     *
+     * The accumulator arithmetic below is the only thing here that can fail silently, and the only
+     * way to exercise it is to hand it timestamps — which is exactly what the browser does.
+     */
+    internal fun frame(timestamp: Double) {
         if (!running) {
             return
         }

@@ -5,7 +5,7 @@ import org.gradle.api.artifacts.result.ResolvedComponentResult
 import org.gradle.api.artifacts.result.ResolvedDependencyResult
 
 /**
- * Architectural enforcement, shared by both convention plugins.
+ * Architectural enforcement, shared by all three convention plugins.
  *
  * The module graph is the only layering guard that cannot be bypassed, so it is checked by the build
  * rather than by convention. Test source sets are checked too — an integration test is not a licence

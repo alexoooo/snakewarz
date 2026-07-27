@@ -120,7 +120,7 @@ public class GameSession(
 
     override fun toString(): String = "GameSession($match)"
 
-    // -- the one dispatch -----------------------------------------------------------------------
+    // -- the one dispatch
 
     private fun dispatch(intent: UiIntent) {
         // Answered ahead of both guards below, and that is the point of putting it here: asking what
@@ -180,7 +180,7 @@ public class GameSession(
         }
     }
 
-    // -- the pointer ----------------------------------------------------------------------------
+    // -- the pointer
 
     private fun hover(cell: Cell) {
         if (cell == hovered) {
@@ -246,7 +246,7 @@ public class GameSession(
         )
     }
 
-    // -- match lifecycle ------------------------------------------------------------------------
+    // -- match lifecycle
 
     private fun begin() {
         awaitingInput = false
@@ -287,8 +287,10 @@ public class GameSession(
     }
 
     private fun play() {
-        // A finished match has nothing left to play, so Play means "again".
-        if (match.outcome != null) {
+        // A finished match has nothing left to play, so Play means "again" — and so does the end of
+        // a partial recording, which has no outcome but is just as over. Without the second half,
+        // Play on a parked mid-match link starts a scheduler that immediately parks again.
+        if (match.outcome != null || (replay != null && awaitingInput)) {
             restart()
             return
         }
@@ -366,7 +368,7 @@ public class GameSession(
             slotParams = options.slots.map { it.params },
         )
 
-    // -- the batch ------------------------------------------------------------------------------
+    // -- the batch
 
     /**
      * Starts a tournament between the bots seated in the pickers.
@@ -480,7 +482,7 @@ public class GameSession(
         return (0 until seated.setup.slotCount).joinToString(separator = " vs ", prefix = " — ") { labels[it] }
     }
 
-    // -- one turn -------------------------------------------------------------------------------
+    // -- one turn
 
     /**
      * Queues a move, and — in a turn-based match — plays the round it belongs to.
@@ -555,7 +557,18 @@ public class GameSession(
 
             StepResult.AwaitingInput -> {
                 awaitingInput = true
-                return TurnScheduler.Progress.AWAITING_INPUT
+                // Under playback this is terminal, not a pause. The scripted slots have run off the
+                // end of a partial recording and there is no key that could ever resume them, so
+                // reporting it as merely awaiting input leaves the scheduler stepping once a frame
+                // forever to be told the same thing — while the transport reads "Pause" and says
+                // nothing is stopped. Parking is the honest state, and it is the argument
+                // `InteractiveBot` makes for playing a fatal move rather than waiting for a key that
+                // cannot come.
+                return if (replay == null) {
+                    TurnScheduler.Progress.AWAITING_INPUT
+                } else {
+                    TurnScheduler.Progress.FINISHED
+                }
             }
 
             is StepResult.Finished -> return TurnScheduler.Progress.FINISHED
@@ -564,7 +577,7 @@ public class GameSession(
         return if (match.outcome == null) TurnScheduler.Progress.CONTINUED else TurnScheduler.Progress.FINISHED
     }
 
-    // -- what the chrome is told ----------------------------------------------------------------
+    // -- what the chrome is told
 
     private fun renderChrome() {
         // The one snapshot the whole frame is built from, batch or no batch: whichever match is on

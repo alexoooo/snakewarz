@@ -17,6 +17,12 @@ public class Grid(public val rows: Int, public val cols: Int) {
     init {
         require(rows > 0) { "rows must be positive, was $rows" }
         require(cols > 0) { "cols must be positive, was $cols" }
+        // In Int arithmetic a large enough board wraps to a negative cellCount, which every ceiling
+        // downstream then passes and every allocation then fails on. Caught here in Long arithmetic
+        // so that cellCount is always the number it says it is.
+        require((rows.toLong() + 2) * (cols.toLong() + 2) <= Int.MAX_VALUE) {
+            "a ${rows}x$cols board has more squares than an array can address"
+        }
     }
 
     /** Width of one padded row, including the wall square at each end. */

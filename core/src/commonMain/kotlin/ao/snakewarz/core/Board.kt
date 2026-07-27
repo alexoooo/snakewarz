@@ -33,6 +33,23 @@ public class Board(
 ) : BoardView {
     override val snakeCount: Int = spawnCells.size
 
+    // The two ceilings that bound what this class is about to ask for, checked here rather than in
+    // the init block at the foot of the file (SW-09).
+    //
+    // Kotlin runs property initializers and init blocks in declaration order, so a require below
+    // `occupancy` and `bodies` fires after they have already been allocated. On a board large enough
+    // to matter that is hundreds of megabytes requested before the line that would have said no --
+    // and the failure is then an OutOfMemoryError rather than the IllegalArgumentException a caller
+    // validating a stranger's replay link is catching.
+    init {
+        require(snakeCount in 1..Occupancy.MAX_SNAKES) {
+            "a match needs 1..${Occupancy.MAX_SNAKES} snakes, was $snakeCount"
+        }
+        require(grid.cellCount <= MAX_JOURNALED_CELL) {
+            "$grid is too large for the undo journal's $MAX_JOURNALED_CELL cell ceiling"
+        }
+    }
+
     /** Slot indices in the order they act. A permutation of `0 until snakeCount`. */
     private val order: IntArray = turnOrder.copyOf()
     private val spawns: IntArray = spawnCells.copyOf()
@@ -64,14 +81,8 @@ public class Board(
         private set
 
     init {
-        require(snakeCount in 1..Occupancy.MAX_SNAKES) {
-            "a match needs 1..${Occupancy.MAX_SNAKES} snakes, was $snakeCount"
-        }
         require(turnOrder.size == snakeCount) {
             "turn order has ${turnOrder.size} entries for $snakeCount snakes"
-        }
-        require(grid.cellCount <= MAX_JOURNALED_CELL) {
-            "$grid is too large for the undo journal's $MAX_JOURNALED_CELL cell ceiling"
         }
 
         val seen = BooleanArray(snakeCount)
@@ -323,7 +334,7 @@ public class Board(
 
     override fun toString(): String = snapshot().toString()
 
-    // -- internals ------------------------------------------------------------------------------
+    // -- internals
 
     private fun growsOnNextMove(slot: Int): Boolean =
         (moveCounts[slot] + 1) % rules.growEveryNthMove == 0

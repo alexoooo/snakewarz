@@ -184,7 +184,7 @@ class ExpertEvalTest {
         assertEquals(listOf(LeafEval.EVEN, LeafEval.EVEN, LeafEval.EVEN), values.toList())
     }
 
-    // -- internals ------------------------------------------------------------------------------
+    // -- internals
 
     /**
      * Two snakes walked south in step until each has filled a column, sealing the east one into the

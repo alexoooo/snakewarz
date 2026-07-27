@@ -43,13 +43,11 @@ tasks.matching { it.name == "wasmJsBrowserTest" }.configureEach {
 
 applyKtlint()
 
-// ---------------------------------------------------------------------------------------------
-// Architectural enforcement.
+// -- architectural enforcement
 //
 // Keeping these modules pure is what lets us (a) run tests on the JVM, and (b) add a Kotlin/JS
 // fallback target later as a config change rather than a rewrite. The check itself lives in
 // ModulePurity.kt, because snakewarz.browser enforces the same table for :ui.
-// ---------------------------------------------------------------------------------------------
 
 // The forbidden-edge table from CLAUDE.md, encoded where it can actually be enforced.
 // A module may depend only on the ones above it, so each entry lists everything below.

@@ -59,7 +59,8 @@ internal class KeyRepeat(private val onMove: (Direction) -> Unit) {
 
     override fun toString(): String = "KeyRepeat(${held ?: "up"})"
 
-    private fun frame(timestamp: Double) {
+    /** `internal` rather than `private` so `KeyRepeatTest` can be the clock this KDoc promises. */
+    internal fun frame(timestamp: Double) {
         val direction = held
         if (direction == null) {
             handle = 0

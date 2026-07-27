@@ -127,7 +127,7 @@ class RolloutTruncationTest {
         assertTrue(!result.isDraw, "a two-square board resolves, it does not tie")
     }
 
-    // -- internals ------------------------------------------------------------------------------
+    // -- internals
 
     /**
      * One [UctBot] configuration under a name, for the printed table.

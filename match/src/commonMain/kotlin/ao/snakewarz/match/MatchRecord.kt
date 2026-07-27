@@ -66,6 +66,15 @@ public class MatchRecord(
      * stock bots would report a divergence that is not one.
      *
      * A divergence is not automatically a bug. It is always a question worth answering.
+     *
+     * ### A partial recording is verified as far as it goes
+     *
+     * [outcome] being `null` means the recording stopped before the match did, which is what Share
+     * publishes — `record()` is taken at whatever turn the board is on. The replay always runs to
+     * completion, so it is *longer* by construction, and holding it to the recorded length would
+     * report a divergence for every mid-match link anyone has ever sent. So a partial record is
+     * checked against the prefix and no further. A replay that stops **short** of the recording is
+     * still a divergence, and so is one whose eliminations differ inside the recorded turns.
      */
     public fun verify(registry: BotRegistry): ReplayVerification {
         val replayed = Match(setup, registry)
@@ -83,7 +92,10 @@ public class MatchRecord(
             }
         }
 
-        if (actual.moves.size != moves.size) {
+        val partial = outcome == null
+        val lengthDiverged =
+            if (partial) actual.moves.size < moves.size else actual.moves.size != moves.size
+        if (lengthDiverged) {
             return ReplayVerification(
                 false,
                 shared,
@@ -91,11 +103,15 @@ public class MatchRecord(
             )
         }
 
-        if (actual.terminals != terminals) {
+        // turnIndex counts every turn, moves and no-move eliminations alike, so turnCount is exactly
+        // where a partial recording stops and everything the replay did after it is not ours to judge.
+        val replayedTerminals =
+            if (partial) actual.terminals.filter { it.turnIndex < turnCount } else actual.terminals
+        if (replayedTerminals != terminals) {
             return ReplayVerification(
                 false,
                 -1,
-                "terminal events differ: recorded $terminals, replayed ${actual.terminals}",
+                "terminal events differ: recorded $terminals, replayed $replayedTerminals",
             )
         }
 

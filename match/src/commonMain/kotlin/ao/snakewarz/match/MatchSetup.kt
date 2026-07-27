@@ -64,7 +64,9 @@ public class MatchSetup(
     public val slotCount: Int get() = slots.size
 
     init {
-        require(rows > 0 && cols > 0) { "a board must be at least 1x1, was ${rows}x$cols" }
+        require(rows in 1..MAX_SIDE && cols in 1..MAX_SIDE) {
+            "a board must be 1x1 to ${MAX_SIDE}x$MAX_SIDE, was ${rows}x$cols"
+        }
         require(slots.isNotEmpty()) { "a match needs at least one slot" }
         require(slotCount <= Occupancy.MAX_SNAKES) {
             "a match takes at most ${Occupancy.MAX_SNAKES} slots, was $slotCount"
@@ -85,6 +87,7 @@ public class MatchSetup(
             seenSlot[slot] = true
         }
 
+        // Cannot overflow: MAX_SIDE squared is four orders of magnitude short of Int.MAX_VALUE.
         val playableCount = rows * cols
         for (slot in 0 until slotCount) {
             require(starts[slot] in 0 until playableCount) {
@@ -154,6 +157,24 @@ public class MatchSetup(
         "MatchSetup(${rows}x$cols, seed=$seed, slots=$slots, order=${order.toList()}, spawns=${starts.toList()})"
 
     public companion object {
+        /**
+         * The largest a board may be on either axis.
+         *
+         * Bounded for the reason [BotId.MAX_LENGTH] and `BotKnob.MAX_PER_BOT` are — *so a decoder
+         * can reject a corrupt payload before allocating from it* — and this is the field where it
+         * matters most. A board is what allocates: `Board` asks for a byte per padded square and an
+         * `Int` per playable square **per slot**, so an unbounded `rows`/`cols` turns a sixty-byte
+         * `#r=` link from a stranger into a request for half a gigabyte. The tab dies during boot,
+         * and it dies with an OOM rather than the `IllegalArgumentException` that `:app` catches to
+         * turn a bad link into a fresh match — so the reader is told their browser cannot run the
+         * game, which is a confident and wrong diagnosis.
+         *
+         * 256 is far above anything the game offers: `:ui` stops at 40x40 and `:lab` defaults to
+         * 12x12. It holds the worst case — eight slots on 256x256 — to a few megabytes, and it is
+         * small enough that `rows * cols` cannot overflow anywhere downstream.
+         */
+        public const val MAX_SIDE: Int = 256
+
         /**
          * Simulated moves a bot may spend on one turn — **measured, not guessed**.
          *

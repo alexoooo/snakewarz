@@ -83,7 +83,7 @@ class ThroughputTest {
         assertTrue(elapsed < PAIRING_CEILING_MILLIS, "a pairing took $elapsed ms")
     }
 
-    // -- internals ------------------------------------------------------------------------------
+    // -- internals
 
     /** Plays [matches] complete matches and returns turns per second. */
     private fun play(entries: List<BotEntry>, size: Int, seed: Long, budget: Int, matches: Int): Long {

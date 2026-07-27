@@ -30,6 +30,7 @@ Gradle task rather than by review, that is named in the rule.
 | [SW-06](#sw-06--names) | Names |
 | [SW-07](#sw-07--a-search-pays-for-its-own-work) | A search pays for its own work |
 | [SW-08](#sw-08--the-bundle-is-a-budget) | The bundle is a budget |
+| [SW-09](#sw-09--a-bound-that-protects-an-allocation-runs-before-the-allocation) | A bound that protects an allocation runs before the allocation |
 | [CC-01](#cc-01--magic-constant) | Magic constant |
 | [CC-02](#cc-02--comments) | Comments |
 | [CC-03](#cc-03--scalability-of-code) | Scalability of code |
@@ -83,7 +84,13 @@ random number.
 
 ## SW-02 — Portable arithmetic only, in `:bots`
 
-**Nothing in `:bots` may call `kotlin.math.ln`, `exp` or `pow`.**
+**Nothing in `:bots`' main sources may call `kotlin.math.ln`, `exp` or `pow`.**
+
+A test may, and exactly one does: `PortableLogTest` uses `kotlin.math.ln` as the oracle `portableLog`
+is measured against, which is the only way to check it at all — and is what would notice somebody
+replacing the series with `ln` for tidiness. The source-set qualifier is what makes the rest of the
+rule a `grep` rather than a thing a reviewer has to remember; without it the check fails on day one
+against the test that proves the rule is being kept.
 
 `+ - * / sqrt` are specified bit-identical by IEEE-754. `log` and `exp` are not, so the same
 expression can land on a different move in Chrome than it did on the JVM. UCB1 is
@@ -214,6 +221,36 @@ the stdlib already does. Measure before adding anything large:
 **Why:** This ships as static files to GitHub Pages and the first thing a visitor does is download all
 of it. Source maps are excluded from the measurement because browsers only fetch them with devtools
 open; everything else is on the critical path to the first frame.
+
+
+## SW-09 — A bound that protects an allocation runs before the allocation
+
+**A `require` that exists to keep an allocation sane must run *before* that allocation, not beside
+it.** In Kotlin that means it cannot live in an `init` block whose class allocates in a property
+initializer, because initializers and `init` blocks run in declaration order and the properties come
+first. Put the check in an `init` block above them, or in the type that owns the number.
+
+Every field the replay codec decodes carries such a bound already, and each says why in the same
+words — *"Bounded so a decoder can reject a corrupt payload before allocating from it"*
+(`BotId.MAX_LENGTH`, `BotKnob.MAX_NAME_LENGTH`, `MAX_VALUE_LENGTH`, `MAX_PER_BOT`,
+`MatchSetup.MAX_SIDE`). A `#r=` link is the one input to this program that arrives from a stranger,
+and the geometry is the field in it that allocates most: `Board` asks for a byte per padded square and
+an `Int` per playable square *per slot*.
+
+Two things make the ordering matter rather than merely tidy:
+
+- The exception type changes. An `OutOfMemoryError` is not an `IllegalArgumentException`, so
+  `:app`'s "a bad link is a fresh match" fallback does not catch it and the boot watchdog blames the
+  reader's browser instead — a confident, wrong diagnosis.
+- Integer arithmetic wraps. A size computed into a negative `Int` passes every ceiling downstream and
+  fails at the array instead, which is why `Grid` checks its padded extent in `Long` arithmetic.
+
+The parallel with [SW-07](#sw-07--a-search-pays-for-its-own-work) is exact, and is why this is a rule
+rather than a fix: charging after the work makes an allowance a record of what already happened, and
+checking after the allocation makes a bound a record of what was already asked for.
+
+**Why:** A limit that runs late is not a limit. Everything it was written to prevent has happened by
+the time it speaks, and all it changes is which error message the reader gets blamed by.
 
 
 # Shared rules
@@ -546,7 +583,19 @@ included build's `ktlintCheck`, which is the only edge in the project that cross
 themselves in `/* */` rather than `/** */`.
 
 Two legacy habits not to reproduce, both because they do not survive automated refactoring:
-`//------` banner comments, and column-aligned assignments.
+**dash-padded** banner comments, and column-aligned assignments. What the rule objects to is the
+padding — a run of dashes filling a comment out to the margin — which carries no information, drifts
+out of alignment with its siblings the first time a rename changes a line's length, and then reads as
+carelessness rather than as the layout it was. A bare section marker is fine and is the house style
+in the longer files:
+
+```kotlin
+// -- internals                       // yes
+// -- internals ---------------       // no
+```
+
+A file needing many of them is usually a file with too many responsibilities, and the markers are the
+symptom rather than the disease — but splitting it is a bigger change than a style rule may demand.
 
 **Why:** Mechanical style should be settled once and never discussed again — which means a tool
 settles it, and the rules that tool gets wrong for this codebase are turned off once, in writing,
@@ -593,6 +642,10 @@ future edit to walk both copies, and silently rewards drift.
   browser-shaped: paint, DOM, wasm codegen, and the golden hashes that
   [SW-02](#sw-02--portable-arithmetic-only-in-bots) exists to protect. Anything provable on the JVM is
   proven there instead, because Karma startup dominates a small suite.
+- **`:ui` and `:app` have nowhere else to go**, so their `wasmJsTest` suites are the browser job's
+  own reason to exist. Reach for the seam rather than the DOM where there is one: the two clocks take
+  a timestamp so a test can be the clock, the hit-test is arithmetic over a bounding box, and
+  `SlotLabels` and `Palette` need no page at all.
 - **A new bot needs no new test file.** `BotContractTest` sweeps `BotRegistry.entries`, so registering
   is what enrols a bot in the suite. Write a test of your own for behaviour the contract cannot state.
 

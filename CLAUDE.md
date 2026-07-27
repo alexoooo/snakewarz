@@ -19,7 +19,7 @@ file per audience. **Read the row that matches before you edit, not after the fi
 
 | About to… | Read | What goes wrong if you don't |
 |---|---|---|
-| write any code at all | [`docs/Coding-Standards.md`](docs/Coding-Standards.md) | Twenty-six rules a review cites by id; several break a match *silently* |
+| write any code at all | [`docs/Coding-Standards.md`](docs/Coding-Standards.md) | A rule set a review cites by id; several break a match *silently* |
 | add or change a bot, or touch `bot-api/` | [`docs/Bots.md`](docs/Bots.md) | A slug or knob name you rename sits in the replay URL of every match somebody shared |
 | touch `match/` — human input, stats, tournaments | [`docs/Match.md`](docs/Match.md) | A match with a person in it has no clock; add a counter to `Match` and the scoreboard grows a second source of truth |
 | touch `ui/`, `index.html` or `styles.css` | [`docs/UI.md`](docs/UI.md) | The overlay is a second canvas painted whole; get the ordering wrong and every decoration vanishes the frame a batch repaints |
@@ -165,6 +165,20 @@ These five break something *silently* when missed, so they are worth knowing bef
   URL of every match somebody shared. Renaming one breaks them all.
 
 Naming, file layout, comment style, fail-fast, test colocation and the rest are in the document.
+
+## Git
+
+Standing rules. They override any default the harness carries.
+
+- **Stage a new source file the moment you create it** — `git add <path>`, nothing more. An untracked
+  file is invisible to `git diff`, so a review of the change reads as if it were never written, and a
+  stash or a branch switch drops it without a word.
+- **Never commit and never push on your own initiative.** Leave the work staged and say so. Committing
+  is the user's call, every time — a green build is not permission.
+- **A commit message is at most 200 characters**, subject and body together. A change needing more
+  explanation than that is explained in the code or in `docs/`, not in the log.
+- **No co-author trailer.** No `Co-Authored-By`, no "Generated with", no attribution of any kind. The
+  commit is authored by the person who asked for it.
 
 ## Commands
 

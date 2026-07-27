@@ -111,7 +111,7 @@ public class Match private constructor(
 
         val decision = try {
             bot.chooseMove(Turn(board, id, board.legalMoves(id), budget, scratches[id.index]))
-        } catch (thrown: Throwable) {
+        } catch (_: Throwable) {
             // A bot that throws has forfeited, not crashed the match. Catching it here is what makes
             // a contributed bot safe to accept: it can lose, but it cannot take the page down.
             null
@@ -194,7 +194,7 @@ public class Match private constructor(
 
     override fun toString(): String = "Match(${setup.rows}x${setup.cols}, turn ${board.turnIndex}, ${setup.slots})"
 
-    // -- internals ------------------------------------------------------------------------------
+    // -- internals
 
     private fun advance(id: SnakeId, direction: Direction): StepResult {
         // Read before applying: after the move the tail has already gone, and the renderer needs to
@@ -231,7 +231,7 @@ public class Match private constructor(
     private fun notifyEliminated(id: SnakeId) {
         try {
             bots[id.index].onEliminated()
-        } catch (thrown: Throwable) {
+        } catch (_: Throwable) {
             // The snake is already out and the board is already decided. There is nothing this
             // could usefully change, so a bot failing to clean up after itself is not the driver's
             // problem.

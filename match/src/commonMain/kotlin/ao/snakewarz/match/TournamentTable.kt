@@ -136,7 +136,7 @@ public class TournamentTable internal constructor(
         }
     }
 
-    // -- internals ----------------------------------------------------------------------------------
+    // -- internals
 
     internal fun recordWin(winner: Int, loser: Int) {
         winCounts[winner * size + loser]++

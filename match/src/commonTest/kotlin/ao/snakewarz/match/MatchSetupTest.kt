@@ -3,6 +3,7 @@ package ao.snakewarz.match
 import ao.snakewarz.botapi.BotId
 import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.core.Grid
+import ao.snakewarz.core.RulesConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -183,6 +184,42 @@ class MatchSetupTest {
         assertFailsWith<IllegalArgumentException>("negative allowance") {
             MatchSetup.create(10, 10, slots, seed = 1, budgets = intArrayOf(10, -1))
         }
+    }
+
+    @Test
+    fun `a board larger than the ceiling is refused before anything allocates`() {
+        // A crafted #r= link is the one input to this program that arrives from a stranger, and the
+        // geometry is the field in it that allocates most. Refusing it has to be an
+        // IllegalArgumentException, because that is what :app catches to fall back to a fresh match.
+        val slots = List(2) { BotId("bot$it") }
+
+        assertFailsWith<IllegalArgumentException> {
+            MatchSetup(
+                seed = 1,
+                rows = MatchSetup.MAX_SIDE + 1,
+                cols = 10,
+                rules = RulesConfig(),
+                budgetPerTurn = 0,
+                slots = slots,
+                turnOrder = intArrayOf(0, 1),
+                spawns = intArrayOf(0, 1),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MatchSetup(
+                seed = 1,
+                rows = 10,
+                cols = 5_000,
+                rules = RulesConfig(),
+                budgetPerTurn = 0,
+                slots = slots,
+                turnOrder = intArrayOf(0, 1),
+                spawns = intArrayOf(0, 1),
+            )
+        }
+
+        // And the ceiling itself is allowed, so the bound is a bound rather than an accident.
+        MatchSetup.create(MatchSetup.MAX_SIDE, MatchSetup.MAX_SIDE, slots, seed = 1)
     }
 
     @Test

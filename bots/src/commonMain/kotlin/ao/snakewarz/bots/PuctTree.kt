@@ -73,9 +73,19 @@ internal class PuctTree(private val maxNodes: Int = MAX_NODES) {
         }
     }
 
-    /** The snake that moved into [node], or [NO_ACTOR] at the root, which nobody moved into. */
+    /**
+     * The snake that moved into [node], or [NO_ACTOR] at the root, which nobody moved into.
+     *
+     * A **test seam**, as [visitsOf], [averageOf] and [priorOf] all are here: the search reads the
+     * arrays directly, and these exist so `PuctTreeTest` can assert per-actor credit, the trapped
+     * node's single-edge prior and the value backup by name instead of by index. Said out loud
+     * because unlike [UctTree], where [UctTree.averageOf] is on the selection path, none of these
+     * four has a production caller — which is a fact about how the two trees are shaped, not a
+     * leftover.
+     */
     fun actorOf(node: Int): Int = actor[node].toInt()
 
+    /** [node]'s visit count. A test seam; see [actorOf]. */
     fun visitsOf(node: Int): Int = visits[node]
 
     /**
@@ -85,10 +95,14 @@ internal class PuctTree(private val maxNodes: Int = MAX_NODES) {
      * is legacy's prior at `Node.java:286`, carried there on purpose and flagged there as the sort of
      * thing somebody tidies away without measuring — which is an argument for keeping it where it was
      * ported, not for importing it into an algorithm that never had it.
+     *
+     * [selectPuct] computes the same quotient inline rather than calling this, because it needs
+     * `firstPlay` for an unvisited child where this returns zero. Two answers to what looks like one
+     * question, so they are two pieces of code on purpose.
      */
     fun averageOf(node: Int): Double = if (visits[node] == 0) 0.0 else rewardSum[node] / visits[node]
 
-    /** [node]'s prior along [direction]. Meaningful only after [open]. */
+    /** [node]'s prior along [direction]. Meaningful only after [open]. A test seam; see [actorOf]. */
     fun priorOf(node: Int, direction: Direction): Double = prior[node * CHILDREN + direction.ordinal]
 
     /** [node]'s child along [direction], or [NO_NODE] if it has never been taken. */

@@ -15,8 +15,18 @@ import kotlinx.browser.window
 private const val REPLAY_PARAMETER = "r="
 
 /** The replay in the current URL, or `null` if there is none — or if what is there is not one. */
-internal fun readReplay(): MatchRecord? {
-    val payload = window.location.hash
+internal fun readReplay(): MatchRecord? = replayIn(window.location.hash)
+
+/**
+ * [readReplay] with the address bar handed in, which is the half of it worth testing.
+ *
+ * This and `MatchSetup`'s geometry check are the two places a stranger's bytes land, so what matters
+ * is that **every** way of being wrong ends at `null` rather than at an exception: a truncated link,
+ * a hand-edited one, a fragment that is about something else entirely. A blank page is a worse
+ * answer to a typo than a fresh match is.
+ */
+internal fun replayIn(hash: String): MatchRecord? {
+    val payload = hash
         .removePrefix("#")
         .split('&')
         .firstOrNull { it.startsWith(REPLAY_PARAMETER) }

@@ -2,6 +2,7 @@ package ao.snakewarz.core
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -82,6 +83,14 @@ class GridTest {
 
         val playable = (0 until grid.cellCount).count { grid.isPlayable(Cell(it)) }
         assertEquals(grid.playableCount, playable, "exactly rows*cols squares are playable")
+    }
+
+    @Test
+    fun `a board whose padded size would overflow an Int is refused`() {
+        // Left unchecked, cellCount wraps negative: every ceiling downstream then passes it and the
+        // allocation it was guarding fails with a NegativeArraySizeException instead.
+        assertFailsWith<IllegalArgumentException> { Grid(rows = 50_000, cols = 50_000) }
+        assertFailsWith<IllegalArgumentException> { Grid(rows = 1, cols = Int.MAX_VALUE) }
     }
 
     @Test

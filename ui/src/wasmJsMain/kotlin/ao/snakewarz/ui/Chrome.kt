@@ -266,7 +266,7 @@ internal class Chrome(
         copyToClipboard(shareUrlInput.value)
     }
 
-    // -- internals ------------------------------------------------------------------------------
+    // -- internals
 
     /**
      * Puts the hover label beside the pointer, inside the board panel on all four sides.
@@ -480,7 +480,13 @@ internal class Chrome(
             null -> ""
         }
 
-        /** Rounded half-up without `kotlin.math`, which is more than a percentage needs. */
+        /**
+         * Rounded half-up without `kotlin.math`, which is more than a percentage needs.
+         *
+         * The second copy of the same four tokens: `TournamentTable` has the other, and `:ui` may
+         * not reach into `:match`'s internals to share it. Duplication on purpose, so that the next
+         * reader does not take it for one.
+         */
         fun percent(rate: Double): Int = ((rate * 1000).toInt() + 5) / 10
 
         /** Must line up with the `max` on `#speed` in index.html. */

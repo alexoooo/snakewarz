@@ -32,6 +32,14 @@ flag: `TurnScheduler` paces bots and replays, while a match with a live player i
 only one with no speed at all — a batch is not something you watch at a rate, it is something you
 wait for, so it runs flat out on an 8ms-per-frame guard and reports progress instead.
 
+The one place the shared path *does* need to know which it is: **running off the end of a partial
+recording is terminal, not a pause.** A scripted slot with no move left answers `Pending`, which under
+a live player would mean "waiting for a key" — but there is no key that could resume a recording, so
+`GameSession.advance` reports `FINISHED` when `replay != null` and the scheduler parks. Without that
+it re-arms `requestAnimationFrame` forever, stepping once a frame to be told the same thing, while
+the Play button reads "Pause" and says nothing is stopped. `Play` on a parked recording therefore
+means "again", exactly as it does on a finished match.
+
 While a batch runs it **owns the arena**: `GameSession` paints its current match and builds the whole
 `UiModel` from that match, so the board, the scoreboard and the stats cannot disagree. The transport
 is greyed, and `dispatch` drops transport intents outright — the space bar does not read the DOM's

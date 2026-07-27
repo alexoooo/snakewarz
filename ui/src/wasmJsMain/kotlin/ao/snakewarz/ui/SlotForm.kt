@@ -127,7 +127,7 @@ internal class SlotForm(
 
     override fun toString(): String = "SlotForm(${select.id}, ${rows.size} knobs)"
 
-    // -- internals ------------------------------------------------------------------------------
+    // -- internals
 
     private fun selected(): BotEntry? = select.value.takeIf { it.isNotEmpty() }?.let { registry[BotId(it)] }
 

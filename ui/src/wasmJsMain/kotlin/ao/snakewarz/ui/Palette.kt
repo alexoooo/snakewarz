@@ -18,9 +18,6 @@ internal class Palette private constructor(
     val gridline: String,
     private val heads: Array<String>,
 ) {
-    /** The trail colour of the snake in [slot]. */
-    fun body(slot: Int): String = bodyColour(slot)
-
     /**
      * The head colour of the snake in [slot] — lighter than its body on a dark page and darker on a
      * light one, so the head reads as the bright end of the trail either way.

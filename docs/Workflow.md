@@ -42,6 +42,16 @@ tool is still honest.
 Browser tests are disabled unless `-PbrowserTests=true`, because Karma startup dominates the runtime
 of small suites. Anything provable on the JVM should be proven there instead.
 
+Two things are only provable there, and both are worth the Karma startup in CI. The four pure
+modules' `commonTest` suites recompile to wasm, which is what re-runs the golden hashes in a real
+browser and is [SW-02](Coding-Standards.md#sw-02--portable-arithmetic-only-in-bots)'s whole purpose.
+And `:ui` and `:app` have no other target at all, so their `wasmJsTest` suites — the two clocks, the
+hit-test, the labels, the palette, the replay fragment — run here or nowhere:
+
+```bash
+./gradlew :ui:wasmJsBrowserTest :app:wasmJsBrowserTest -PbrowserTests=true
+```
+
 ## What each suite costs
 
 Prefer `jvmTest` while developing; most modules answer in seconds. **`:bots` does not** — it is a

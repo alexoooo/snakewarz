@@ -217,6 +217,23 @@ class ReplayCodecTest {
     }
 
     @Test
+    fun `a payload claiming a huge board is refused rather than allocated for`() {
+        // The geometry is the decoded field that allocates most, and it is one a stranger controls.
+        // Refusing it has to be an IllegalArgumentException: an OutOfMemoryError is not something
+        // :app can catch, so the tab would die during boot and blame the browser.
+        val match = matchOf(10, 10, "cycle", "south")
+        match.runToCompletion()
+        val bytes = base64.decode(ReplayCodec.encode(match.record()))
+
+        // Byte 2 is the rows varint, one byte wide for any board this game offers. Widen it to 5000.
+        val huge = bytes.copyOfRange(0, 2) +
+            byteArrayOf(0x87.toByte(), 0x27) +
+            bytes.copyOfRange(3, bytes.size)
+
+        assertFailsWith<IllegalArgumentException> { ReplayCodec.decode(base64.encode(huge)) }
+    }
+
+    @Test
     fun `a future format version is refused, not guessed at`() {
         val match = matchOf(6, 6, "cycle", "cycle")
         match.runToCompletion()

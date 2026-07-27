@@ -45,6 +45,23 @@ engine records `TRAPPED` whichever is played — so this is a move in the sense 
 make one, not a choice, and it is not the `MoveTracker` bug (which invented a *survivable* move
 nobody chose).
 
+## Replays arrive from strangers
+
+A `#r=` payload is the one input to this program nobody here wrote, so **every field the codec decodes
+is bounded before anything allocates from it** — `BotId.MAX_LENGTH`, the three `BotKnob` ceilings, and
+`MatchSetup.MAX_SIDE` for the geometry, which is the field that allocates most. That is
+[SW-09](Coding-Standards.md#sw-09--a-bound-that-protects-an-allocation-runs-before-the-allocation),
+and the ordering is the whole of it: a check that runs after the array is a check that has already
+lost, and it loses as an `OutOfMemoryError` rather than the `IllegalArgumentException` `:app` catches
+to fall back to a fresh match.
+
+**`MatchRecord.verify` treats a partial recording as a prefix.** `outcome == null` means the record
+stopped before the match did, which is the *usual* shape for a shared link — `GameSession.share()`
+calls `record()` at whatever turn the board is on. The replay always runs to completion and is longer
+by construction, so `verify` compares the recorded moves and the eliminations inside the recorded
+turns, and stops there. A replay that ends **short** of the recording is still a divergence, and a
+finished record is still held to an exact match.
+
 ## Stats and tournaments
 
 `MatchStats` is **derived, never accumulated**. The board already knows every figure worth reporting

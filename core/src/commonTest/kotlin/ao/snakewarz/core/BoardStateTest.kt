@@ -144,6 +144,18 @@ class BoardStateTest {
     }
 
     @Test
+    fun `a board past the journal ceiling is refused before it allocates`() {
+        // Sized so the distinction is the whole test: two billion squares clears the journal ceiling
+        // by two orders of magnitude, so allocating for it first would raise an OutOfMemoryError and
+        // this assertion would fail. It passes only while the require runs ahead of the arrays.
+        val grid = Grid(46_000, 46_000)
+
+        assertFailsWith<IllegalArgumentException> {
+            Board(grid, intArrayOf(grid.cellAt(0, 0).index))
+        }
+    }
+
+    @Test
     fun `the rules reject configurations that could not terminate`() {
         assertFailsWith<IllegalArgumentException> { RulesConfig(growEveryNthMove = 0) }
         assertFailsWith<IllegalArgumentException> { RulesConfig(maxTurns = 0) }

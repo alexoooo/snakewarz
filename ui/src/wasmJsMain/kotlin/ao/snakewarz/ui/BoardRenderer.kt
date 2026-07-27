@@ -232,7 +232,7 @@ internal class BoardRenderer(
      */
     fun paintSnake(view: BoardView, id: SnakeId) {
         val snake = view.snake(id)
-        val colour = palette.body(id.index)
+        val colour = Palette.bodyColour(id.index)
         val alpha = if (snake.alive) 1.0 else Palette.CORPSE_ALPHA
 
         for (i in 0 until snake.length) {
@@ -276,7 +276,7 @@ internal class BoardRenderer(
             cell == snake.tail -> tailAlpha(view, snake)
             else -> 1.0
         }
-        fill(cell, palette.body(owner.index), alpha)
+        fill(cell, Palette.bodyColour(owner.index), alpha)
     }
 
     /**
@@ -488,5 +488,3 @@ internal class BoardRenderer(
         const val THREAD_MIN_WIDTH = 2.0
     }
 }
-
-internal fun prefersDark(): Boolean = window.matchMedia("(prefers-color-scheme: dark)").matches

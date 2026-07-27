@@ -3,9 +3,12 @@ package ao.snakewarz.botapi
 /**
  * The contract every bot implements. One instance is created per slot per match.
  *
- * Because the instance lives for the whole match, per-turn state is just an instance field — which
- * is how an MCTS bot keeps its tree across turns with no extra API at all. `BoardView.hash` makes
- * finding last turn's subtree a `Long` compare rather than a full board equality test.
+ * Because the instance lives for the whole match, per-turn state is just an instance field, so a bot
+ * that wants to carry a search tree across turns needs no extra API to do it: `BoardView.hash` is
+ * there to make finding last turn's subtree a `Long` compare rather than a full board equality test.
+ * Neither shipped search bot takes that up, and it is not an oversight: reuse was measured during
+ * the rewrite at roughly six percent of the tree surviving a turn, so `UctBot` and `PuctBot` reset
+ * theirs instead. The opening is real, the arithmetic is in `docs/Migration.md`.
  *
  * ### [chooseMove] is synchronous, and must never become `suspend`
  *

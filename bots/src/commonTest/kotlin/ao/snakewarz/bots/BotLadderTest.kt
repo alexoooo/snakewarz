@@ -18,11 +18,21 @@ import kotlin.test.assertTrue
  * point, at [BUDGET], the allowance a real match is played under. The thresholds are the measured
  * results with a little slack, not aspirations: a failure is a question about what changed, exactly
  * like a golden hash.
+ *
+ * Every rung is asserted, the first included. Six bots above `random` means six comparisons, and a
+ * missing one is invisible — the list reads as complete whether or not it is.
  */
 class BotLadderTest {
     @Test
     fun `each rung beats the one below it`() {
-        // Measured at the shipped allowance, 12x12 over twenty matches: 17, 18, 14, 16, 15.
+        // Measured at the shipped allowance, 12x12 over twenty matches: 16, 17, 18, 14, 16, 15.
+        //
+        // The first rung is the one that says `random` is the weakest thing here, which is what
+        // makes it the right bot to seat by default -- the opening screen of a game nobody has
+        // configured yet should be the easiest opponent there is -- and `ShippedBots` requires the
+        // registration order to say so. It is also the only rung whose loser plays no search, so it
+        // costs almost nothing to check.
+        assertBeats("wallhug", "random", atLeast = 13)
         assertBeats("space", "wallhug", atLeast = 14)
         assertBeats("pressure", "space", atLeast = 15)
         assertBeats("chase", "pressure", atLeast = 11)

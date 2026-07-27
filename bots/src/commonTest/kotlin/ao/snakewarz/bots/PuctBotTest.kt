@@ -172,7 +172,7 @@ class PuctBotTest {
         }
     }
 
-    // -- internals ------------------------------------------------------------------------------
+    // -- internals
 
     private fun puctOn(board: Board, eval: String, seed: Long = 1): PuctBot =
         PuctBot(setupFor(board, board.toAct, seed, BotParams(mapOf(PuctBot.EVAL.name to eval))))

@@ -119,6 +119,61 @@ class ReplayPlaybackTest {
         assertTrue(verification.detail.contains("moves"), verification.detail)
     }
 
+    @Test
+    fun `verify agrees with a recording that stops mid-match`() {
+        // Which is the shape Share publishes: `record()` is taken at whatever turn the board is on,
+        // so an outcome of null is the common case for a link somebody sent, not an odd one. The
+        // replay runs to completion and is longer by construction; holding it to the recorded length
+        // reported a divergence for every one of them.
+        val match = matchOf(15, 15, "cycle", "cycle", seed = 1234)
+        repeat(11) { match.step() }
+        val partial = match.record()
+
+        assertEquals(null, partial.outcome, "the fixture has to actually be partial")
+
+        val verification = partial.verify(TestRegistry.ALL)
+
+        assertTrue(verification.matches, verification.detail)
+    }
+
+    @Test
+    fun `verify still catches a tampered prefix in a partial recording`() {
+        // The prefix is checked as strictly as a whole match; it is only the tail that is not ours.
+        val match = matchOf(15, 15, "cycle", "cycle", seed = 1234)
+        repeat(11) { match.step() }
+        val partial = match.record()
+
+        val tampered = DirectionStream()
+        for (i in 0 until partial.moves.size) {
+            tampered.add(if (i == 5) wrongTurn(partial.moves[i]) else partial.moves[i])
+        }
+
+        val verification = MatchRecord(partial.setup, tampered, partial.terminals, null)
+            .verify(TestRegistry.ALL)
+
+        assertEquals(false, verification.matches)
+        assertEquals(5, verification.divergedAtMove)
+    }
+
+    @Test
+    fun `verify catches a replay that stops short of a partial recording`() {
+        // The half of the length check that survives: longer than the record is expected, shorter is
+        // a real divergence, and the leniency must not swallow it.
+        val record = playedRecord()
+
+        val overlong = DirectionStream()
+        for (i in 0 until record.moves.size) {
+            overlong.add(record.moves[i])
+        }
+        repeat(3) { overlong.add(Direction.NORTH) }
+
+        val verification = MatchRecord(record.setup, overlong, record.terminals, null)
+            .verify(TestRegistry.ALL)
+
+        assertEquals(false, verification.matches)
+        assertTrue(verification.detail.contains("moves"), verification.detail)
+    }
+
     /** A match long enough that tampering with move five is tampering with something. */
     private fun playedRecord(): MatchRecord {
         val match = matchOf(15, 15, "cycle", "cycle", seed = 1234)

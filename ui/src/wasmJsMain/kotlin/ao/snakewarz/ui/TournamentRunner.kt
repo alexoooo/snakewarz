@@ -49,14 +49,15 @@ internal class TournamentRunner(private val onFrame: () -> Unit) {
         handle = 0
     }
 
-    /** Forgets the batch entirely, so the panel goes back to offering a new one. */
-    fun clear() {
-        stop()
-        tournament = null
-    }
-
     override fun toString(): String = "TournamentRunner(${tournament ?: "idle"})"
 
+    /**
+     * The timestamp is ignored, unlike in [TurnScheduler.frame] and `KeyRepeat.frame`.
+     *
+     * Deliberate rather than missed: those two pace something against wall time and need to know how
+     * much of it went by, and this one has nothing to pace. A batch runs as fast as the machine
+     * allows, so the only clock it needs is the one bounding this frame.
+     */
     private fun frame(timestamp: Double) {
         if (!running) {
             return

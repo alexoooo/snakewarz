@@ -238,6 +238,13 @@
     // Kotlin signals success by adding `booted` to <body>. Anything else -- a thrown error, a
     // rejected promise, or simply never booting -- reveals the unsupported panel.
     (function () {
+        // How long a cold start may take before we call it a failure. Generous on purpose: the
+        // module is downloaded, compiled and instantiated inside this window, and a slow phone on a
+        // slow connection is a browser that *can* run the game, so firing early would tell the truth
+        // in the wrong direction. The panel it reveals blames the browser, so nothing that is really
+        // a bad input should be allowed to reach it.
+        var BOOT_TIMEOUT_MS = 15000;
+
         var settled = false;
 
         function fail(reason) {
@@ -266,7 +273,7 @@
 
         setTimeout(function () {
             fail("timed out waiting for the WebAssembly module to start");
-        }, 15000);
+        }, BOOT_TIMEOUT_MS);
     })();
 </script>
 <script src="snakewarz.js"></script>

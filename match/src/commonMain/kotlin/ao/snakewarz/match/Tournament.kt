@@ -157,7 +157,7 @@ public class Tournament(
         FINISHED,
     }
 
-    // -- internals ------------------------------------------------------------------------------
+    // -- internals
 
     private fun startMatch(): Match {
         val setup = setupFor(matchesPlayed)

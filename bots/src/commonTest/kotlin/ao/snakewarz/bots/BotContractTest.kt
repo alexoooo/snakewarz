@@ -124,9 +124,9 @@ class BotContractTest {
     @Test
     fun `a bot spends budget if and only if it declares an allowance`() {
         // `BotEntry.search` is what decides whether the sidebar offers an allowance field at all, so
-        // it had better describe the bot rather than merely claim something about it. Seven of the
-        // nine answer with a flood fill and consume nothing; a slider for those would change no move
-        // they ever play.
+        // it had better describe the bot rather than merely claim something about it. Most answer
+        // with a flood fill and consume nothing; a slider for those would change no move they ever
+        // play.
         forEachShippedBot { entry ->
             val match = HeadlessMatch(listOf(entry, entry), rows = 10, cols = 10, seed = 606, budgetPerTurn = 2_000)
             match.run()

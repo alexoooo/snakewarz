@@ -82,7 +82,15 @@ internal class ShortestPaths(private val grid: Grid) {
         }
     }
 
-    /** Steps from the origin to [cell], or [UNREACHABLE]. */
+    /**
+     * Steps from the origin to [cell], or [UNREACHABLE].
+     *
+     * No production caller: a bot wants [distanceBeside], because a snake cannot stand *on* its
+     * target. This is how `ShortestPathsTest` asserts the scan itself — every square's distance, the
+     * sealed-off region, the stale-generation guard — which needs the plain answer rather than the
+     * one shifted by a step. [distanceBeside] repeats the array read instead of calling this, so
+     * that [requireScanned] stays out of a four-way loop.
+     */
     fun distanceTo(cell: Cell): Int {
         requireScanned()
         return if (stamp[cell.index] == generation) steps[cell.index] else UNREACHABLE
