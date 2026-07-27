@@ -10,7 +10,8 @@ import kotlin.math.sqrt
  *
  * A sibling of [UctTree] rather than a mode of it, and the reason is not the sixty lines of allocator
  * they have in common. `GoldenMoveStreamTest` pins the move stream `uct` plays as a hash, re-run in
- * real Chrome, and CLAUDE.md says a golden failure "is always a question that has to be answered".
+ * real Chrome, and SW-01 in `docs/Coding-Standards.md` makes a golden failure a question rather than
+ * a hash to update.
  * Refactoring the tree UCT selects through risks reordering a floating-point expression and moving
  * that hash for no reason anybody would be able to name afterwards. A mode flag would be worse
  * still: a branch in the hottest loop in the program, and a `DoubleArray(capacity * 4)` allocated

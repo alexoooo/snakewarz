@@ -19,15 +19,8 @@ no claim a rung would make. All three sections are gated by the same contract su
 `:ui` opens slot 2 on the slug `uct` — the page should start on the game somebody came here to play
 — and falls back to `entries.first()` when a registry does not offer it, so registration order still
 shows through. Append new bots; do not prepend. Of the ten, only `flat-monte-carlo`, `uct` and `puct`
-touch `Turn.scratch` — the other seven consume no budget at all, and `BotContractTest` enforces that
-rather than merely asserting it here: a bot spends budget **if and only if** it declares a
-`BotKnob.Search`.
-
-`puct` is the one bot that **charges its own budget**. A rollout spends the allowance a move at a
-time and the engine can see it; a static evaluation sweeping the board cannot be seen that way, so
-`PuctBot.judge` calls `Turn.budget.tryConsume(eval.cost)` — *before* running the evaluation, so the
-allowance is a bound rather than a note about work already done. Without it, `budgetPerTurn` would
-quietly mean something different for every bot that declared one.
+touch `Turn.scratch`; the other seven consume no budget at all. `puct` is also the only one that
+charges for work the engine cannot watch it do — see *A search that does not simulate*, below.
 
 ## Adding a bot
 
@@ -124,13 +117,19 @@ while (p.outcome == null) p.advance(policy.pick(p.board.legalMoves(p.toAct)) ?: 
 `advance` charges the budget itself, and an exhausted budget makes `outcome` a draw — so the loop
 condition *is* the budget check and the search terminates structurally rather than on trust.
 
-**A search that does not simulate has to charge itself.** `Turn.budget.tryConsume(units)` is public
-for that, and `PuctBot` is the one bot that uses it: a board-wide sweep at a leaf costs real time the
-engine cannot see, and a bot that charged nothing for one would make `budgetPerTurn` mean something
-different for it than for everything else. Charge **before** doing the work — `tryConsume` refuses
-and charges nothing once there is not enough left, so charging afterwards makes the allowance a
-record rather than a bound. Do not tune the figure down to make your bot look better; report the
-wall-clock beside the win rate instead, which is what `:lab`'s `time` subcommand is for.
+### A search that does not simulate
+
+A rollout spends the allowance a move at a time and the engine can see it; a static evaluation
+sweeping the board cannot be seen that way. `Turn.budget.tryConsume(units)` is public for that, and
+`PuctBot` is the one bot that uses it — `PuctBot.judge` calls `Turn.budget.tryConsume(eval.cost)`.
+A bot that charged nothing for such a sweep would make `budgetPerTurn` mean something different for
+it than for everything else.
+
+Charge **before** doing the work: `tryConsume` refuses and charges nothing once there is not enough
+left, so charging afterwards makes the allowance a record rather than a bound. Do not tune the figure
+down to make your bot look better; report the wall-clock beside the win rate instead, which is what
+`:lab`'s `time` subcommand is for. That is rule SW-07 in
+[`Coding-Standards.md`](Coding-Standards.md).
 
 Adding a bot needs **no HTML change**: the pickers in the sidebar are filled from `BotRegistry.entries`
 at startup, and each seat's settings rows are built from that entry's `knobs`. Those are the only two

@@ -29,8 +29,9 @@ you have to know before you type a command you already think you know: never bac
 ## Lab entrant syntax
 
 A lab entrant is `<slug>[:name=value,...]`, where `budget` is that entrant's own allowance and every
-other name is one of that bot's declared knobs — so one bot enters twice at two configurations, which
-is the question a testbed of search bots exists to answer. Parsing is **strict**, unlike
+other name is one of that bot's declared knobs — so one bot enters twice at two configurations, for
+the reason [`Match.md`](Match.md) gives for a `Contestant`'s identity being all three of id,
+allowance and params. Parsing is **strict**, unlike
 `BotKnob.Param.read`: a `main` has something to catch a throw, and a mistyped knob name would
 otherwise quietly measure the default and waste however many minutes the batch takes. A `play` of
 `uct` against `flat-monte-carlo` reproduces `BotLadderTest`'s conclusion, which is how you tell the

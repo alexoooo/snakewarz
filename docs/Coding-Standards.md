@@ -69,6 +69,11 @@ as the replay URLs people have shared keep working.**
   never milliseconds. Time lives in `:ui` and `:lab` only — and `:lab` sits outside all four rather
   than inside one of them, because a tool that reports how long a batch took has to read a clock and
   a module a match runs through must not be able to.
+- **A golden failure is a question, never a hash to update.** `GoldenMoveStreamTest` pins a move
+  stream, re-run in real Chrome. If it moves, something changed the arithmetic or the search order,
+  and which one has to be named before the hash is touched — "update the golden to make CI green" is
+  the exact way this rule and [SW-02](#sw-02--portable-arithmetic-only-in-bots) get defeated without
+  anybody noticing.
 
 **Why:** A replay is a URL somebody bookmarked or posted, and CI re-runs recorded matches against the
 registry. Every one of these is a way for the same seed to produce a different game later — on a new
@@ -299,6 +304,12 @@ Comparisons that ARE legitimate, because the referent exists outside the diff:
 **The rewrite test:** would this comment still make sense to someone who checks out only today's
 commit, with no access to the diff or the conversation that produced it? If not, either restate it as
 a present-tense constraint or delete it.
+
+**Cite a document by filename, never by quoted sentence.** `docs/Bots.md` is a referent that survives
+the document being edited; a sentence quoted out of it is one nobody can grep for once the wording
+changes, and the citation then rots with no build failure to announce it. This is not hypothetical:
+`PuctTree` and `Migration.md` both spent a while attributing a rule about golden hashes to a sentence
+CLAUDE.md did not contain.
 
 **Why:** Well-named identifiers say *what* the code does. A comment adds value only when it captures a
 hidden constraint, a measured result, a non-trivial invariant, or behaviour that would surprise a
