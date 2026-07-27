@@ -1,17 +1,17 @@
 package ao.snakewarz.match
 
 import ao.snakewarz.botapi.Bot
-import ao.snakewarz.botapi.BotEntry
-import ao.snakewarz.botapi.BotFactory
-import ao.snakewarz.botapi.BotId
-import ao.snakewarz.botapi.BotParams
-import ao.snakewarz.botapi.BotRegistry
 import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Turn
-import ao.snakewarz.core.Direction
-import ao.snakewarz.core.Grid
-import ao.snakewarz.core.RulesConfig
+import ao.snakewarz.botapi.knob.BotParams
+import ao.snakewarz.botapi.registry.BotEntry
+import ao.snakewarz.botapi.registry.BotFactory
+import ao.snakewarz.botapi.registry.BotId
+import ao.snakewarz.botapi.registry.BotRegistry
+import ao.snakewarz.core.grid.Direction
+import ao.snakewarz.core.grid.Grid
+import ao.snakewarz.core.rules.RulesConfig
 
 /**
  * Bots for testing the driver, defined here rather than borrowed from `:bots`.

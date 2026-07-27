@@ -1,8 +1,8 @@
 package ao.snakewarz.app
 
 import ao.snakewarz.bots.ShippedBots
-import ao.snakewarz.match.InputBuffer
-import ao.snakewarz.match.PlayableRegistry
+import ao.snakewarz.match.human.InputBuffer
+import ao.snakewarz.match.human.PlayableRegistry
 import ao.snakewarz.ui.GameSession
 import kotlinx.browser.document
 import kotlinx.browser.window

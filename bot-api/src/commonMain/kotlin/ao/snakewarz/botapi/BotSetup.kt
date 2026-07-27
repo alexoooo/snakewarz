@@ -1,9 +1,10 @@
 package ao.snakewarz.botapi
 
-import ao.snakewarz.core.Grid
-import ao.snakewarz.core.Rng
-import ao.snakewarz.core.RulesConfig
-import ao.snakewarz.core.SnakeId
+import ao.snakewarz.botapi.knob.BotParams
+import ao.snakewarz.core.grid.Grid
+import ao.snakewarz.core.random.Rng
+import ao.snakewarz.core.rules.RulesConfig
+import ao.snakewarz.core.snake.SnakeId
 
 /**
  * What a bot is told once, when it is created for a slot — the things that cannot change mid-match.

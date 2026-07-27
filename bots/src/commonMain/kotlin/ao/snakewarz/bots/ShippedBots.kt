@@ -1,10 +1,21 @@
 package ao.snakewarz.bots
 
-import ao.snakewarz.botapi.BotEntry
-import ao.snakewarz.botapi.BotFactory
-import ao.snakewarz.botapi.BotId
-import ao.snakewarz.botapi.BotKnob
-import ao.snakewarz.botapi.BotRegistry
+import ao.snakewarz.botapi.knob.BotKnob
+import ao.snakewarz.botapi.registry.BotEntry
+import ao.snakewarz.botapi.registry.BotFactory
+import ao.snakewarz.botapi.registry.BotId
+import ao.snakewarz.botapi.registry.BotRegistry
+import ao.snakewarz.bots.reactive.BurninHellBot
+import ao.snakewarz.bots.reactive.RandomBot
+import ao.snakewarz.bots.reactive.TomSnakeBot
+import ao.snakewarz.bots.reactive.WallHugBot
+import ao.snakewarz.bots.reactive.chase.ChaseBot
+import ao.snakewarz.bots.reactive.space.PressureBot
+import ao.snakewarz.bots.reactive.space.SpaceBot
+import ao.snakewarz.bots.search.FlatMonteCarloBot
+import ao.snakewarz.bots.search.puct.ExpertEval
+import ao.snakewarz.bots.search.puct.PuctBot
+import ao.snakewarz.bots.search.uct.UctBot
 
 /**
  * Every bot compiled into the app.

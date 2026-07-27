@@ -1,6 +1,6 @@
 package ao.snakewarz.bots
 
-import ao.snakewarz.botapi.BotId
+import ao.snakewarz.botapi.registry.BotId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -38,6 +38,40 @@ class ShippedBotsTest {
         // Twice, because the failure this guards against — iterating a HashMap — is intermittent by
         // nature, and reordering the registry silently reorders every tournament built on it.
         assertEquals(ShippedBots.entries.map { it.id }, ShippedBots.entries.map { it.id })
+    }
+
+    @Test
+    fun `the sidebar offers these and only these`() {
+        // A knob is offered to a player only when it is a material tradeoff -- no single best value,
+        // several valid ones, each a visibly different bot. Everything else is a hyperparameter a
+        // sweep settles better than a form does, and stays reachable from `:lab` and from a replay.
+        //
+        // Pinned rather than derived, because the failure it guards against is a knob quietly
+        // arriving on the sidebar: the default is `false`, so this fails only when somebody chose.
+        assertEquals(
+            mapOf(
+                "flat-monte-carlo" to listOf("budget"),
+                "uct" to listOf("budget", "exploration"),
+                "puct" to listOf("budget", "eval"),
+            ),
+            ShippedBots.entries
+                .filter { it.offered.isNotEmpty() }
+                .associate { entry -> entry.id.slug to entry.offered.map { it.name } },
+        )
+    }
+
+    @Test
+    fun `what a bot can be handed is more than what it is asked`() {
+        // The other half of the rule above: hiding a knob must not un-declare it, or `:lab` loses a
+        // dimension it measures in and an old replay carrying one stops meaning what it meant.
+        val uct = ShippedBots.entryOf(BotId("uct"))
+        assertEquals(listOf("exploration", "maxNodes", "rolloutDepth"), uct.params.map { it.name })
+
+        val puct = ShippedBots.entryOf(BotId("puct"))
+        assertEquals(
+            listOf("eval", "cpuct", "territoryWeight", "mobilityWeight", "trapPenalty", "separationBonus"),
+            puct.params.map { it.name },
+        )
     }
 
     @Test

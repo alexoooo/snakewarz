@@ -1,8 +1,11 @@
 package ao.snakewarz.bots
 
-import ao.snakewarz.botapi.BotEntry
-import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.botapi.Decision
+import ao.snakewarz.botapi.knob.BotParams
+import ao.snakewarz.botapi.registry.BotEntry
+import ao.snakewarz.bots.reactive.RandomBot
+import ao.snakewarz.bots.reactive.space.SpaceBot
+import ao.snakewarz.bots.search.uct.UctBot
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -68,7 +71,7 @@ class BotContractTest {
     fun `a different seed plays a different match, or the seed is being ignored`() {
         // Only meaningful for bots that consume randomness; a deterministic bot is exempt, and
         // saying which is which out loud is more useful than skipping the check.
-        val random = ShippedBots.entryOf(ao.snakewarz.botapi.BotId("random"))
+        val random = ShippedBots.entryOf(ao.snakewarz.botapi.registry.BotId("random"))
 
         val first = HeadlessMatch(listOf(random, random), rows = 14, cols = 14, seed = 1)
         val second = HeadlessMatch(listOf(random, random), rows = 14, cols = 14, seed = 2)

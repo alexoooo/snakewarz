@@ -79,7 +79,7 @@ private val exploration = EXPLORATION.read(setup.params)
 
 internal companion object {
     val SEARCH = BotKnob.Search(min = 0, max = 400_000, step = 10_000)
-    val EXPLORATION = BotKnob.Decimal("exploration", "Exploration", "...", default = 5.0, min = 0.1, max = 100.0, step = 0.1)
+    val EXPLORATION = BotKnob.Decimal("exploration", "Exploration", "...", default = 5.0, min = 0.1, max = 100.0, step = 0.1, tradeoff = true)
     val KNOBS: List<BotKnob> = listOf(SEARCH, EXPLORATION)
 }
 
@@ -106,6 +106,29 @@ only one of them. Four things about the shape:
 - Knob names are **frozen once released**, like a `BotId` and for the same reason: they travel in the
   replay URL of every match somebody configured.
 - Nothing else has to change. No HTML, no `:ui` code, no codec work.
+
+### Declaring one is not the same as offering one
+
+**`tradeoff = true` puts a knob on the sidebar, and it defaults to `false`.** A tradeoff is a choice
+with no single best answer: several values are valid, each produces a visibly different bot, and which
+one you want depends on what you are after. An allowance is the type case — bigger is stronger and
+slower, and neither end is wrong — so `BotKnob.Search` declares itself one and you get an allowance
+field by declaring an allowance.
+
+Everything else is a **hyperparameter**, and a sweep settles one better than a person staring at a
+form can. Those stay declared and stay off the sidebar. Declaring one still buys everything that
+matters: `:lab` sweeps it, a replay carries it, a test pins it, `BotParams` reads it. What it does not
+buy is a row in front of somebody who has no way to judge the number and no reason to expect the
+default is wrong.
+
+The two lists on `BotEntry` are that split. `params` is complete and is what `:lab` validates against;
+`offered` is the handful a form reads. Of the ten shipped bots, three offer anything at all: an
+allowance, `uct`'s `exploration`, and `puct`'s `eval`. `ShippedBotsTest` pins that list, so a knob
+cannot arrive on the sidebar without somebody having said so.
+
+The failure this prevents is quiet and was real: `puct` used to show four `ExpertEval` weights that do
+nothing at all unless `eval=expert`, so most of the time most of that panel was inert, and `uct`
+showed a tree ceiling the allowance already bounds. Neither was wrong, and neither was answerable.
 
 For a rollout, take `turn.scratch.playout()` and spin on `outcome`:
 

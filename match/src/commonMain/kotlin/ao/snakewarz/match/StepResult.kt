@@ -1,10 +1,10 @@
 package ao.snakewarz.match
 
-import ao.snakewarz.core.Direction
-import ao.snakewarz.core.EliminationReason
-import ao.snakewarz.core.MatchOutcome
-import ao.snakewarz.core.MoveOutcome
-import ao.snakewarz.core.SnakeId
+import ao.snakewarz.core.grid.Direction
+import ao.snakewarz.core.rules.EliminationReason
+import ao.snakewarz.core.rules.MatchOutcome
+import ao.snakewarz.core.rules.MoveOutcome
+import ao.snakewarz.core.snake.SnakeId
 
 /**
  * What one call to [Match.step] did. Exactly one thing, always — which is the point.

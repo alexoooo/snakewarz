@@ -1,6 +1,6 @@
 package ao.snakewarz.match
 
-import ao.snakewarz.core.Cell
+import ao.snakewarz.core.grid.Cell
 
 /**
  * The squares the last [Match.step] changed. Valid until the next one.

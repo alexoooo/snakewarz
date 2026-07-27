@@ -1,18 +1,32 @@
 package ao.snakewarz.ui
 
-import ao.snakewarz.botapi.BotRegistry
-import ao.snakewarz.core.Cell
-import ao.snakewarz.core.Direction
-import ao.snakewarz.core.MatchEnd
-import ao.snakewarz.core.MatchOutcome
-import ao.snakewarz.match.InputBuffer
+import ao.snakewarz.botapi.registry.BotRegistry
+import ao.snakewarz.core.grid.Cell
+import ao.snakewarz.core.grid.Direction
+import ao.snakewarz.core.rules.MatchEnd
+import ao.snakewarz.core.rules.MatchOutcome
 import ao.snakewarz.match.Match
-import ao.snakewarz.match.MatchRecord
 import ao.snakewarz.match.MatchSetup
-import ao.snakewarz.match.ReplayCodec
 import ao.snakewarz.match.StepResult
-import ao.snakewarz.match.Tournament
-import ao.snakewarz.match.TournamentConfig
+import ao.snakewarz.match.human.InputBuffer
+import ao.snakewarz.match.replay.MatchRecord
+import ao.snakewarz.match.replay.ReplayCodec
+import ao.snakewarz.match.tournament.Tournament
+import ao.snakewarz.match.tournament.TournamentConfig
+import ao.snakewarz.ui.chrome.Chrome
+import ao.snakewarz.ui.model.HoverInfo
+import ao.snakewarz.ui.model.MatchOptions
+import ao.snakewarz.ui.model.ReplayLink
+import ao.snakewarz.ui.model.SlotLabels
+import ao.snakewarz.ui.model.TournamentOptions
+import ao.snakewarz.ui.model.TournamentStatus
+import ao.snakewarz.ui.model.UiIntent
+import ao.snakewarz.ui.model.UiModel
+import ao.snakewarz.ui.render.BoardRenderer
+import ao.snakewarz.ui.render.prefersDark
+import ao.snakewarz.ui.render.tailClearsNext
+import ao.snakewarz.ui.schedule.TournamentRunner
+import ao.snakewarz.ui.schedule.TurnScheduler
 import kotlinx.browser.window
 
 /**
@@ -130,6 +144,10 @@ public class GameSession(
         when (intent) {
             is UiIntent.Hover -> return hover(renderer.cellAt(intent.clientX, intent.clientY))
             UiIntent.HoverEnded -> return hover(Cell.NONE)
+            // Beside the pointer and for its reason: re-measuring the board changes nothing about the
+            // match, so it is neither dropped while a batch owns the arena nor grounds for taking the
+            // arena back off one. Folding a panel away must not end somebody's tournament.
+            UiIntent.Relayout -> return refit()
             else -> Unit
         }
 
@@ -212,7 +230,12 @@ public class GameSession(
         renderer.paintOverlay(shown.view, hovered)
     }
 
-    /** Re-measures and repaints whichever match is on screen. Resize, and the theme changing. */
+    /**
+     * Re-measures and repaints whichever match is on screen.
+     *
+     * Resize, the theme changing, and anything that moves the chrome the board's track shares a
+     * column with — [UiIntent.Relayout], and entering or leaving replay, which reveals the scrub row.
+     */
     private fun refit() {
         val shown = batchBoard ?: match
         renderer.fit(shown.view)
@@ -256,6 +279,11 @@ public class GameSession(
         // already block, so stopping is not merely tidiness.
         batch.stop()
         batchBoard = null
+
+        // The chrome before the measure, which is the one ordering constraint here. The scrub row
+        // comes and goes with replay mode and sits in the board's own column, so measuring first
+        // would size the board against a row that is about to arrive — or one that has just left.
+        renderChrome()
         renderer.fit(match.view)
         refreshOverlay()
 

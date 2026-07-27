@@ -1,22 +1,22 @@
 package ao.snakewarz.bots
 
-import ao.snakewarz.botapi.BoardScratch
 import ao.snakewarz.botapi.Bot
-import ao.snakewarz.botapi.BotEntry
-import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Turn
-import ao.snakewarz.core.Board
+import ao.snakewarz.botapi.knob.BotParams
+import ao.snakewarz.botapi.registry.BotEntry
+import ao.snakewarz.botapi.scratch.BoardScratch
 import ao.snakewarz.core.Budget
-import ao.snakewarz.core.Direction
-import ao.snakewarz.core.DirectionSet
-import ao.snakewarz.core.EliminationReason
-import ao.snakewarz.core.Grid
-import ao.snakewarz.core.MatchOutcome
-import ao.snakewarz.core.RulesConfig
-import ao.snakewarz.core.SnakeId
-import ao.snakewarz.core.SplitMix64
+import ao.snakewarz.core.grid.Direction
+import ao.snakewarz.core.grid.DirectionSet
+import ao.snakewarz.core.grid.Grid
+import ao.snakewarz.core.random.SplitMix64
+import ao.snakewarz.core.rules.Board
+import ao.snakewarz.core.rules.EliminationReason
+import ao.snakewarz.core.rules.MatchOutcome
+import ao.snakewarz.core.rules.RulesConfig
+import ao.snakewarz.core.snake.SnakeId
 
 /**
  * A minimal turn loop, so `:bots` can test bots without reaching for `:match`.

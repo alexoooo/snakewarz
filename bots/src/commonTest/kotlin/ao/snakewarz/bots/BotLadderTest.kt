@@ -1,8 +1,8 @@
 package ao.snakewarz.bots
 
-import ao.snakewarz.botapi.BotEntry
-import ao.snakewarz.botapi.BotId
-import ao.snakewarz.core.SnakeId
+import ao.snakewarz.botapi.registry.BotEntry
+import ao.snakewarz.botapi.registry.BotId
+import ao.snakewarz.core.snake.SnakeId
 import kotlin.test.Test
 import kotlin.test.assertTrue
 

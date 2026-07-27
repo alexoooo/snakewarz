@@ -58,8 +58,29 @@ body {
     display: none;
 }
 
+/*
+ * One page. This is a game, not a document: the whole of it is on screen at once, and the only thing
+ * that scrolls is the sidebar.
+ *
+ * Applied to `booted` rather than to `body`, so #loading and #unsupported keep the ordinary block
+ * layout they are written for -- a failure panel is a document and should behave like one.
+ *
+ * Every `min-height: 0` below is load-bearing. A flex or grid item's automatic minimum size is its
+ * content, so without them the board column refuses to shrink past the board it contains, the page
+ * grows a scrollbar, and the whole arrangement quietly does nothing.
+ */
+body.booted {
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
 body.booted #app {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 
 body.failed #unsupported {
@@ -97,6 +118,15 @@ body.failed #loading {
 
 /* Layout ------------------------------------------------------------------- */
 
+/* One line rather than two: the height it saves is height the board gets. */
+header {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-bottom: 0.9rem;
+}
+
 header h1 {
     margin: 0;
     font-size: 1.35rem;
@@ -104,7 +134,7 @@ header h1 {
 }
 
 .tagline {
-    margin: 0.15rem 0 1.25rem;
+    margin: 0;
     color: var(--ink-dim);
     font-size: 0.9rem;
 }
@@ -119,18 +149,48 @@ header h1 {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 18rem;
     gap: 1.5rem;
-    align-items: start;
+    align-items: stretch;
     max-width: 74rem;
+    flex: 1;
+    min-height: 0;
 }
 
+/*
+ * Narrow enough that the two columns stack, and two full-height panels cannot: the sidebar would get
+ * a viewport of its own under a board that already used one. So the page goes back to being a page.
+ */
 @media (max-width: 52rem) {
     .arena {
         grid-template-columns: minmax(0, 1fr);
+        min-height: 0;
+    }
+
+    body.booted {
+        height: auto;
+        overflow: visible;
+        display: block;
+    }
+
+    body.booted #app {
+        display: block;
+    }
+
+    .sidebar {
+        overflow: visible;
     }
 }
 
+/*
+ * Rows, for the reason .arena has columns. The board measures this panel, so the track it sits in
+ * has to have a height of its own that the canvas inside cannot influence -- `minmax(0, 1fr)` is
+ * that, and it is the vertical half of the circularity the comment above .arena describes. The
+ * chrome under it is `auto`, so the board gets whatever is left and nothing overflows the page.
+ */
 .board-panel {
     min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto auto auto auto;
 }
 
 /*
@@ -146,8 +206,10 @@ header h1 {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     justify-items: center;
+    align-content: center;
     position: relative;
     min-width: 0;
+    min-height: 0;
 }
 
 #board,
@@ -245,18 +307,30 @@ header h1 {
 
 /* Tournament --------------------------------------------------------------- */
 
+/*
+ * A disclosure rather than a section, so a page that must fit pays one line for a feature most
+ * matches never use. Open, it takes its room out of the board above it rather than off the bottom of
+ * the page -- which is the whole point of the `minmax(0, 1fr)` board row, and why opening it asks
+ * the renderer to refit.
+ */
 .tournament {
-    margin-top: 1.5rem;
-    padding-top: 1.1rem;
+    margin-top: 1rem;
+    padding-top: 0.9rem;
     border-top: 1px solid var(--line);
+    min-height: 0;
 }
 
-.tournament h2 {
-    margin: 0;
+.tournament > summary {
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.07em;
     color: var(--ink-dim);
+    cursor: pointer;
+    user-select: none;
+}
+
+.tournament > summary:hover {
+    color: var(--ink);
 }
 
 .tournament select {
@@ -277,7 +351,8 @@ header h1 {
 #tournament-table {
     margin: 0.9rem 0 0;
     padding: 0.75rem 0.9rem;
-    overflow-x: auto;
+    max-height: 40vh;
+    overflow: auto;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 8px;
@@ -338,11 +413,14 @@ input[type="number"] {
 
 /* Sidebar ------------------------------------------------------------------ */
 
+/* The one scrollable region on the page, which is what buys everything else a fixed height. */
 .sidebar {
     padding: 1rem 1.25rem 1.25rem;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 10px;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 .sidebar section + section {
@@ -402,24 +480,6 @@ input[type="number"] {
 
 .slot.out .swatch {
     opacity: 0.35;
-}
-
-.stats {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 0.25rem 0.7rem;
-    margin: 0;
-    font-size: 0.9rem;
-}
-
-.stats dt {
-    color: var(--ink-dim);
-}
-
-.stats dd {
-    margin: 0;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
 }
 
 .setup {
@@ -520,11 +580,6 @@ input[type="number"] {
     margin: 0.75rem 0 0;
     color: var(--ink-dim);
     font-size: 0.8rem;
-}
-
-footer {
-    max-width: 74rem;
-    margin-top: 1.25rem;
 }
 
 kbd {

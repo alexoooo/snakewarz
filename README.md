@@ -49,11 +49,16 @@ to the same bot at two evaluations and running a tournament is how those numbers
 
 ## Settings
 
-A bot that has anything worth tuning says so, and the sidebar offers it: pick UCT in a slot, open
-**Settings** under it, and there is its search allowance, its exploration constant, its tree ceiling
-and its rollout depth. Each seat is configured on its own, so one bot can play another copy of itself
-set up differently. Nothing about this is hard-coded in the page — the rows come off the same
-registry the pickers do, so a contributed bot's knobs appear by declaring them and nothing else.
+A bot with a real choice to offer says so, and the sidebar offers it: pick UCT in a slot, open
+**Settings** under it, and there is its search allowance and its exploration constant. Each seat is
+configured on its own, so one bot can play another copy of itself set up differently. Nothing about
+this is hard-coded in the page — the rows come off the same registry the pickers do, so a contributed
+bot's settings appear by declaring them and nothing else.
+
+The bar for appearing there is deliberately high: a **tradeoff**, meaning several values are valid and
+each plays visibly differently, rather than a number a sweep settles better than you can. A bot's other
+tunables are still declared and still reachable — `:lab` sweeps them and a replay link carries them —
+they just do not take up a row in front of somebody with no way to judge them.
 
 The allowance is counted in simulated moves rather than milliseconds, which is what keeps a match
 reproducible on any machine. Everything you change travels in the replay link, so a shared match says

@@ -47,6 +47,13 @@
         <p class="tagline">Tron-style snakes as an AI testbed</p>
     </header>
 
+    <!--
+      One page, no document scroll: #app is a viewport-height column, the board column shrinks its
+      board to whatever is left, and the sidebar is the one thing here that scrolls. That is why the
+      tournament below is a <details> rather than a section -- closed it costs a line, and open it
+      takes the room out of the board rather than off the bottom of the page.
+    -->
+
     <div class="arena">
         <section class="board-panel">
             <div class="board-wrap" id="board-wrap">
@@ -77,8 +84,8 @@
 
             <p id="status" role="status">Starting&hellip;</p>
 
-            <section class="tournament">
-                <h2>Tournament</h2>
+            <details class="tournament" id="tournament">
+                <summary>Tournament</summary>
                 <div class="transport">
                     <button id="run-tournament" type="button">Run tournament</button>
                     <label for="format">Format</label>
@@ -102,7 +109,7 @@
                     columns. Free-for-all seats all of them in every match &mdash; rows outlasted
                     columns.
                 </p>
-            </section>
+            </details>
         </section>
 
         <aside class="sidebar">
@@ -134,20 +141,6 @@
                         <span class="fate"></span>
                     </li>
                 </ol>
-            </section>
-
-            <section>
-                <h2>Match</h2>
-                <dl class="stats">
-                    <dt>Turns</dt>
-                    <dd id="stat-turns">0</dd>
-                    <dt>Rounds</dt>
-                    <dd id="stat-rounds">0</dd>
-                    <dt>Filled</dt>
-                    <dd id="stat-filled">0%</dd>
-                    <dt>Longest</dt>
-                    <dd id="stat-longest">&mdash;</dd>
-                </dl>
             </section>
 
             <section>
@@ -218,16 +211,17 @@
                     move, no server involved; open one and it plays back here too.
                 </p>
             </section>
+
+            <section>
+                <h2>Keys</h2>
+                <p class="note">
+                    Arrow keys or WASD to move &mdash; with you in the match nothing happens until
+                    you press one, and holding a key keeps going that way. Space plays and pauses a
+                    match between bots, <kbd>.</kbd> steps it one turn.
+                </p>
+            </section>
         </aside>
     </div>
-
-    <footer>
-        <p class="note">
-            Arrow keys or WASD to move &mdash; with you in the match nothing happens until you press
-            one, and holding a key keeps going that way. Space plays and pauses a match between
-            bots, <kbd>.</kbd> steps it one turn.
-        </p>
-    </footer>
 </main>
 
 <script>

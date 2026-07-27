@@ -1,7 +1,7 @@
 package ao.snakewarz.match
 
-import ao.snakewarz.core.EliminationReason
-import ao.snakewarz.core.SnakeId
+import ao.snakewarz.core.rules.EliminationReason
+import ao.snakewarz.core.snake.SnakeId
 
 /**
  * A turn on which a snake left the match without moving — the replay's side table.

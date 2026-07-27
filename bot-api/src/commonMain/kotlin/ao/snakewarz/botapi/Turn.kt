@@ -1,10 +1,11 @@
 package ao.snakewarz.botapi
 
-import ao.snakewarz.core.BoardView
+import ao.snakewarz.botapi.scratch.Scratch
 import ao.snakewarz.core.Budget
-import ao.snakewarz.core.DirectionSet
-import ao.snakewarz.core.SnakeId
-import ao.snakewarz.core.SnakeView
+import ao.snakewarz.core.grid.DirectionSet
+import ao.snakewarz.core.rules.BoardView
+import ao.snakewarz.core.snake.SnakeId
+import ao.snakewarz.core.snake.SnakeView
 
 /**
  * Everything a bot is given for one decision.

@@ -1,6 +1,6 @@
 package ao.snakewarz.botapi
 
-import ao.snakewarz.core.Direction
+import ao.snakewarz.core.grid.Direction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame

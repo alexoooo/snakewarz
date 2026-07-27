@@ -1,6 +1,6 @@
 package ao.snakewarz.bots
 
-import ao.snakewarz.botapi.BotId
+import ao.snakewarz.botapi.registry.BotId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -101,7 +101,7 @@ class GoldenMoveStreamTest {
             "random",
             "random",
             seed = 11,
-            rules = ao.snakewarz.core.RulesConfig(growEveryNthMove = 1),
+            rules = ao.snakewarz.core.rules.RulesConfig(growEveryNthMove = 1),
         )
 
         assertEquals(false, halfSpeed == tron)
@@ -114,7 +114,7 @@ class GoldenMoveStreamTest {
         rows: Int = 20,
         cols: Int = 20,
         budgetPerTurn: Int = 1_000,
-        rules: ao.snakewarz.core.RulesConfig = ao.snakewarz.core.RulesConfig(),
+        rules: ao.snakewarz.core.rules.RulesConfig = ao.snakewarz.core.rules.RulesConfig(),
     ): Long {
         val match = HeadlessMatch(
             listOf(ShippedBots.entryOf(BotId(first)), ShippedBots.entryOf(BotId(second))),

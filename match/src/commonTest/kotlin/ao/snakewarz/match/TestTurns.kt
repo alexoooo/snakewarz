@@ -1,11 +1,11 @@
 package ao.snakewarz.match
 
-import ao.snakewarz.botapi.BoardScratch
 import ao.snakewarz.botapi.Turn
-import ao.snakewarz.core.Board
+import ao.snakewarz.botapi.scratch.BoardScratch
 import ao.snakewarz.core.Budget
-import ao.snakewarz.core.Grid
-import ao.snakewarz.core.SnakeId
+import ao.snakewarz.core.grid.Grid
+import ao.snakewarz.core.rules.Board
+import ao.snakewarz.core.snake.SnakeId
 
 /**
  * A one-snake board in the middle of open space, for tests about what a bot decides rather than

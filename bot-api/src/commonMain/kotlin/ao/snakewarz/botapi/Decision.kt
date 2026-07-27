@@ -1,6 +1,6 @@
 package ao.snakewarz.botapi
 
-import ao.snakewarz.core.Direction
+import ao.snakewarz.core.grid.Direction
 
 /**
  * What a bot decided to do this turn.

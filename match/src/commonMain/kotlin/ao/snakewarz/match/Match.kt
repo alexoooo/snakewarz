@@ -1,25 +1,30 @@
 package ao.snakewarz.match
 
-import ao.snakewarz.botapi.BoardScratch
 import ao.snakewarz.botapi.Bot
-import ao.snakewarz.botapi.BotRegistry
 import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
-import ao.snakewarz.botapi.Scratch
 import ao.snakewarz.botapi.Turn
-import ao.snakewarz.core.Board
-import ao.snakewarz.core.BoardView
+import ao.snakewarz.botapi.registry.BotRegistry
+import ao.snakewarz.botapi.scratch.BoardScratch
+import ao.snakewarz.botapi.scratch.Scratch
 import ao.snakewarz.core.Budget
-import ao.snakewarz.core.Cell
-import ao.snakewarz.core.Direction
-import ao.snakewarz.core.EliminationReason
-import ao.snakewarz.core.Grid
-import ao.snakewarz.core.MatchOutcome
-import ao.snakewarz.core.MatchState
-import ao.snakewarz.core.MoveOutcome
-import ao.snakewarz.core.Rng
-import ao.snakewarz.core.SnakeId
-import ao.snakewarz.core.SplitMix64
+import ao.snakewarz.core.grid.Cell
+import ao.snakewarz.core.grid.Direction
+import ao.snakewarz.core.grid.Grid
+import ao.snakewarz.core.random.Rng
+import ao.snakewarz.core.random.SplitMix64
+import ao.snakewarz.core.rules.Board
+import ao.snakewarz.core.rules.BoardView
+import ao.snakewarz.core.rules.EliminationReason
+import ao.snakewarz.core.rules.MatchOutcome
+import ao.snakewarz.core.rules.MatchState
+import ao.snakewarz.core.rules.MoveOutcome
+import ao.snakewarz.core.snake.SnakeId
+import ao.snakewarz.match.replay.DirectionStream
+import ao.snakewarz.match.replay.MatchRecord
+import ao.snakewarz.match.replay.ScriptedRegistry
+import ao.snakewarz.match.stats.MatchStats
+import ao.snakewarz.match.stats.SlotStats
 
 /**
  * Runs a match, one turn at a time, and records it as it goes.

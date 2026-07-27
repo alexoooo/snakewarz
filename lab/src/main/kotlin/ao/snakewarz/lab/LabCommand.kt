@@ -1,15 +1,15 @@
 package ao.snakewarz.lab
 
-import ao.snakewarz.botapi.BotId
-import ao.snakewarz.botapi.BotKnob
-import ao.snakewarz.botapi.BotParams
-import ao.snakewarz.botapi.BotRegistry
-import ao.snakewarz.match.Contestant
+import ao.snakewarz.botapi.knob.BotKnob
+import ao.snakewarz.botapi.knob.BotParams
+import ao.snakewarz.botapi.registry.BotId
+import ao.snakewarz.botapi.registry.BotRegistry
 import ao.snakewarz.match.Match
 import ao.snakewarz.match.MatchSetup
-import ao.snakewarz.match.Tournament
-import ao.snakewarz.match.TournamentConfig
-import ao.snakewarz.match.TournamentFormat
+import ao.snakewarz.match.tournament.Contestant
+import ao.snakewarz.match.tournament.Tournament
+import ao.snakewarz.match.tournament.TournamentConfig
+import ao.snakewarz.match.tournament.TournamentFormat
 import kotlin.time.Duration
 import kotlin.time.TimeSource
 
@@ -18,7 +18,7 @@ import kotlin.time.TimeSource
  *
  * Two subcommands, because strength and cost are different measurements and conflating them would
  * produce a number about neither. [Play] answers "which of these is better", by running the real
- * [Tournament] over the real [ao.snakewarz.match.TournamentTable]. [Time] answers "what does one turn
+ * [Tournament] over the real [ao.snakewarz.match.tournament.TournamentTable]. [Time] answers "what does one turn
  * of this cost", which a matrix cannot: a two-bot match's elapsed time is the *sum* of both bots'
  * thinking, so a per-contestant figure taken off a shared match is a figure about the pairing.
  *

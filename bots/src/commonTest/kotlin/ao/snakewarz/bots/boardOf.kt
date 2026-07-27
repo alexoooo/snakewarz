@@ -1,19 +1,19 @@
 package ao.snakewarz.bots
 
-import ao.snakewarz.botapi.BoardScratch
 import ao.snakewarz.botapi.Bot
-import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Turn
-import ao.snakewarz.core.Board
+import ao.snakewarz.botapi.knob.BotParams
+import ao.snakewarz.botapi.scratch.BoardScratch
 import ao.snakewarz.core.Budget
-import ao.snakewarz.core.Cell
-import ao.snakewarz.core.Direction
-import ao.snakewarz.core.Grid
-import ao.snakewarz.core.RulesConfig
-import ao.snakewarz.core.SnakeId
-import ao.snakewarz.core.SplitMix64
+import ao.snakewarz.core.grid.Cell
+import ao.snakewarz.core.grid.Direction
+import ao.snakewarz.core.grid.Grid
+import ao.snakewarz.core.random.SplitMix64
+import ao.snakewarz.core.rules.Board
+import ao.snakewarz.core.rules.RulesConfig
+import ao.snakewarz.core.snake.SnakeId
 
 /**
  * Hand-built positions, for the tests that are about *one* decision rather than a whole match.

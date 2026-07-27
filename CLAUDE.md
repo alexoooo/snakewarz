@@ -41,11 +41,11 @@ hundred matches without the page stopping.
 
 | Path | Status |
 |---|---|
-| `core/` | `:core` module. Padded-grid primitives plus the rules engine: `Occupancy`, `Board`, `MatchState`, `SplitMix64`, `Budget` |
-| `bot-api/` | `:bot-api` module. `Bot`, `Decision`, `Turn`, `BotSetup`, `BotRegistry`, `BotKnob` — what a bot lets you tune — plus `Scratch`/`Playout`, the search arena that makes the budget structural |
-| `bots/` | `:bots` module. Ten bots and `ShippedBots`, the `BotRegistry` implementation, over the `internal` search primitives `FloodFill`, `ShortestPaths`, `SpaceOwnership`, `nearestOpponent`, `randomPlayout`, `truncatedPlayout`, `portableLog`, `UctTree`, `PuctTree` and `LeafEval` |
-| `match/` | `:match` module. `Match` driver, `MatchSetup`, `MatchRecord`, `ReplayCodec`, spawn placement, `MatchStats`, `Tournament`, and human input — `InputBuffer`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM |
-| `ui/` | `:ui` module. `GameSession` — the only public class — over `BoardRenderer`, `TurnScheduler`, `TournamentRunner`, `Chrome` and `Palette` |
+| `core/` | `:core` module. Padded-grid primitives plus the rules engine, under `grid`, `snake`, `rules` and `random` — `Occupancy`, `SnakeBody`, `Board`, `MatchState`, `SplitMix64` — with `Budget` at the root |
+| `bot-api/` | `:bot-api` module. The contract at the root — `Bot`, `Decision`, `Turn`, `BotSetup` — over `registry` (`BotId`, `BotEntry`, `BotFactory`, `BotRegistry`), `knob`, what a bot lets you tune, and `scratch`, the search arena that makes the budget structural |
+| `bots/` | `:bots` module. `ShippedBots`, the `BotRegistry` implementation, at the root over ten bots. Each cluster keeps the primitive only it reads: `reactive.chase` holds `ChaseBot` with `ShortestPaths` and `nearestOpponent`, `reactive.space` the two room-ranking bots with `FloodFill`, `search.uct` the trees' `portableLog` and `truncatedPlayout`, `search.puct` the `LeafEval` family. `search` itself keeps what both trees read — `randomPlayout`, `SpaceOwnership` — and the flat baseline |
+| `match/` | `:match` module. `Match` driver, `MatchSetup` and spawn placement at the root, over `replay` (`MatchRecord`, `ReplayCodec`), `stats`, `tournament`, and `human` — `InputBuffer`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM |
+| `ui/` | `:ui` module. `GameSession` — the only public class — over `render` (`BoardRenderer`, `Palette`), `chrome`, `model` and `schedule` (`TurnScheduler`, `TournamentRunner`) |
 | `app/` | `:app` module. `main()`, registry injection and `#r=` replay routing. Sixty lines, and that is the point |
 | `lab/` | `:lab` module. A JVM command line for running batches headlessly — the one place outside `:ui` where a clock and a `println` live |
 | `build-logic/` | Convention plugins `snakewarz.pure`, `snakewarz.browser` and `snakewarz.tool`, sharing `registerModulePurityCheck` |
@@ -83,10 +83,11 @@ seeded matches, shareable replays encoded in the URL hash, per-match stats, and 
 **Why seven Gradle modules rather than seven packages in one:** the compiler is the only enforcement
 that cannot be bypassed under pressure, and this is meant to keep growing — at the size this is aimed
 at, "the engine physically cannot reference the DOM" has to be a build fact rather than a convention
-somebody remembers. Kotlin's `internal` is module-scoped, so a sub-package buys path depth and no
-boundary at all; a module buys a real fence *and* a `checkModulePurity` edge. The per-module KMP
-configuration that would make this expensive is solved once, in a convention plugin. That is
-[CC-06](docs/Coding-Standards.md#cc-06--the-module-is-the-package).
+somebody remembers. Kotlin's `internal` is module-scoped, so only a module buys a real fence *and* a
+`checkModulePurity` edge. The per-module KMP configuration that would make this expensive is solved
+once, in a convention plugin. Modules are the fences; the sub-packages *inside* each one are how it
+stays readable, and that pair is
+[CC-06](docs/Coding-Standards.md#cc-06--a-package-is-a-handful-of-files).
 
 The `jvm()` target on the four pure modules exists **only to run tests fast** — it is never deployed and
 contributes nothing to the wasm bundle. It doubles as a second compiler proving those modules are
@@ -156,7 +157,7 @@ tail clear first is a materially different game, one where a snake can chase its
 **[`docs/Coding-Standards.md`](docs/Coding-Standards.md) is the rule set every change is reviewed
 against — determinism, the hot path, naming, comments, tests, module purity.** Read it before the
 first change, not after the first review. Each rule carries an id so a review can cite one: `SW-NN`
-are this project's own, `CC-NN` share their numbering and intent with the sibling kzen project.
+are this project's own, `CC-NN` are the general code-craft rules.
 
 These five break something *silently* when missed, so they are worth knowing before you open it:
 

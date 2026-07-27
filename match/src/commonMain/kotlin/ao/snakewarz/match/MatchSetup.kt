@@ -1,11 +1,11 @@
 package ao.snakewarz.match
 
-import ao.snakewarz.botapi.BotId
-import ao.snakewarz.botapi.BotParams
-import ao.snakewarz.core.Grid
-import ao.snakewarz.core.Occupancy
-import ao.snakewarz.core.RulesConfig
-import ao.snakewarz.core.SplitMix64
+import ao.snakewarz.botapi.knob.BotParams
+import ao.snakewarz.botapi.registry.BotId
+import ao.snakewarz.core.grid.Grid
+import ao.snakewarz.core.grid.Occupancy
+import ao.snakewarz.core.random.SplitMix64
+import ao.snakewarz.core.rules.RulesConfig
 
 /**
  * Everything needed to set a match up, and the header of its replay.
@@ -120,7 +120,7 @@ public class MatchSetup(
 
     public fun grid(): Grid = Grid(rows, cols)
 
-    /** The spawns translated into [grid]'s padded address space, which is what [ao.snakewarz.core.Board] wants. */
+    /** The spawns translated into [grid]'s padded address space, which is what [ao.snakewarz.core.rules.Board] wants. */
     internal fun spawnCells(grid: Grid): IntArray =
         IntArray(slotCount) { grid.cellAt(starts[it] / cols, starts[it] % cols).index }
 

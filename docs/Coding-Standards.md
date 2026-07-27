@@ -8,12 +8,9 @@ Every rule has an id, so a review or a commit can cite one ("violates SW-01").
 
 - **`SW-NN`** are snakewarz's own. Get one wrong and the code still compiles, still passes most of the
   suite, and then reproduces differently in the browser than it did on the JVM.
-- **`CC-NN`** share their numbering and intent with the sibling kzen project
-  (`kzen/docs/CODING_STANDARDS.md`), so a citation carries across. The numbering is kept in step
-  deliberately: `CC-14` is absent because it governs kzen's release train and there is nothing here it
-  could apply to. Where this project reaches a different answer the rule says so — `CC-06` is the one
-  that inverts outright, because Kotlin's visibility model makes the module, not the package, the
-  boundary that matters.
+- **`CC-NN`** are general code-craft rules — the ones that recur in AI-generated code and would apply
+  to any Kotlin codebase of this shape. Ids are permanent and never reused, so a citation stays valid
+  for as long as the rule does; the numbering has gaps where one was retired.
 
 The architecture these rules serve is in [`../CLAUDE.md`](../CLAUDE.md), which holds the module graph
 and the forbidden edges, gives the reasoning behind both, and routes to the per-module detail in this
@@ -36,7 +33,7 @@ in the rule.
 | [CC-03](#cc-03--scalability-of-code) | Scalability of code |
 | [CC-04](#cc-04--coherence-of-related-concepts) | Coherence of related concepts |
 | [CC-05](#cc-05--single-purpose-code-paths) | Single-purpose code paths |
-| [CC-06](#cc-06--the-module-is-the-package) | The module is the package |
+| [CC-06](#cc-06--a-package-is-a-handful-of-files) | A package is a handful of files |
 | [CC-07](#cc-07--drive-by-refactoring-and-cleanup) | Drive-by refactoring and cleanup |
 | [CC-08](#cc-08--fail-fast-on-unexpected-code-paths) | Fail-fast on unexpected code paths |
 | [CC-09](#cc-09--stub-markers-encode-intent) | Stub markers encode intent |
@@ -431,25 +428,44 @@ injected where" instead of "read one function". The predicate variant adds a sec
 upward import locks the generic layer to one feature, so the generic stops being reusable.
 
 
-## CC-06 — The module is the package
+## CC-06 — A package is a handful of files
 
-**In this repo the *module* is the unit of packaging, not the sub-package. Each module holds one flat
-package named after it, and when that package outgrows itself the answer is a new module, not a
-sub-package.**
+**A package holds a handful of files. Five is comfortable, ten is a smell, twenty means the split is
+overdue. When a package outgrows itself, break it into sub-packages by responsibility, and give a
+class cluster a package of its own.**
 
-This is a deliberate departure from kzen, where the same id means "a few files per package; 10+ is a
-smell". Here `ao.snakewarz.bots` holds twenty-five files and that is correct: Kotlin's `internal` is
-**module**-scoped, so a sub-package inside a module adds path depth while adding no boundary at all,
-whereas a new module gets a real fence *and* a `checkModulePurity` edge.
+The module and the package answer different questions, and neither substitutes for the other:
 
-So the smell to watch for is not file count, it is a module that has acquired a second
-responsibility. The module table in [`../CLAUDE.md`](../CLAUDE.md#module-graph) states each module's
-one job; if new code does not fit any of those sentences, that is the signal.
+- A **module** is an *enforcement* boundary. It is what turns a forbidden edge into a build failure,
+  and it is what `internal` is scoped to. Add one when a responsibility needs a fence — the module
+  table in [`../CLAUDE.md`](../CLAUDE.md#module-graph) states each module's one job, and code that
+  fits none of those sentences is the signal.
+- A **package** is a *navigation* boundary. It is free to add, enforced by nothing, and exists so a
+  reader opening a module sees a few named groups instead of one wall of files.
 
-**Why:** Browseability and removability, same as kzen's rule — reached differently because the
-visibility model is different. Splitting `:bots` into `bots.search`, `bots.eval` and `bots.ladder`
-would make every primitive equally visible to everything it was before, and would only make the
-import list longer.
+So a module holding twenty-five files is not by itself wrong; twenty-five files in *one* package is.
+
+**Split along what uses what, never by what kind of thing a file is.** A package named for a *kind* —
+`eval`, `impls`, `helpers`, `types`, `utils` — reads as organised and is not: it collects files whose
+only shared property is a suffix, and it puts each one a package away from the single thing that
+calls it. The test is the call graph. `ExpertEval` is read by `PuctBot` and nothing else, so it lives
+beside `PuctBot` in `search.puct`, not in an `eval` package with `MobilityEval` — those two are
+siblings in name only. A file with one consumer belongs in that consumer's package; a file with
+consumers in several packages belongs in the nearest package enclosing them.
+
+**A package is one kind of thing, and a tight cluster inside it gets nested out.** If some files in a
+package are bound to each other and the rest are not, that asymmetry is invisible in a flat listing —
+so make it structural. `reactive` lists bots; `ShortestPaths` and `nearestOpponent` are read by
+`ChaseBot` and nothing else, so the three of them are `reactive.chase` rather than two helpers shelved
+among six unrelated bots. The reader should be able to open a package, see that everything in it
+belongs together, and descend only where the names say there is more.
+
+The `internal` primitives stay `internal` and stay equally visible across the new sub-packages, and
+that is fine: the split buys browseability and does not pretend to buy a boundary.
+
+**Why:** Browseability and removability. A flat package of twenty-five files has no reading order and
+no seam to delete along. The same files under four names say what the module is made of before you
+open anything, and a whole concern can be lifted out by its directory.
 
 
 ## CC-07 — Drive-by refactoring and cleanup
@@ -633,8 +649,10 @@ future edit to walk both copies, and silently rewards drift.
 
 ## CC-13 — Test colocation
 
-**Tests live in the same Gradle module and the same package as the code they cover** — `Foo` in
-`:core` under `ao.snakewarz.core` is tested by `FooTest` in `:core`'s test source set, same package.
+**Tests live in the same Gradle module and the same package as the code they cover** — `Board` in
+`:core` under `ao.snakewarz.core.rules` is tested by `BoardRulesTest` in `:core`'s test source set,
+under that same sub-package. When [CC-06](#cc-06--a-package-is-a-handful-of-files) splits a package,
+the test tree moves with it.
 
 - **`commonTest` by default.** All four pure modules keep their suites there, which means every test
   runs on the JVM for speed *and* proves the code is platform-free.
@@ -667,9 +685,8 @@ Two exceptions, both narrow: a sealed hierarchy whose variants are only meaningf
 may share the parent's file, and a private or `internal` type that is an implementation detail of the
 file's public class may live beside it. "They're related" is not enough.
 
-kzen's version of this rule continues "and a class cluster gets its own package"; here that clause
-belongs to [CC-06](#cc-06--the-module-is-the-package) instead — a cluster that wants a boundary wants
-a module.
+A cluster of classes that only make sense together gets its own *package*, not one shared file — that
+clause belongs to [CC-06](#cc-06--a-package-is-a-handful-of-files).
 
 **Why:** File names are the first index a reader uses, and a class hiding inside a sibling's file is
 invisible to file-based navigation.

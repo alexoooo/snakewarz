@@ -1,9 +1,9 @@
 package ao.snakewarz.match
 
-import ao.snakewarz.botapi.BotId
-import ao.snakewarz.botapi.BotParams
-import ao.snakewarz.core.Grid
-import ao.snakewarz.core.RulesConfig
+import ao.snakewarz.botapi.knob.BotParams
+import ao.snakewarz.botapi.registry.BotId
+import ao.snakewarz.core.grid.Grid
+import ao.snakewarz.core.rules.RulesConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -90,16 +90,16 @@ class MatchSetupTest {
         val slots = listOf(BotId("a"), BotId("b"))
 
         assertFailsWith<IllegalArgumentException>("duplicate spawn") {
-            MatchSetup(1, 5, 5, ao.snakewarz.core.RulesConfig(), 0, slots, intArrayOf(0, 1), intArrayOf(3, 3))
+            MatchSetup(1, 5, 5, ao.snakewarz.core.rules.RulesConfig(), 0, slots, intArrayOf(0, 1), intArrayOf(3, 3))
         }
         assertFailsWith<IllegalArgumentException>("turn order names a slot twice") {
-            MatchSetup(1, 5, 5, ao.snakewarz.core.RulesConfig(), 0, slots, intArrayOf(1, 1), intArrayOf(0, 3))
+            MatchSetup(1, 5, 5, ao.snakewarz.core.rules.RulesConfig(), 0, slots, intArrayOf(1, 1), intArrayOf(0, 3))
         }
         assertFailsWith<IllegalArgumentException>("spawn off the board") {
-            MatchSetup(1, 5, 5, ao.snakewarz.core.RulesConfig(), 0, slots, intArrayOf(0, 1), intArrayOf(0, 999))
+            MatchSetup(1, 5, 5, ao.snakewarz.core.rules.RulesConfig(), 0, slots, intArrayOf(0, 1), intArrayOf(0, 999))
         }
         assertFailsWith<IllegalArgumentException>("negative budget") {
-            MatchSetup(1, 5, 5, ao.snakewarz.core.RulesConfig(), -1, slots, intArrayOf(0, 1), intArrayOf(0, 3))
+            MatchSetup(1, 5, 5, ao.snakewarz.core.rules.RulesConfig(), -1, slots, intArrayOf(0, 1), intArrayOf(0, 3))
         }
     }
 

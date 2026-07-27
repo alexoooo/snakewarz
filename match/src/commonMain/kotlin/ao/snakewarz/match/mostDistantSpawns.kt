@@ -1,6 +1,6 @@
 package ao.snakewarz.match
 
-import ao.snakewarz.core.Grid
+import ao.snakewarz.core.grid.Grid
 import kotlin.math.sqrt
 
 /**
@@ -17,7 +17,7 @@ import kotlin.math.sqrt
  * ties resolve to the lowest row and then the lowest column. Only `+`, `/` and `sqrt` are involved,
  * all of which are exactly specified on both the JVM and wasm.
  *
- * Squares are returned as **playable** indices, `row * cols + col` — not padded [ao.snakewarz.core.Cell]
+ * Squares are returned as **playable** indices, `row * cols + col` — not padded [ao.snakewarz.core.grid.Cell]
  * indices, because these go into the replay header and must not encode the engine's padding scheme.
  */
 internal fun mostDistantSpawns(grid: Grid, count: Int): IntArray {

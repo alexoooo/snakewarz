@@ -1,9 +1,9 @@
 package ao.snakewarz.lab
 
-import ao.snakewarz.botapi.BotId
+import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.bots.ShippedBots
 import ao.snakewarz.match.MatchSetup
-import ao.snakewarz.match.TournamentFormat
+import ao.snakewarz.match.tournament.TournamentFormat
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

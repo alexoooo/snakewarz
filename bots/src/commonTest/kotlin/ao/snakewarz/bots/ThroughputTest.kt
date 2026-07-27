@@ -1,7 +1,7 @@
 package ao.snakewarz.bots
 
-import ao.snakewarz.botapi.BotEntry
-import ao.snakewarz.botapi.BotId
+import ao.snakewarz.botapi.registry.BotEntry
+import ao.snakewarz.botapi.registry.BotId
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.time.TimeSource

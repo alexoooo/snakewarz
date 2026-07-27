@@ -1,7 +1,7 @@
 package ao.snakewarz.app
 
-import ao.snakewarz.match.MatchRecord
-import ao.snakewarz.match.ReplayCodec
+import ao.snakewarz.match.replay.MatchRecord
+import ao.snakewarz.match.replay.ReplayCodec
 import kotlinx.browser.window
 
 /**

@@ -1,13 +1,14 @@
 package ao.snakewarz.match
 
-import ao.snakewarz.botapi.BotId
-import ao.snakewarz.botapi.BotParams
-import ao.snakewarz.core.Direction
-import ao.snakewarz.core.EliminationReason
-import ao.snakewarz.core.MatchEnd
-import ao.snakewarz.core.MoveOutcome
-import ao.snakewarz.core.RulesConfig
-import ao.snakewarz.core.SnakeId
+import ao.snakewarz.botapi.knob.BotParams
+import ao.snakewarz.botapi.registry.BotId
+import ao.snakewarz.core.grid.Direction
+import ao.snakewarz.core.rules.EliminationReason
+import ao.snakewarz.core.rules.MatchEnd
+import ao.snakewarz.core.rules.MoveOutcome
+import ao.snakewarz.core.rules.RulesConfig
+import ao.snakewarz.core.snake.SnakeId
+import ao.snakewarz.match.replay.ReplayCodec
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

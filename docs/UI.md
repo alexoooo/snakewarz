@@ -41,7 +41,7 @@ the Play button reads "Pause" and says nothing is stopped. `Play` on a parked re
 means "again", exactly as it does on a finished match.
 
 While a batch runs it **owns the arena**: `GameSession` paints its current match and builds the whole
-`UiModel` from that match, so the board, the scoreboard and the stats cannot disagree. The transport
+`UiModel` from that match, so the board, the scoreboard and the status line cannot disagree. The transport
 is greyed, and `dispatch` drops transport intents outright — the space bar does not read the DOM's
 disabled flags. Touching the transport afterwards hands the arena back with a full `fit`, because the
 renderer paints one square at a time and would otherwise step a match onto somebody else's board.
@@ -56,9 +56,35 @@ mouse across a finished tournament's last position silently swaps it for the pla
 **The board is a fixed rectangle of device pixels** — `BoardRenderer.BOARD_EXTENT`, anchored to the
 `devicePixelRatio` the page opened at. The grid decides only how finely that rectangle is divided, so
 an 8x8 and a 40x40 occupy the same frame and zooming the page moves the text around a board that
-stays put. The container and the viewport height are clamps for a window it will not fit in, not
-inputs to the size. There is deliberately **no maximum cell size**: one is what used to make a small
-board small, and it would fight the extent at every size the picker offers.
+stays put. Its container's width and height are clamps for a box it will not fit in, not inputs to the
+size. There is deliberately **no maximum cell size**: one is what used to make a small board small,
+and it would fight the extent at every size the picker offers.
+
+### One page, and the one thing that scrolls
+
+**The page does not scroll; the sidebar does.** This is a game, not a document — `body.booted` is a
+`100dvh` column with `overflow: hidden`, `.sidebar` is the single `overflow-y: auto` region, and the
+board takes whatever height the chrome in its column leaves.
+
+That last part is the piece with a trap in it. `.board-panel` is a grid whose first row is
+`minmax(0, 1fr)`, and `BoardRenderer.fit` measures `.board-wrap`'s `clientHeight` — so the track has a
+height of its own that the canvas inside cannot influence. **This is the vertical half of the
+circularity `.arena`'s comment describes**: size the track from its content and the canvas sizes the
+box that sizes the canvas, which is how the board once came out different on every load. Every
+`min-height: 0` down that chain is load-bearing for the same reason — a flex or grid item's automatic
+minimum size is its content, so one missing `min-height` and the column refuses to shrink, the page
+grows a scrollbar, and the whole arrangement quietly does nothing.
+
+Anything that changes the height of the chrome beside the board therefore changes the board, and the
+`resize` listener will not hear about it. Two things do: the tournament disclosure opening or closing,
+which comes up as `UiIntent.Relayout` and is answered beside `Hover` for `Hover`'s reason — folding a
+panel must not take the arena off a running batch — and replay mode revealing the scrub row, which
+`GameSession` causes itself and so handles by rendering the chrome **before** it measures, in
+`begin()`.
+
+Below `52rem` the arena stacks into one column and the shell reverts to an ordinary scrolling page.
+Two full-height panels cannot share one viewport, and pretending otherwise gives the sidebar a
+viewport of its own underneath a board that already used one.
 
 ### The overlay canvas
 
@@ -116,6 +142,12 @@ becomes app state only when Start match calls `read()`. Two things there are loa
 - **Values equal to the declared default are omitted**, so an untouched seat yields
   `BotParams.EMPTY`, `MatchSetup.configured` stays false, and the replay URL of a stock match is
   byte-identical to the one the codec produced before any of this existed.
+- **The form shows `BotEntry.offered` and reads `BotEntry.params`**, and those are different lists —
+  see [Bots.md](Bots.md#declaring-one-is-not-the-same-as-offering-one). A knob no row exists for still
+  has a value: a replay carried one in, or somebody measured one in `:lab` and shared the link. So
+  `read()` walks the bot's whole declaration and falls back to what `applySetup` put in `remembered`.
+  Read the rows instead and a replay of `uct` at `rolloutDepth=25` rematches at `0` — the same
+  half-built feature `applySetup` exists to prevent, one level down.
 
 ## Deployment
 
