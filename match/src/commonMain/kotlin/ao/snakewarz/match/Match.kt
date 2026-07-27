@@ -1,7 +1,7 @@
 package ao.snakewarz.match
 
-import ao.snakewarz.botapi.Bot
 import ao.snakewarz.botapi.BoardScratch
+import ao.snakewarz.botapi.Bot
 import ao.snakewarz.botapi.BotRegistry
 import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision

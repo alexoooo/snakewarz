@@ -1,7 +1,7 @@
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
-/**
+/*
  * Convention for a *platform-free* module: pure common Kotlin, no browser and no JVM APIs.
  *
  * Ships as `wasmJs`. Also compiles for `jvm()` **purely to run tests fast** — that target is never
@@ -40,6 +40,8 @@ kotlin {
 tasks.matching { it.name == "wasmJsBrowserTest" }.configureEach {
     enabled = browserTests
 }
+
+applyKtlint()
 
 // ---------------------------------------------------------------------------------------------
 // Architectural enforcement.

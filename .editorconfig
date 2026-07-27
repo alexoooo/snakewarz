@@ -15,6 +15,32 @@ ij_kotlin_allow_trailing_comma_on_call_site = true
 ij_kotlin_name_count_to_use_star_import = 2147483647
 ij_kotlin_name_count_to_use_star_import_for_members = 2147483647
 
+# ktlint lints against the same style the IDE formats with -- `kotlin.code.style=official` is
+# IntelliJ's, and ktlint's own `ktlint_official` is a different, stricter one. Picking that would
+# mean the formatter and the linter disagreeing on every save.
+ktlint_code_style = intellij_idea
+
+# Five rules are off, and none of them for being inconvenient.
+#
+# The first three are wrapping rules that re-decide layout the IDE has already decided: they want a
+# class header, a function signature or an argument list collapsed onto one line whenever it fits
+# inside 120 columns. IntelliJ does not collapse those, so with the rules on, formatting the file and
+# linting it pull in opposite directions forever. Line length is still enforced, which is the part
+# that matters.
+ktlint_standard_class-signature = disabled
+ktlint_standard_function-signature = disabled
+ktlint_standard_argument-list-wrapping = disabled
+
+# A file holds one public top-level declaration and is named after it -- so a file whose declaration
+# is a function is named for a function: nearestOpponent.kt, portableLog.kt, mix64.kt. See SW-06 and
+# CC-15 in docs/CODING_STANDARDS.md.
+ktlint_standard_filename = disabled
+
+# A `when` branch carrying a why-comment counts as multiline, so this rule blank-line-separates every
+# branch of the `when` it sits in. Commented branches are the norm here (CC-02), so the rule's effect
+# is to punish the practice the standards require.
+ktlint_standard_blank-line-between-when-conditions = disabled
+
 [*.{yml,yaml,json,toml}]
 indent_size = 2
 

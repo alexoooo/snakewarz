@@ -30,6 +30,7 @@ hundred matches without the page stopping.
 | `app/` | `:app` module. `main()`, registry injection and `#r=` replay routing. Sixty lines, and that is the point |
 | `lab/` | `:lab` module. A JVM command line for running batches headlessly — the one place outside `:ui` where a clock and a `println` live |
 | `build-logic/` | Convention plugins `snakewarz.pure`, `snakewarz.browser` and `snakewarz.tool`, sharing `registerModulePurityCheck` |
+| `docs/CODING_STANDARDS.md` | The rules every change is reviewed against. **Read this before writing code** |
 | `docs/MIGRATION.md` | The design doc and phase log. **Read this before changing architecture** |
 
 `ShippedBots` has **three sections, and only the first is a ladder**. The ladder is registered weakest
@@ -226,14 +227,10 @@ constant. The seed is kept as provenance and as a CI verification input, never a
 truth.
 
 At the *bot* level this is closed rather than merely contained: `UctBot` takes its logarithm from
-`portableLog`, which is built from `+ - * /` only, so UCB1 picks the same move on both targets and
-the UCT golden hash reproduces bit-for-bit in Chrome. **Nothing in `:bots` may call `kotlin.math.ln`,
-`exp` or `pow`** — the failure it buys is a golden hash that passes on the JVM and fails in the
-browser, which reads as a codegen bug and is not one.
-
-`PuctBot` needs no logarithm at all: PUCT is `Q + c·P·sqrt(N)/(1+n)` and `sqrt` is exactly specified
-by IEEE-754, so the rule binds it without costing it anything. Its prior is proportional rather than
-a softmax for the same reason, and that is a feature — there is no temperature left to tune.
+`portableLog`, built from `+ - * /` only, so UCB1 picks the same move on both targets and the UCT
+golden hash reproduces bit-for-bit in Chrome. `PuctBot` needs no logarithm at all. That is rule
+**SW-02** in [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md), which is where the reasoning and
+the exact prohibition live.
 
 **4. Legality is evaluated *before* the tail retracts.** A snake may not move into the square its own tail
 is about to leave, even on a turn when that square is certain to clear. This is the legacy rule —
@@ -241,59 +238,38 @@ is about to leave, even on a turn when that square is certain to clear. This is 
 tail clear first is a materially different game, one where a snake can chase its own tail forever. It is
 `BoardRulesTest."a snake may not move into the square its own tail is about to leave"`.
 
-## Determinism rules
+## Coding standards
 
-A match must reproduce exactly. This is a hard invariant, not a nice-to-have.
+**[`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md) is the rule set every change is reviewed
+against — determinism, the hot path, naming, comments, tests, module purity.** Read it before the
+first change, not after the first review. Each rule carries an id so a review can cite one: `SW-NN`
+are this project's own, `CC-NN` share their numbering and intent with the sibling kzen project.
 
-- **No global RNG.** RNG is injected per slot, forked from the match seed (`matchRng.fork(slotIndex)`) so one
-  bot's consumption never shifts another's stream.
-- **Use the project's `SplitMix64`, not `kotlin.random.Random`.** A persisted URL replay format must not
-  depend on stdlib algorithm stability across Kotlin versions and targets.
-- **No `HashMap`/`HashSet` *iteration* in `:core` or `:bots`.** Use `LinkedHashMap` or sorted arrays. The
-  legacy code iterated a `HashMap` and was only *accidentally* stable because `PlayerAvatar.hashCode()`
-  returned a monotonic index.
-- **No wall-clock anything in `:core`, `:bot-api`, `:bots`, or `:match`.** Bot budgets are counted in
-  iterations, never milliseconds. Time lives in `:ui` and `:lab` only — and `:lab` is deliberately
-  outside all four rather than inside one of them, because a tool that reports how long a batch took
-  has to read a clock and a module a match runs through must not be able to.
+These five are the ones that break something *silently* when missed, so they are worth knowing before
+you open the document:
 
-## Conventions
+- **SW-01 Determinism** — RNG injected per slot and forked from the match seed, `SplitMix64` rather
+  than `kotlin.random.Random`, no `HashMap`/`HashSet` iteration in `:core` or `:bots`, no wall clock
+  below `:ui`.
+- **SW-02 Portable arithmetic** — nothing in `:bots` calls `ln`, `exp` or `pow`. `portableLog` and
+  `sqrt` are what reproduce bit-for-bit on both targets.
+- **SW-03 Hot path** — primitive arrays, no `Sequence`, no `data class`, no `List<Cell>` on a path
+  MCTS calls millions of times a turn; mutate-and-undo over allocating a state; search buffers are
+  constructor-allocated instance fields.
+- **SW-04 Module purity** — the forbidden edges above, `explicitApi()` everywhere, everything outside
+  a module's contract `internal`.
+- **SW-05 Frozen identifiers** — a released `BotId`, knob name or `Choice` value sits in the replay
+  URL of every match somebody shared. Renaming one breaks them all.
 
-- Root package **`ao.snakewarz`**; sub-packages mirror module names.
-- `explicitApi()` in every module. Anything outside a module's contract is `internal`.
-- **No version suffixes in names, ever.** No `v2` package, no `SnakesGame2`. Name for behaviour:
-  `UctBot` vs `FlatMonteCarloBot`.
-- **No `Foo`/`FooImpl`.** Either the class is concrete (`Board`, `MatchState`), or the interface names the
-  role and implementations name the mechanism (`Bot`/`UctBot`, `Rng`/`SplitMix64`). No `Util`/`Helper`
-  objects — use methods or extensions.
-- Value classes for ids: `Cell`, `SnakeId`, `BotId`, `DirectionSet`.
-- `rows`/`cols`, `row`/`col`. Not `numRows`, not `getRowCount`.
-- One public top-level declaration per file, named after it. Sealed hierarchies may share a file.
-- **Bot ids are stable lowercase slugs and are frozen once released** — they are embedded in the replay
-  format. Renaming one breaks every existing replay URL.
-- Fix legacy misspellings on sight; do not carry them forward: `deleget` → the concept is deleted;
-  `obsticles` → `obstacles`; `untill`, `seriese`, `demilited` → corrected; `utcSearch` → `uctSearch`
-  (legacy consistently swaps UCT and UTC, including in class docs).
-- `kotlin.code.style=official`, 4 spaces, 120 columns, ktlint in CI. Do **not** reproduce legacy's
-  `//------` banner comments or column-aligned assignments — they do not survive automated refactoring.
-
-### Hot-path rules
-
-The engine is called millions of times per turn from inside MCTS. In `:core` and `:bots`:
-
-- Primitive arrays (`IntArray`, `ByteArray`, `LongArray`) over `List<Int>`.
-- A `value class` over `Int` unboxes in most positions but **boxes as a generic type argument or when
-  nullable** — so `List<Cell>` allocates per element. No hot-path API returns a collection of `Cell`.
-- No `Sequence`. No `data class` for hot-path types (generated `equals`/`hashCode`/`copy` add code size and
-  invite allocation).
-- Prefer mutate-and-undo over allocating a new state. The engine's canonical representation is a mutable
-  arena with an undo journal; immutable `MatchState` snapshots are derived at most once per turn.
+Naming, file layout, comment style, fail-fast, test colocation and the rest are in the document.
 
 ## Commands
 
 ```bash
-./gradlew build                              # both targets, JVM tests, checkModulePurity
+./gradlew build                              # both targets, JVM tests, checkModulePurity, ktlintCheck
 ./gradlew jvmTest                            # fast inner loop, with breakpoints
+./gradlew ktlintFormat                       # fix what the style gate can fix by itself
+./gradlew -p build-logic ktlintCheck         # build-logic lints itself; root `check` depends on this
 ./gradlew allTests -PbrowserTests=true       # browser suite (needs Chrome; off by default)
 ./gradlew :app:wasmJsBrowserDevelopmentRun   # local dev server — yours. See below before an agent runs this
 ./gradlew :app:wasmJsBrowserDistribution     # production bundle -> app/build/dist/wasmJs/productionExecutable
@@ -318,6 +294,12 @@ tool is still honest.
 
 Browser tests are disabled unless `-PbrowserTests=true`, because Karma startup dominates the runtime
 of small suites. Anything provable on the JVM should be proven there instead.
+
+**A ktlint failure you fix by *deleting* the offending file can survive the fix.** The check task
+compares against its last *successful* run, so removing a file restores the inputs it already knows
+and it reports the old violation again without looking. Fixing the code in place is fine; deleting
+needs `--rerun-tasks` on that module. It is a ktlint-gradle behaviour, not something this build
+configures, and the build cache usually hides it.
 
 ### Never background `wasmJsBrowserDevelopmentRun` — serve the distribution instead
 

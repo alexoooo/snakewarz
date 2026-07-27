@@ -32,7 +32,9 @@ public class MatchRecord(
         var previous = -1
         for (event in terminals) {
             require(event.turnIndex > previous) { "terminal events must ascend by turn, saw ${event.turnIndex}" }
-            require(event.slot.index < setup.slotCount) { "terminal event names slot ${event.slot}, which is not playing" }
+            require(event.slot.index < setup.slotCount) {
+                "terminal event names slot ${event.slot}, which is not playing"
+            }
             previous = event.turnIndex
         }
     }
@@ -90,7 +92,11 @@ public class MatchRecord(
         }
 
         if (actual.terminals != terminals) {
-            return ReplayVerification(false, -1, "terminal events differ: recorded $terminals, replayed ${actual.terminals}")
+            return ReplayVerification(
+                false,
+                -1,
+                "terminal events differ: recorded $terminals, replayed ${actual.terminals}",
+            )
         }
 
         if (outcome != null && actual.outcome != outcome) {

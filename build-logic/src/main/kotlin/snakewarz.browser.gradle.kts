@@ -1,7 +1,7 @@
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
-/**
+/*
  * Convention for a browser-only module: may touch the DOM, the canvas and the clock.
  *
  * `wasmJs` only — no JVM target, because these modules cannot compile without browser APIs.
@@ -43,6 +43,8 @@ kotlin {
 tasks.matching { it.name == "wasmJsBrowserTest" }.configureEach {
     enabled = browserTests
 }
+
+applyKtlint()
 
 // A browser module may touch the DOM, but it is still layered. `:ui` renders a BoardView and a
 // MatchRecord and must not know which bot produced them — that is what keeps a replay a list of

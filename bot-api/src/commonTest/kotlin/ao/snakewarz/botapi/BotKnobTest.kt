@@ -9,7 +9,8 @@ import kotlin.test.assertTrue
 
 class BotKnobTest {
     private val count = BotKnob.Integer("maxNodes", "Tree nodes", "how big", default = 1024, min = 16, max = 4096)
-    private val rate = BotKnob.Decimal("exploration", "Exploration", "how wide", 5.0, min = 0.1, max = 100.0, step = 0.1)
+    private val rate =
+        BotKnob.Decimal("exploration", "Exploration", "how wide", 5.0, min = 0.1, max = 100.0, step = 0.1)
     private val flag = BotKnob.Flag("reuseTree", "Reuse tree", "keep it", default = false)
     private val eval = BotKnob.Choice(
         "eval", "Evaluation", "how a leaf is judged",

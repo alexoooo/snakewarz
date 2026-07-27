@@ -23,8 +23,8 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      # `build` compiles both targets, runs the fast JVM test suite, and runs
-      # checkModulePurity on every pure module. Browser tests are excluded here by design;
+      # `build` compiles both targets, runs the fast JVM test suite, and runs checkModulePurity
+      # and ktlintCheck on every module. Browser tests are excluded here by design;
       # they are the separate browser-conformance job below.
       - name: Build
         run: ./gradlew build --stacktrace

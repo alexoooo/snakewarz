@@ -1,6 +1,6 @@
 import org.gradle.api.artifacts.VersionCatalogsExtension
 
-/**
+/*
  * Convention for a *measuring instrument*: a JVM command-line tool, never deployed and never on the
  * wasm bundle's classpath.
  *
@@ -33,6 +33,8 @@ dependencies {
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 }
+
+applyKtlint()
 
 // The same architectural enforcement the other two conventions get, and for a module that sees more
 // than any of them it matters more: :lab reaches both a bot registry and the match driver, which

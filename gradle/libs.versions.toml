@@ -5,9 +5,19 @@ kotlin = "2.4.10"
 kotlinx-browser = "0.5.0"
 jvmToolchain = "21"
 
+# The linter and the Gradle plugin that runs it are released separately upstream, so they are
+# pinned separately. A new ktlint is a new rule set -- decide it, don't bump it.
+ktlint = "1.8.0"
+ktlintPlugin = "14.2.0"
+
 [libraries]
 kotlin-gradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+ktlint-gradlePlugin = { module = "org.jlleitschuh.gradle:ktlint-gradle", version.ref = "ktlintPlugin" }
 kotlinx-browser = { module = "org.jetbrains.kotlinx:kotlinx-browser", version.ref = "kotlinx-browser" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+
+# Applied by id from the convention plugins; needed as an alias only by build-logic, which lints
+# itself and so cannot go through a convention plugin of its own making.
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlintPlugin" }

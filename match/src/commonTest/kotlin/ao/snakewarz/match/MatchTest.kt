@@ -153,7 +153,9 @@ class MatchTest {
     fun `the turn limit ends a match nobody can lose`() {
         // Two snakes on a wide, empty board that only ever go straight would otherwise run forever;
         // the cap is what stops a browser tab doing that.
-        val setup = MatchSetup.create(4, 4, listOf(BotId("cycle"), BotId("cycle")), seed = 1, rules = RulesConfig(maxTurns = 6))
+        val setup = MatchSetup.create(
+            4, 4, listOf(BotId("cycle"), BotId("cycle")), seed = 1, rules = RulesConfig(maxTurns = 6),
+        )
         val match = Match(setup, TestRegistry.ALL)
 
         val outcome = match.runToCompletion()
