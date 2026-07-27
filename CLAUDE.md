@@ -43,7 +43,7 @@ hundred matches without the page stopping.
 |---|---|
 | `core/` | `:core` module. Padded-grid primitives plus the rules engine, under `grid`, `snake`, `rules` and `random` — `Occupancy`, `SnakeBody`, `Board`, `MatchState`, `SplitMix64` — with `Budget` at the root |
 | `bot-api/` | `:bot-api` module. The contract at the root — `Bot`, `Decision`, `Turn`, `BotSetup` — over `registry` (`BotId`, `BotEntry`, `BotFactory`, `BotRegistry`), `knob`, what a bot lets you tune, and `scratch`, the search arena that makes the budget structural |
-| `bots/` | `:bots` module. `ShippedBots`, the `BotRegistry` implementation, at the root over ten bots. Each cluster keeps the primitive only it reads: `reactive.chase` holds `ChaseBot` with `ShortestPaths` and `nearestOpponent`, `reactive.space` the two room-ranking bots with `FloodFill`, `search.uct` the trees' `portableLog` and `truncatedPlayout`, `search.puct` the `LeafEval` family. `search` itself keeps what both trees read — `randomPlayout`, `SpaceOwnership` — and the flat baseline |
+| `bots/` | `:bots` module. `ShippedBots`, the `BotRegistry` implementation, at the root over ten bots. Each cluster keeps the primitive only it reads: `reactive.chase` holds `ChaseBot` with `ShortestPaths` and `nearestOpponent`, `reactive.space` the two room-ranking bots with `FloodFill`, `search.uct` the trees' `portableLog` and `truncatedPlayout`, `search.puct` the `LeafEval` family. `search` itself keeps what all three searchers read — `randomPlayout`, `SpaceOwnership`, `EvaluationCost` — and the flat baseline |
 | `match/` | `:match` module. `Match` driver, `MatchSetup` and spawn placement at the root, over `replay` (`MatchRecord`, `ReplayCodec`), `stats`, `tournament`, and `human` — `InputBuffer`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM |
 | `ui/` | `:ui` module. `GameSession` — the only public class — over `render` (`BoardRenderer`, `Palette`), `chrome`, `model` and `schedule` (`TurnScheduler`, `TournamentRunner`) |
 | `app/` | `:app` module. `main()`, registry injection and `#r=` replay routing. Sixty lines, and that is the point |
@@ -200,7 +200,7 @@ Standing rules. They override any default the harness carries.
 ./gradlew allTests -PbrowserTests=true       # browser suite (needs Chrome; off by default)
 ./gradlew :app:wasmJsBrowserDevelopmentRun   # local dev server — yours. See below before an agent runs this
 ./gradlew :app:wasmJsBrowserDistribution     # production bundle -> app/build/dist/wasmJs/productionExecutable
-./gradlew :lab:run --args="play puct:eval=expert puct:eval=rollout --rounds 40 --budget 40000"
+./gradlew :lab:run --args="play puct:eval=expert puct:eval=rollout --rounds 40 --budget 2000"
 ```
 
 `:bots` tests take a couple of minutes because `BotLadderTest` plays several hundred complete matches;

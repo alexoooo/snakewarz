@@ -1,6 +1,7 @@
 package ao.snakewarz.bots.search.puct
 
 import ao.snakewarz.botapi.scratch.Playout
+import ao.snakewarz.bots.search.EvaluationCost
 import ao.snakewarz.bots.search.SpaceOwnership
 import ao.snakewarz.core.grid.Direction
 import ao.snakewarz.core.grid.Grid
@@ -26,31 +27,37 @@ import ao.snakewarz.core.snake.SnakeId
  * ### What it is worth, measured
  *
  * All figures from `:lab`, 12x12, forty rounds a pairing, both seatings of every seed — one sigma is
- * about ±3.2 wins, so anything inside 17-23 is the same number. At an **equal allowance**:
+ * about ±3.2 wins, so anything inside 17-23 is the same number. At an **equal allowance**, which is
+ * now an equal number of iterations:
  *
  * | | expert | rollout | mobility | uct | score |
  * |---|---|---|---|---|---|
- * | expert | — | 18 | 31 | 15 | 44% |
- * | rollout | 22 | — | 28 | 19 | 53% |
- * | mobility | 9 | 12 | — | 13 | 28% |
- * | uct | 25 | 21 | 27 | — | 61% |
+ * | expert | — | 33 | 20 | 25 | 65% |
+ * | rollout | 7 | — | 31 | 22 | 50% |
+ * | mobility | 20 | 9 | — | 8 | 31% |
+ * | uct | 15 | 18 | 32 | — | 54% |
  *
- * So at equal allowance this loses to a random rollout. It is not being given an equal *turn*,
- * though: [cost] overcharges it, and measured at the shipped allowance a turn here is 1,104 µs
- * against `eval=rollout`'s 1,892 and `uct`'s 2,006. Handed the 68,000 that buys the same
- * millisecond, the three are level:
+ * **Per iteration, the hand-written appraisal is decisively the better leaf** — 33 of 40 against the
+ * random rollout it replaces, with the tree, the prior and the allowance all held still. That is a
+ * reversal of what this table said when an allowance was counted in simulated moves and [cost] was
+ * `grid.playableCount`: the appraisal read 44% there and lost to the rollout, because it was being
+ * charged a hundred and forty-four units for a leaf the rollout got for sixty.
  *
- * | | expert@68k | rollout | uct | score |
+ * It is not free, and the second table is the one that keeps the first honest. A turn here is
+ * 2,709 µs at 1,000 evaluations against `eval=rollout`'s 1,984 and `uct`'s 2,096, so a sweep costs
+ * about 1.4 rollouts on this board. Handed the 730 that buys the same millisecond:
+ *
+ * | | expert@730 | rollout | uct | score |
  * |---|---|---|---|---|
- * | expert@68k | — | 18 | 21 | 49% |
- * | rollout | 22 | — | 19 | 51% |
- * | uct | 19 | 21 | — | 50% |
+ * | expert@730 | — | 21 | 24 | 56% |
+ * | rollout | 19 | — | 22 | 51% |
+ * | uct | 16 | 18 | — | 43% |
  *
- * **A hand-written appraisal is worth about what a random rollout is worth, per unit of time.** That
- * is the honest reading, and it is why `puct` is registered as experimental rather than as a ladder
- * rung. [cost] is deliberately left overcharging rather than tuned down to close the gap — the
- * accounting should not be adjusted to favour the thing it is accounting for, and the allowance knob
- * is there for anybody who wants the other comparison.
+ * **A hand-written appraisal is worth about what a random rollout is worth, per unit of time**, and
+ * is comfortably ahead of one per unit of search. Both readings are inside two sigma of each other,
+ * which is why `puct` is still registered as experimental rather than as a ladder rung — and why
+ * [ao.snakewarz.bots.search.EvaluationCost] leaving every evaluation at `1` is a thing to know about
+ * before quoting the first table: it is a count of iterations and makes no claim about the clock.
  *
  * ### Two things the ablation found
  *
@@ -83,17 +90,16 @@ internal class ExpertEval(
     private val space = SpaceOwnership(grid, slotCount)
 
     /**
-     * One board-wide ownership sweep, priced at the playable squares.
+     * One board-wide ownership sweep, and one unit of allowance like everything else.
      *
-     * Measured rather than guessed: `UctBot.ROLLOUT_DEPTH` records that a hundred rollout moves cost
-     * about what one sweep costs on a 12x12, where `playableCount` is 144 — so this overcharges by
-     * roughly forty per cent, which is the direction to be wrong in. It is a *constant* rather than
-     * the squares a sweep actually reached, because two evaluations compared at one nominal
-     * allowance have to be paying for the same thing.
+     * A *constant* rather than the squares a sweep actually reached, because two evaluations
+     * compared at one nominal allowance have to be paying for the same thing. That it is the same
+     * constant a random rollout pays is [EvaluationCost]'s open question, not a claim: they are
+     * equal iterations rather than equal milliseconds until somebody measures the ratio.
      */
-    override val cost: Int = grid.playableCount
+    override val cost: Int get() = EvaluationCost.EXPERT
 
-    override fun valuesInto(playout: Playout, into: DoubleArray): Boolean {
+    override fun valuesInto(playout: Playout, into: DoubleArray) {
         val board = playout.board
         val owned = space.measure(board)
 
@@ -125,7 +131,7 @@ internal class ExpertEval(
             for (slot in 0 until slotCount) {
                 into[slot] = if (board.snake(SnakeId(slot)).alive) LeafEval.WIN else LeafEval.LOSS
             }
-            return true
+            return
         }
 
         val fair = 1.0 / live
@@ -179,8 +185,6 @@ internal class ExpertEval(
 
             into[slot] = value.coerceIn(LeafEval.LOSS, LeafEval.WIN)
         }
-
-        return true
     }
 
     override fun toString(): String = "ExpertEval"

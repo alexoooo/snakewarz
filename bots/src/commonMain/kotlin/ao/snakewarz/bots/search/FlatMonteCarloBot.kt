@@ -5,7 +5,6 @@ import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Turn
 import ao.snakewarz.botapi.knob.BotKnob
-import ao.snakewarz.botapi.scratch.BoardScratch
 import ao.snakewarz.botapi.scratch.Playout
 import ao.snakewarz.bots.reactive.RandomBot
 import ao.snakewarz.bots.reactive.space.SpaceBot
@@ -23,10 +22,11 @@ import ao.snakewarz.core.rules.MatchOutcome
  * it is where the awkward parts of driving [Playout] get worked out on something with no tree
  * bookkeeping on top of them.
  *
- * The whole search is the loop condition. `Playout.advance` charges the turn's budget, and an
- * exhausted budget makes `outcome` non-null — so this terminates structurally rather than because
- * anybody counted. Handed no allowance at all it runs zero rollouts, spends exactly nothing, and
- * answers with [SpaceBot]'s flood fill, which costs no budget and is a perfectly respectable move.
+ * The whole search is the loop condition. Asking for a playout charges one [EvaluationCost.ROLLOUT],
+ * and a playout the allowance would not stretch to comes back with `outcome` already non-null — so
+ * this terminates structurally rather than because anybody counted. Handed no allowance at all it
+ * runs zero rollouts, spends exactly nothing, and answers with [SpaceBot]'s flood fill, which costs
+ * no budget and is a perfectly respectable move.
  *
  * Two departures from legacy, both of which change the answer rather than merely the code:
  *
@@ -65,9 +65,10 @@ public class FlatMonteCarloBot(setup: BotSetup) : Bot {
 
         var next = 0
         while (true) {
-            val playout = turn.scratch.playout()
+            val playout = turn.scratch.playout(EvaluationCost.ROLLOUT)
             if (playout.outcome != null) {
-                // The allowance is gone. Whatever has been sampled so far is what we go on.
+                // The allowance would not stretch to another rollout. Whatever has been sampled so
+                // far is what we go on.
                 break
             }
 
@@ -76,11 +77,6 @@ public class FlatMonteCarloBot(setup: BotSetup) : Bot {
 
             playout.advance(opening)
             val result = randomPlayout(playout, rng)
-            if (result === BoardScratch.EXHAUSTED) {
-                // Not a draw -- no information at all. Scoring it would invent a result for
-                // whichever candidate happened to be sampled last.
-                break
-            }
 
             total[opening.ordinal] += rewardFor(result, playout)
             rollouts[opening.ordinal]++
@@ -144,9 +140,10 @@ public class FlatMonteCarloBot(setup: BotSetup) : Bot {
     internal companion object {
         /**
          * How much of a turn this may spend. The same range [UctBot] offers, and for the same
-         * reason — this is the other bot in the box whose strength is bought by the iteration.
+         * reason — this is the other bot in the box whose strength is bought by the iteration, and
+         * its iteration is the same rollout, priced the same.
          */
-        val SEARCH = BotKnob.Search(min = 0, max = 400_000, step = 10_000)
+        val SEARCH = BotKnob.Search(min = 0, max = 10_000, step = 100)
 
         val KNOBS: List<BotKnob> = listOf(SEARCH)
 

@@ -187,9 +187,21 @@ class ReplayCodecTest {
     fun `an already-shared link still decodes, byte for byte`() {
         // The one test that protects links people have already sent each other. Captured from the
         // encoder as it shipped, and asserted from both ends: this payload must keep decoding, and
-        // an unconfigured match must keep encoding to exactly it. Do not regenerate it to make a
+        // the match it describes must keep encoding to exactly it. Do not regenerate it to make a
         // change pass -- a change that moves these bytes has broken every replay URL in existence.
-        val match = matchOf(10, 10, "cycle", "south", seed = 2005)
+        //
+        // SHIPPED_BUDGET is spelled out rather than defaulted because a record carries the allowance
+        // it was *played* under. `MatchSetup.DEFAULT_BUDGET_PER_TURN` has since moved -- the unit
+        // changed from simulated moves to evaluations -- and a link written before that must still
+        // come back as the match it was, which is the whole reason the figure is in the header.
+        val setup = MatchSetup.create(
+            rows = 10,
+            cols = 10,
+            slots = listOf(BotId("cycle"), BotId("south")),
+            seed = 2005,
+            budgetPerTurn = SHIPPED_BUDGET,
+        )
+        val match = Match(setup, TestRegistry.ALL)
         match.runToCompletion()
 
         assertEquals(SHIPPED_PAYLOAD, ReplayCodec.encode(match.record()))
@@ -257,6 +269,9 @@ class ReplayCodecTest {
          * decoder test: an unconfigured match must keep encoding to exactly these bytes.
          */
         const val SHIPPED_PAYLOAD = "AQAJCdUHAAAAAAAAAoAgwLgCAgVjeWNsZQVzb3V0aABjAAECBQABAQA"
+
+        /** What `MatchSetup.DEFAULT_BUDGET_PER_TURN` was when [SHIPPED_PAYLOAD] was captured. */
+        const val SHIPPED_BUDGET = 40_000
 
         val base64 = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
     }

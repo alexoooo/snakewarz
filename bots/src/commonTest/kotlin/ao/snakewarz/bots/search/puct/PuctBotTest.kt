@@ -38,9 +38,9 @@ class PuctBotTest {
 
     @Test
     fun `it never outruns whatever it is given, at any evaluation`() {
-        // The awkward boundaries, and this bot has one UctBot does not: at `expert` a single leaf
-        // costs a whole board sweep, so most of these allowances cannot buy even one. `tryConsume`
-        // then refuses, and the bot has to fall back rather than run the evaluation on credit.
+        // The awkward boundaries. One evaluation is one unit, so the low end of this range is a
+        // search of a handful of iterations rather than of none -- and zero still has to fall back
+        // rather than run one evaluation on credit.
         for (eval in EVALS) {
             for (allowance in intArrayOf(0, 1, 2, 3, 4, 5, 8, 13, 21, 55, 100, 1_000)) {
                 val board = boardOf(7, 7, 3 to 3, 0 to 0)
@@ -57,38 +57,46 @@ class PuctBotTest {
     }
 
     @Test
-    fun `an evaluation that sweeps the board pays for itself out of the allowance`() {
-        // A leaf at `expert` costs one sweep, priced at the playable squares -- 144 on a 12x12 -- so
-        // the shipped allowance buys a couple of hundred of them and the tree is a couple of hundred
-        // nodes. That is the whole trade this bot exists to measure: UctBot at the same allowance
-        // builds thousands, because a rollout is charged per move rather than per leaf.
+    fun `an allowance buys the same search whichever evaluation is spending it`() {
+        // The point of counting evaluations rather than simulated moves, stated as an assertion.
+        // `expert` sweeps the whole board and `mobility` reads sixteen squares, and the two take
+        // wildly different wall clock -- but one iteration is one unit, so at the same allowance
+        // they build the same tree and a matrix comparing them is comparing the value functions.
         val opening = boardOf(12, 12, 0 to 0, 11 to 11)
 
-        val expert = puctOn(opening, PuctBot.EXPERT)
-        expert.chooseMove(turnOn(opening, opening.toAct, Budget(40_000)))
-        assertTrue(expert.nodesSearched in 120..500, "expert built ${expert.nodesSearched} nodes")
+        val sizes = EVALS.map { eval ->
+            val bot = puctOn(opening, eval)
+            bot.chooseMove(turnOn(opening, opening.toAct, Budget(ALLOWANCE)))
+            bot.nodesSearched
+        }
 
-        val mobility = puctOn(opening, PuctBot.MOBILITY)
-        mobility.chooseMove(turnOn(opening, opening.toAct, Budget(40_000)))
-        assertTrue(
-            mobility.nodesSearched > expert.nodesSearched * 5,
-            "a near-free evaluation should buy a far bigger tree: " +
-                "${mobility.nodesSearched} against ${expert.nodesSearched}",
-        )
+        for (size in sizes) {
+            assertTrue(size in (ALLOWANCE - 2)..(ALLOWANCE + 2), "$ALLOWANCE evaluations built $sizes")
+        }
     }
 
     @Test
     fun `the evaluation it is told to use is the one it uses`() {
-        // Three readings of the same position that cost three different amounts. If the knob were
-        // being ignored, all three tree sizes would agree.
-        val opening = boardOf(12, 12, 0 to 0, 11 to 11)
-        val sizes = EVALS.map { eval ->
-            val bot = puctOn(opening, eval)
-            bot.chooseMove(turnOn(opening, opening.toAct, Budget(20_000)))
-            bot.nodesSearched
+        // Same tree size now, so the tell has to be the moves rather than the node count: three
+        // readings of the same position that disagree about what to play. If the knob were being
+        // ignored, all three streams would be identical.
+        val puct = ShippedBots.entryOf(BotId("puct"))
+        val random = ShippedBots.entryOf(BotId("random"))
+
+        val streams = EVALS.map { eval ->
+            val match = HeadlessMatch(
+                listOf(puct, random),
+                rows = 12,
+                cols = 12,
+                seed = 5,
+                budgetPerTurn = ALLOWANCE,
+                paramsPerSlot = listOf(BotParams(mapOf(PuctBot.EVAL.name to eval)), BotParams.EMPTY),
+            )
+            match.run()
+            match.moves()
         }
 
-        assertEquals(sizes.distinct().size, sizes.size, "the three evaluations built the same tree: $sizes")
+        assertEquals(streams.distinct().size, streams.size, "the three evaluations played the same match")
     }
 
     @Test
@@ -119,7 +127,7 @@ class PuctBotTest {
             val board = boardOf(9, 9, 4 to 4, 0 to 0)
             val before = board.hash
 
-            puctOn(board, eval, seed = 4).chooseMove(turnOn(board, board.toAct, Budget(20_000)))
+            puctOn(board, eval, seed = 4).chooseMove(turnOn(board, board.toAct, Budget(ALLOWANCE)))
 
             assertEquals(before, board.hash, "$eval moved the live arena")
             assertEquals(0, board.turnIndex)
@@ -134,7 +142,7 @@ class PuctBotTest {
         for (eval in EVALS) {
             assertEquals(
                 Direction.EAST,
-                moveFrom(puctOn(board, eval, seed = 2), board, Budget(20_000)),
+                moveFrom(puctOn(board, eval, seed = 2), board, Budget(ALLOWANCE)),
                 "$eval walked into the three-square pocket",
             )
         }
@@ -147,7 +155,13 @@ class PuctBotTest {
 
         var wins = 0
         for (seed in 1L..10L) {
-            val match = HeadlessMatch(listOf(puct, random), rows = 12, cols = 12, seed = seed, budgetPerTurn = 20_000)
+            val match = HeadlessMatch(
+                listOf(puct, random),
+                rows = 12,
+                cols = 12,
+                seed = seed,
+                budgetPerTurn = ALLOWANCE,
+            )
             if (match.run().winner == SnakeId(0)) {
                 wins++
             }
@@ -170,7 +184,7 @@ class PuctBotTest {
                 rows = 12,
                 cols = 12,
                 seed = seed,
-                budgetPerTurn = 20_000,
+                budgetPerTurn = ALLOWANCE,
             )
             val outcome = match.run()
 
@@ -184,10 +198,13 @@ class PuctBotTest {
     private fun puctOn(board: Board, eval: String, seed: Long = 1): PuctBot =
         PuctBot(setupFor(board, board.toAct, seed, BotParams(mapOf(PuctBot.EVAL.name to eval))))
 
-    private fun moveFrom(bot: PuctBot, board: Board, budget: Budget = Budget(10_000)): Direction =
+    private fun moveFrom(bot: PuctBot, board: Board, budget: Budget = Budget(ALLOWANCE)): Direction =
         (bot.chooseMove(turnOn(board, board.toAct, budget)) as Decision.Move).direction
 
     private companion object {
         val EVALS = listOf(PuctBot.ROLLOUT, PuctBot.MOBILITY, PuctBot.EXPERT)
+
+        /** Evaluations a turn: a fifth of the shipped allowance, which is a real search and is quick. */
+        const val ALLOWANCE = 200
     }
 }

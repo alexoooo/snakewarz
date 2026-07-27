@@ -1,7 +1,7 @@
 package ao.snakewarz.bots.search.puct
 
-import ao.snakewarz.botapi.scratch.BoardScratch
 import ao.snakewarz.botapi.scratch.Playout
+import ao.snakewarz.bots.search.EvaluationCost
 import ao.snakewarz.bots.search.randomPlayout
 import ao.snakewarz.bots.search.uct.UctBot
 import ao.snakewarz.core.random.Rng
@@ -16,19 +16,11 @@ import ao.snakewarz.core.random.Rng
  * and every difference between the two would be a candidate explanation for the result.
  */
 internal class RolloutEval(private val slotCount: Int, private val rng: Rng) : LeafEval {
-    /** Zero: [randomPlayout] charges a unit per simulated move, which is the whole allowance model. */
-    override val cost: Int get() = 0
+    /** The same rollout [UctBot] runs, so by construction the same price. */
+    override val cost: Int get() = EvaluationCost.ROLLOUT
 
-    override fun valuesInto(playout: Playout, into: DoubleArray): Boolean {
-        val result = randomPlayout(playout, rng)
-        if (result === BoardScratch.EXHAUSTED) {
-            // Identity rather than equality: `SpaceOwnership`'s judged draw is equal to this by value
-            // and is a real reading of a position, whereas this carries no information about one.
-            return false
-        }
-
-        outcomeValues(result, slotCount, into)
-        return true
+    override fun valuesInto(playout: Playout, into: DoubleArray) {
+        outcomeValues(randomPlayout(playout, rng), slotCount, into)
     }
 
     override fun toString(): String = "RolloutEval"

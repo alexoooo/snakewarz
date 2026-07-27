@@ -31,7 +31,8 @@ internal class HeadlessMatch(
     rows: Int,
     cols: Int,
     seed: Long,
-    budgetPerTurn: Int = 1_000,
+    /** Evaluations, not simulated moves — twenty rollouts is a real search and costs a test nothing. */
+    budgetPerTurn: Int = 20,
     rules: RulesConfig = RulesConfig(),
     /**
      * Off for the throughput benchmark and on for everything else. Recording allocates once a turn,

@@ -13,14 +13,14 @@ first: `random`, `wallhug`, `space`, `pressure`, `chase`, `flat-monte-carlo`, `u
 the one below it over twenty matches — `BotLadderTest` is the gate, and it is the only test in the
 suite a *correct but useless* bot would fail. Then come the bots contributed to the original project,
 ordered by slug and claiming nothing about strength: `burninhell`, `tomsnake`. Then **experimental**:
-`puct`, which is level with `uct` per unit of *time* and behind it at an equal allowance, so it makes
-no claim a rung would make. All three sections are gated by the same contract suite.
+`puct`, which is ahead of `uct` at an equal allowance and level with it per unit of *time*, and the
+gap between those two readings is the reason it makes no claim a rung would make — see `ExpertEval`
+for both tables. All three sections are gated by the same contract suite.
 
 `:ui` opens slot 2 on the slug `uct` — the page should start on the game somebody came here to play
 — and falls back to `entries.first()` when a registry does not offer it, so registration order still
 shows through. Append new bots; do not prepend. Of the ten, only `flat-monte-carlo`, `uct` and `puct`
-touch `Turn.scratch`; the other seven consume no budget at all. `puct` is also the only one that
-charges for work the engine cannot watch it do — see *A search that does not simulate*, below.
+touch `Turn.scratch`; the other seven consume no budget at all.
 
 ## Adding a bot
 
@@ -45,9 +45,9 @@ Three rules that are not obvious until they bite:
 
 - **`turn.legalMoves.isEmpty` is the first branch of every bot.** The contract suite opens on a 1x1
   board where nothing is legal on turn one, and an unguarded `legalMoves.nth(0)` takes it down.
-- **Re-read `playout.outcome` after every `advance`, never carry it.** An exhausted budget makes the
-  playout over, and `advance` on an over playout throws — so a stale reading is an exception that
-  only fires when the allowance lands on that exact move.
+- **Re-read `playout.outcome` after every `advance`, never carry it.** Any move can be the one that
+  ends the game, and `advance` on an over playout throws — so a stale reading is an exception that
+  only fires when a rollout happens to finish on that exact move.
 - **A bot handed a budget of zero must spend exactly zero and still play well.** That is a contract
   test, and the shipped answer is to fall back on `SpaceBot`, whose flood fill charges nothing.
 
@@ -78,7 +78,7 @@ reader** — that is the whole design, and it is why the constructor holds no li
 private val exploration = EXPLORATION.read(setup.params)
 
 internal companion object {
-    val SEARCH = BotKnob.Search(min = 0, max = 400_000, step = 10_000)
+    val SEARCH = BotKnob.Search(min = 0, max = 10_000, step = 100)
     val EXPLORATION = BotKnob.Decimal("exploration", "Exploration", "...", default = 5.0, min = 0.1, max = 100.0, step = 0.1, tradeoff = true)
     val KNOBS: List<BotKnob> = listOf(SEARCH, EXPLORATION)
 }
@@ -133,25 +133,36 @@ showed a tree ceiling the allowance already bounds. Neither was wrong, and neith
 For a rollout, take `turn.scratch.playout()` and spin on `outcome`:
 
 ```kotlin
-val p = turn.scratch.playout()
-while (p.outcome == null) p.advance(policy.pick(p.board.legalMoves(p.toAct)) ?: Direction.NORTH)
+while (true) {
+    val p = turn.scratch.playout(EvaluationCost.ROLLOUT)
+    if (p.outcome != null) break                    // the allowance would not stretch to another
+    while (p.outcome == null) p.advance(policy.pick(p.board.legalMoves(p.toAct)) ?: Direction.NORTH)
+    credit(p.outcome)
+}
 ```
 
-`advance` charges the budget itself, and an exhausted budget makes `outcome` a draw — so the loop
-condition *is* the budget check and the search terminates structurally rather than on trust.
+### The allowance is a count of evaluations
 
-### A search that does not simulate
+**One unit buys one judgement of a position** — a rollout played to the end, a static appraisal, one
+iteration of a tree search. Not one simulated move, which is what it used to be and which meant
+something different for every bot: doubling the moves buys a rollout bot twice the search and a bot
+that never simulates nothing at all.
 
-A rollout spends the allowance a move at a time and the engine can see it; a static evaluation
-sweeping the board cannot be seen that way. `Turn.budget.tryConsume(units)` is public for that, and
-`PuctBot` is the one bot that uses it — `PuctBot.judge` calls `Turn.budget.tryConsume(eval.cost)`.
-A bot that charged nothing for such a sweep would make `budgetPerTurn` mean something different for
-it than for everything else.
+`Scratch.playout(cost)` is where that is charged, and charging it there does three things at once:
 
-Charge **before** doing the work: `tryConsume` refuses and charges nothing once there is not enough
-left, so charging afterwards makes the allowance a record rather than a bound. Do not tune the figure
-down to make your bot look better; report the wall-clock beside the win rate instead, which is what
-`:lab`'s `time` subcommand is for. That is rule SW-07 in
+- **Termination is structural.** An iteration a bot cannot afford is an iteration it cannot start —
+  the playout comes back with `outcome` already non-null and every rollout loop's first line stops
+  it. Nothing is trusted to count.
+- **Nothing is ever half-charged.** The evaluation is paid for *before* it runs, so a rollout that
+  has begun always finishes and a search never has to tell an exhausted line from a real one part
+  way through crediting it. `tryConsume` refuses and charges nothing when there is not enough left.
+- **A matrix at "equal allowance" compares the bots rather than their arithmetic.** `puct` at
+  `eval=expert` sweeps the whole board and at `eval=mobility` reads sixteen squares; both are one
+  iteration, so the same number means the same amount of search.
+
+What it does *not* claim is equal wall clock. `bots/search`'s `EvaluationCost` is the exchange rate,
+it carries the measurements, and every entry in it is `1` today — so read a win-rate matrix with the
+`time` figures beside it. Do not tune your own cost down to look better in one; that is rule SW-07 in
 [`Coding-Standards.md`](Coding-Standards.md).
 
 Adding a bot needs **no HTML change**: the pickers in the sidebar are filled from `BotRegistry.entries`
@@ -163,21 +174,28 @@ places `:ui` builds DOM, and this is why.
 A search bot's strength is how much search fits in its allowance, so most of the design questions
 here were settled by a batch rather than by an argument. Each of those numbers is the reason
 something is or is not in the code, which is exactly the kind of fact that gets re-proposed every
-year or two. Three live in the KDoc of the constant they set: `UctBot.ROLLOUT_DEPTH` carries the
+year or two. Four live in the KDoc of the constant they set: `UctBot.ROLLOUT_DEPTH` carries the
 rollout-truncation table, `MatchSetup.DEFAULT_BUDGET_PER_TURN` the allowance table and the 8ms frame
-budget that sets it, and `ExpertEval` the two that put `puct` in the experimental section rather than
-on the ladder. Re-running any of them is a `:lab` command rather than an archaeology.
+budget that sets it, `ExpertEval` the two that keep `puct` in the experimental section rather than on
+the ladder, and `EvaluationCost` what an evaluation of each kind actually costs — the one that is
+recorded and deliberately *not* acted on. Re-running any of them is a `:lab` command rather than an
+archaeology.
 
 The fourth has no constant to live in, because what it settled was that there is no code.
 
 **Tree reuse across turns was built, measured and rejected.** It looks free: a bot instance lives for
 the whole match, so a tree kept in a field needs no new API, and `BoardView.hash` makes finding last
 turn's subtree a `Long` compare where legacy's `BiState.equals` compared whole `BitSet`s. It is not
-worth it. A turn builds about **137 nodes on a 20x20 at the shipped allowance**, spread over four
-openings and then over the opponent's replies, which leaves roughly **8 visits** in the subtree that
-would survive — six percent, in exchange for a `hash` column on the node pool and a copying
-compaction of it, because node ids are positional and "keep only this subtree" is not a free
-operation on a flat array. There is also a soundness wrinkle worth knowing before anybody tries
+worth it. A turn builds **one node per evaluation** — a thousand of them at the shipped allowance —
+spread over four openings and then over the opponent's four replies, so what survives into next turn
+is about a sixteenth of the tree. That is what the original measurement found when an allowance was
+counted in moves and a turn built 137 nodes: **8 visits** would have survived, six percent. Counting
+evaluations moved the node count and not the fraction, because the fraction is set by the branching
+— raising the allowance raises both sides of it together. Six percent is not worth a `hash` column on
+the node pool and a copying compaction of it, which is what it would cost: node ids are positional,
+and "keep only this subtree" is not a free operation on a flat array.
+
+There is also a soundness wrinkle worth knowing before anybody tries
 again: `hash` deliberately omits `turnIndex`, and `turnIndex` is what `maxTurns` terminates on, so
 statistics gathered at a shallower turn describe a position with a longer horizon than the one they
 would be grafted onto.

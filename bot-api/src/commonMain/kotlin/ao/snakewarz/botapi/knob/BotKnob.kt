@@ -233,7 +233,7 @@ public sealed class BotKnob(
         public val max: Int,
         public val step: Int,
         label: String = "Budget",
-        help: String = "Simulated moves this bot may spend on one turn.",
+        help: String = "Evaluations — rollouts, appraisals — this bot may spend on one turn.",
         tradeoff: Boolean = true,
     ) : BotKnob(NAME, label, help, tradeoff) {
         init {

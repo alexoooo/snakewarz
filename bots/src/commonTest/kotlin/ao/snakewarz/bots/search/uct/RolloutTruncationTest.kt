@@ -30,9 +30,10 @@ import kotlin.time.TimeSource
  * full, at the same allowance, on the ladder's board, over the ladder's twenty matches. The answer
  * and the table it produced are in [UctBot.ROLLOUT_DEPTH].
  *
- * The comparison prints times as well as wins, because the two are not interchangeable. Truncation
- * buys iterations *per unit of budget*, and budget is counted in simulated moves — so a truncated
- * search that also costs more wall-clock per turn has not made the trade it appears to have made.
+ * The comparison prints times as well as wins, because the two are not interchangeable. A budget is
+ * counted in evaluations, so a truncated iteration and a full one buy exactly one each — all
+ * truncation can win now is wall clock, and a truncated search that costs *more* per turn has not
+ * made the trade it appears to have made.
  *
  * Prefixed `[bench]` like [ThroughputTest], and read the same way:
  *
@@ -71,15 +72,14 @@ class RolloutTruncationTest {
         println("[bench] rolloutDepth $depth: $wins/$ROUNDS vs full rollouts")
 
         assertTrue(
-            wins in EVEN_ENOUGH,
-            "truncating at $depth won $wins of $ROUNDS, which is no longer 'no measurable difference'",
+            wins in NO_CLEAR_EDGE,
+            "truncating at $depth won $wins of $ROUNDS, so the trade is no longer the one recorded",
         )
 
         // No third measurement is needed to settle it, and that is worth saying explicitly. Equal
-        // budget is the *generous* comparison for truncation -- a budget is simulated moves, and
-        // truncation exists to buy more iterations per move. If it does not win there, and it also
-        // costs several times the wall-clock per turn, then there is no allowance at which it is the
-        // better use of a millisecond. Both of those come out of the loop above.
+        // budget now means an equal number of iterations, so truncation buys none of the extra search
+        // it was proposed for -- what is left is a leaf that is at best a little better for a turn
+        // that costs twice as much. Both halves of that come out of the loop above.
     }
 
     @Test
@@ -230,9 +230,9 @@ class RolloutTruncationTest {
          *
          * What is being compared is a ratio — strength per unit of budget against wall-clock per
          * unit of budget — and that ratio does not turn on the allowance. Running it at the shipped
-         * 40,000 would multiply the time this test takes by four and change none of its conclusions.
+         * 1,000 would multiply the time this test takes by ten and change none of its conclusions.
          */
-        const val BUDGET = 10_000
+        const val BUDGET = 100
 
         /** Short, medium and long, spanning the range the idea could plausibly pay off over. */
         val DEPTHS = listOf(10, 25, 60)
@@ -241,12 +241,16 @@ class RolloutTruncationTest {
         const val HEADLINE = 1
 
         /**
-         * Two sigma either side of even, over forty matches.
+         * Wide enough to hold what has actually been measured, and no wider.
          *
-         * A range rather than a floor, because what is being asserted is that truncation makes *no
-         * difference*. A run that fell outside it in either direction would be news.
+         * This fixture reads 26 of 40 and `:lab`'s reads 20 — one sigma over forty matches is ±3.2,
+         * so those are the same claim, and it is not "no difference" any more: counting evaluations
+         * rather than moves gives the truncated bot the same iteration count, and a space-ownership
+         * sweep is a less noisy leaf than one random playout. A range rather than a floor, because
+         * what has to hold is that the *edge is small* — small enough to be swamped by the two times
+         * wall clock the loop above prints. A run outside it in either direction would be news.
          */
-        val EVEN_ENOUGH = 14..26
+        val NO_CLEAR_EDGE = 14..30
 
         const val TIMED_PASSES = 3
     }

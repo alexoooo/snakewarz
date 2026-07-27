@@ -5,9 +5,9 @@ import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Turn
 import ao.snakewarz.botapi.knob.BotKnob
-import ao.snakewarz.botapi.scratch.BoardScratch
 import ao.snakewarz.botapi.scratch.Playout
 import ao.snakewarz.bots.reactive.space.SpaceBot
+import ao.snakewarz.bots.search.EvaluationCost
 import ao.snakewarz.bots.search.SpaceOwnership
 import ao.snakewarz.bots.search.randomPlayout
 import ao.snakewarz.core.grid.Direction
@@ -23,6 +23,9 @@ import ao.snakewarz.core.rules.MatchOutcome
  * move whose child scored best. Nothing about that is new; what makes it fast here is that the
  * engine mutates and unwinds a single arena instead of building a board per node, and that the tree
  * is six flat arrays instead of an object graph.
+ *
+ * **One iteration is one evaluation**, which is what the allowance counts — [EvaluationCost.ROLLOUT]
+ * is charged by asking for the playout, and the rollout then runs to the end however long it takes.
  *
  * **It searches the real N-player game.** The rewrite was planned around an abstract `DuelBot` that
  * would reduce the field to the nearest opponent and solve a duel, because legacy's `BiState` held
@@ -70,8 +73,8 @@ public class UctBot(setup: BotSetup) : Bot {
         tree.reset()
         tree.open(UctTree.ROOT, legal)
 
-        while (turn.budget.remaining > 0 && iterate(turn)) {
-            // Every exit is inside iterate(): the allowance ran out, or a rollout could not finish.
+        while (iterate(turn)) {
+            // The only exit is inside iterate(): the allowance would not stretch to another rollout.
         }
 
         val best = tree.bestMoveAtRoot()
@@ -81,13 +84,16 @@ public class UctBot(setup: BotSetup) : Bot {
     /**
      * One descend-simulate-credit pass. Returns `false` when the search should stop.
      *
+     * The rollout is paid for on the first line, which is also what says whether there is one left to
+     * run: an unaffordable playout comes back reporting an outcome before a move is made.
+     *
      * The moves this applies are unwound by the next call's `playout()`, which resets the arena from
      * the live board — so [ao.snakewarz.botapi.scratch.Playout.undo] is never called here. A reset is one
      * array copy against a rollout of a hundred-odd moves, and it makes an off-by-one unwind, which
      * would quietly poison every later iteration, impossible rather than merely unlikely.
      */
     private fun iterate(turn: Turn): Boolean {
-        val playout = turn.scratch.playout()
+        val playout = turn.scratch.playout(EvaluationCost.ROLLOUT)
         if (playout.outcome != null) {
             return false
         }
@@ -103,7 +109,7 @@ public class UctBot(setup: BotSetup) : Bot {
             playout.advance(direction)
 
             // Re-read after every advance, never carried over: advancing on a stale reading is an
-            // IllegalStateException, and the budget can expire on any move.
+            // IllegalStateException, and any move can be the one that ends the game.
             result = playout.outcome
 
             val child = tree.childOrCreate(node, direction, mover)
@@ -128,12 +134,6 @@ public class UctBot(setup: BotSetup) : Bot {
             node = child
         }
 
-        if (result === BoardScratch.EXHAUSTED) {
-            // Not a draw -- no information at all. Crediting it would invent a result for whichever
-            // line the allowance happened to expire on.
-            return false
-        }
-
         for (i in 0 until depth) {
             tree.record(path[i], result)
         }
@@ -154,13 +154,13 @@ public class UctBot(setup: BotSetup) : Bot {
 
     internal companion object {
         /**
-         * How much of a turn this may spend, and over what range moving it is worth anything.
+         * How many evaluations of a turn this may spend, and over what range moving it is worth
+         * anything.
          *
-         * Ten times the shipped allowance at the top, which is around 40 ms a turn in Chrome — slow
-         * enough to watch and well short of hanging a frame. `MatchSetup.DEFAULT_BUDGET_PER_TURN`
-         * carries the measurements the shipped figure came from, and the argument for the headroom.
+         * Ten times the shipped allowance at the top. `MatchSetup.DEFAULT_BUDGET_PER_TURN` carries
+         * the measurements the shipped figure came from, and the argument for the headroom.
          */
-        val SEARCH = BotKnob.Search(min = 0, max = 400_000, step = 10_000)
+        val SEARCH = BotKnob.Search(min = 0, max = 10_000, step = 100)
 
         /**
          * Legacy's `5` at `Node.java:423` — an exploration constant of `sqrt(1/5)`.
@@ -211,26 +211,29 @@ public class UctBot(setup: BotSetup) : Bot {
          * was named the highest-value lever left when this bot landed, on the usual reasoning that a
          * hundred-move rollout is an expensive way to buy one bit. It was then built
          * ([truncatedPlayout], [SpaceOwnership]) and played against this over forty matches a depth,
-         * at the same allowance, on a 12x12:
+         * at the same allowance, on a 12x12. Re-measured at 100 evaluations a turn, `:lab` for the
+         * wins and `RolloutTruncationTest` for the clocks:
          *
-         * | depth | wins of 40 | µs/turn | against full |
-         * |---|---|---|---|
-         * | 10 | 20 | 1,120 | 3.1× |
-         * | 25 | 22 | 630 | 1.8× |
-         * | 60 | 23 | 435 | 1.2× |
-         * | played out | — | 357 | — |
+         * | depth | wins of 40 | µs/turn, JVM | µs/turn, Chrome | against full |
+         * |---|---|---|---|---|
+         * | 10 | 27 | 387 | 1,011 | 2.9× / 3.2× |
+         * | 25 | 20 | 269 | 575 | 2.0× / 1.8× |
+         * | 60 | 17 | 189 | 367 | 1.4× / 1.2× |
+         * | played out | — | 134 | 313 | — |
          *
-         * Dead even on strength — one sigma over forty matches is ±3.2, so 20, 22 and 23 are the
-         * same number — for one and a fifth to three times the wall-clock. The reasoning does not
-         * survive contact with *this* engine: a rollout here is mutate-and-undo over a flat arena at
-         * tens of nanoseconds a move, so a hundred of them cost about what **one** board-wide
-         * ownership sweep costs, and truncating at ten buys seven times as many sweeps rather than
-         * seven times as much search. The shape of the table is the tell — truncation gets cheaper
-         * and very slightly better as the cut moves *out* toward not truncating at all.
+         * One sigma over forty matches is ±3.2, so cutting *hard* is a little ahead per iteration
+         * (27 of 40 is two sigma) and cutting late is a little behind — which is the shape to
+         * expect, since an ownership sweep is a less noisy reading of a position than one random
+         * playout, and a rollout cut at sixty has usually finished anyway. It is not free: reading
+         * the board costs 1.4 to 3.2 times the wall clock of playing it out, because a rollout here
+         * is mutate-and-undo over a flat arena at tens of nanoseconds a move and a hundred of them
+         * cost about what **one** board-wide sweep costs.
          *
-         * Equal budget is the generous comparison, too — a budget is simulated moves, and buying
-         * more iterations per move is the entire point of truncating. Losing there and costing more
-         * leaves no allowance at which it is the better use of a millisecond.
+         * So per *millisecond* it is still behind, and the currency has moved against it since it
+         * was proposed. An allowance is counted in evaluations now, so a truncated iteration and a
+         * full one buy exactly one each — the extra iterations that were the entire argument for
+         * truncating are not on offer any more, and what is left is a slightly better leaf for two
+         * to three times the price of the same number of them.
          *
          * It ships wired and off rather than deleted, because a measured "no" is worth more with the
          * thing still there to re-measure: `./gradlew :lab:run --args="play uct uct:rolloutDepth=25"`,
@@ -239,7 +242,9 @@ public class UctBot(setup: BotSetup) : Bot {
          *
          * Not a [BotKnob.tradeoff], so it is not on the sidebar: the table above is what settling a
          * number by measurement looks like, and having settled it there is nothing left for a player
-         * to decide.
+         * to decide. It is the first thing to re-measure if [ao.snakewarz.bots.search.EvaluationCost]
+         * is ever calibrated, because a truncated iteration would then stop costing what a full one
+         * costs and the trade would be a different one.
          */
         val ROLLOUT_DEPTH = BotKnob.Integer(
             name = "rolloutDepth",

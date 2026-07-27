@@ -25,7 +25,7 @@ public class Turn(
      * rather than blame the bot with `SUICIDE`.
      */
     public val legalMoves: DirectionSet,
-    /** This turn's search allowance, already reset. Counted in iterations, never in milliseconds. */
+    /** This turn's search allowance, already reset. Counted in evaluations, never in milliseconds. */
     public val budget: Budget,
     public val scratch: Scratch,
 ) {

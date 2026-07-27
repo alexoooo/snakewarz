@@ -150,31 +150,32 @@ class ExpertEvalTest {
 
         assertEquals(LeafEval.EVEN, values[0])
         assertEquals(LeafEval.EVEN, values[1])
-        assertEquals(1, eval.cost, "a handful of array reads is priced as one simulated move")
     }
 
     @Test
-    fun `a rollout charges through the playout rather than up front`() {
+    fun `every evaluation is priced the same, so an allowance is a count of them`() {
+        // Uncalibrated on purpose -- EvaluationCost says so out loud. What has to hold is that the
+        // three are one currency, because a matrix comparing them at "the same allowance" is
+        // otherwise comparing nothing.
+        val board = boardOf(5, 5, 0 to 0, 4 to 4)
+
+        assertEquals(1, MobilityEval(2).cost)
+        assertEquals(1, RolloutEval(2, SplitMix64(7)).cost)
+        assertEquals(1, expert(board).cost)
+    }
+
+    @Test
+    fun `a rollout is paid for by the playout it is handed, and always finishes`() {
         val board = boardOf(1, 2, 0 to 0, 0 to 1)
-        val eval = RolloutEval(2, SplitMix64(7))
         val values = DoubleArray(2)
 
-        assertEquals(0, eval.cost, "charging for it here as well would charge for it twice")
+        // One unit, which buys the whole rollout however many moves it turns out to run.
+        val budget = Budget(1)
+        RolloutEval(2, SplitMix64(7)).valuesInto(playoutOn(board, budget), values)
 
-        val budget = Budget(1_000)
-        assertTrue(eval.valuesInto(playoutOn(board, budget), values))
-        assertTrue(budget.consumed > 0, "the simulated moves are what it spends")
+        assertEquals(1, budget.consumed)
         // A two-square board resolves rather than ties, so one of these is a win and one a loss.
         assertTrue(values[0] + values[1] == LeafEval.WIN, "${values.toList()}")
-    }
-
-    @Test
-    fun `a rollout that runs out of allowance says so rather than guessing`() {
-        val board = boardOf(12, 12, 0 to 0, 11 to 11)
-        val eval = RolloutEval(2, SplitMix64(7))
-
-        // One unit buys one move on a board that takes far more than one to finish.
-        assertFalse(eval.valuesInto(playoutOn(board, Budget(1)), DoubleArray(2)))
     }
 
     @Test

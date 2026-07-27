@@ -1,6 +1,7 @@
 package ao.snakewarz.bots.search.puct
 
 import ao.snakewarz.botapi.scratch.Playout
+import ao.snakewarz.bots.search.EvaluationCost
 import ao.snakewarz.core.snake.SnakeId
 
 /**
@@ -17,10 +18,9 @@ import ao.snakewarz.core.snake.SnakeId
  * left reads [LeafEval.LOSS] whatever its opponents have.
  */
 internal class MobilityEval(private val slotCount: Int) : LeafEval {
-    /** One, matching one simulated move: a few array reads against one `Board.apply`. */
-    override val cost: Int get() = 1
+    override val cost: Int get() = EvaluationCost.MOBILITY
 
-    override fun valuesInto(playout: Playout, into: DoubleArray): Boolean {
+    override fun valuesInto(playout: Playout, into: DoubleArray) {
         val board = playout.board
 
         var total = 0
@@ -39,8 +39,6 @@ internal class MobilityEval(private val slotCount: Int) : LeafEval {
                 else -> into[slot] / total
             }
         }
-
-        return true
     }
 
     override fun toString(): String = "MobilityEval"

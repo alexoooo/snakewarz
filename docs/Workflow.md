@@ -22,8 +22,8 @@ you have to know before you type a command you already think you know: never bac
 
 # And the lab, for the questions a batch answers rather than a test. `play` prints the same win
 # matrix the sidebar does; `time` costs one bot's turn against an opponent handed no allowance.
-./gradlew :lab:run --args="play puct:eval=expert puct:eval=rollout --rounds 40 --budget 40000"
-./gradlew :lab:run --args="time puct:eval=expert --budget 40000"
+./gradlew :lab:run --args="play puct:eval=expert puct:eval=rollout --rounds 40 --budget 2000"
+./gradlew :lab:run --args="time puct:eval=expert --budget 2000"
 ```
 
 ## Why `:lab` is a module

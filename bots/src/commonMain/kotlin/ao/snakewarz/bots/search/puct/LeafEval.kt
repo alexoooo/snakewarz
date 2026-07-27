@@ -1,6 +1,7 @@
 package ao.snakewarz.bots.search.puct
 
 import ao.snakewarz.botapi.scratch.Playout
+import ao.snakewarz.bots.search.EvaluationCost
 import ao.snakewarz.bots.search.uct.UctTree
 import ao.snakewarz.bots.search.uct.truncatedPlayout
 
@@ -26,30 +27,18 @@ import ao.snakewarz.bots.search.uct.truncatedPlayout
  * outcome directly and calls this only when there is none — the rule [truncatedPlayout] states as "a
  * rollout that finished on its own is worth more than a judgement of it".
  *
- * ### It charges for itself
+ * ### It is what the allowance is counted in
  *
- * A rollout spends the allowance a move at a time through `Playout.advance`, so its cost is visible
- * to the engine. A static evaluation's is not: it can sweep the whole board and charge nothing,
- * which would quietly make `budgetPerTurn` mean something different for every bot that declared one.
- * [cost] is what closes that, and [PuctBot] pays it *before* calling [valuesInto].
+ * One of these *is* one unit of budget. [PuctBot] pays [cost] by asking for the iteration's playout,
+ * before descending, so an evaluation that has begun always produces a value and no iteration is
+ * ever half-charged. What one costs relative to the others is [EvaluationCost], which is where
+ * calibrating them happens.
  */
 internal interface LeafEval {
-    /**
-     * Fills [into] with each slot's value of the position, and says whether there was one.
-     *
-     * `false` means the allowance ran out with nothing to say, and the iteration that asked must be
-     * abandoned rather than credited — the same distinction [PuctBot] draws around
-     * `BoardScratch.EXHAUSTED`, and for the same reason. A static evaluation always answers `true`;
-     * only one that simulates can run out part-way through an answer.
-     */
-    fun valuesInto(playout: Playout, into: DoubleArray): Boolean
+    /** Fills [into] with each slot's value of the position. */
+    fun valuesInto(playout: Playout, into: DoubleArray)
 
-    /**
-     * What one call costs, in the same currency as one simulated move.
-     *
-     * Zero for an evaluation that spends the budget itself by advancing the playout, since charging
-     * it twice would be worse than not charging it at all.
-     */
+    /** What one call costs against the turn's allowance — see [EvaluationCost]. */
     val cost: Int
 
     companion object {

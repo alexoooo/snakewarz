@@ -3,6 +3,8 @@ package ao.snakewarz.ui.model
 import ao.snakewarz.botapi.Bot
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Turn
+import ao.snakewarz.botapi.knob.BotKnob
+import ao.snakewarz.botapi.knob.BotParams
 import ao.snakewarz.botapi.registry.BotEntry
 import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.botapi.registry.BotRegistry
@@ -25,7 +27,7 @@ class SlotLabelsTest {
         val labels = labelsFor(listOf("random", "uct"))
 
         assertEquals("Random", labels[0])
-        assertEquals("UCT", labels[1])
+        assertEquals("UCT - 1k", labels[1])
     }
 
     @Test
@@ -36,7 +38,7 @@ class SlotLabelsTest {
 
         assertEquals("Random ·1", labels[0])
         assertEquals("Random ·2", labels[1])
-        assertEquals("UCT", labels[2], "a unique seat beside repeated ones is still left alone")
+        assertEquals("UCT - 1k", labels[2], "a unique seat beside repeated ones is still left alone")
     }
 
     @Test
@@ -47,14 +49,57 @@ class SlotLabelsTest {
             cols = 10,
             slots = listOf(BotId("uct"), BotId("uct")),
             seed = 7,
-            budgetPerTurn = 40_000,
-            budgets = intArrayOf(40_000, 4_000),
+            budgetPerTurn = 1_000,
+            budgets = intArrayOf(1_000, 4_000),
         )
 
         val labels = SlotLabels(setup, Registry)
 
-        assertEquals("UCT", labels[0], "the seat at the match default is not the odd one out")
-        assertEquals("UCT @4k", labels[1])
+        assertEquals("UCT - 1k", labels[0])
+        assertEquals("UCT - 4k", labels[1])
+    }
+
+    @Test
+    fun `a search bot names its allowance even when nothing about it is unusual`() {
+        // It is the setting strength scales on, so hiding it in the match where every seat is at the
+        // default hides it in exactly the match where the number is the question.
+        val labels = labelsFor(listOf("random", "uct"))
+
+        assertEquals("UCT - 1k", labels[1])
+        assertEquals("Random", labels[0], "a bot that spends no allowance is not granted a number to show")
+    }
+
+    @Test
+    fun `a tuned setting is named beside the allowance rather than starred`() {
+        assertEquals("UCT - 1k/exploration=7.5", labelWith("uct", BotParams(mapOf("exploration" to "7.5"))))
+    }
+
+    @Test
+    fun `a mode is named at its default too, so the seat beside it is readable`() {
+        // `PUCT - 1k` next to `PUCT - 1k/rollout` tells you one of them is not `rollout` and leaves
+        // you to remember which the other is. Two seats at two evaluations is the experiment.
+        assertEquals("PUCT - 1k/expert", labelWith("puct", BotParams.EMPTY))
+        assertEquals("PUCT - 1k/rollout", labelWith("puct", BotParams(mapOf("eval" to "rollout"))))
+    }
+
+    @Test
+    fun `a number is named only when it has been moved, and moved is asked of the knob`() {
+        // Every `uct` in existence runs at the same exploration constant, so naming it in every label
+        // would spend the width of the panel to say nothing -- and `5.0` arriving spelled out from a
+        // replay fragment is that constant rather than a departure from it.
+        assertEquals("UCT - 1k", labelWith("uct", BotParams(mapOf("exploration" to "5.0"))))
+    }
+
+    private fun labelWith(slug: String, params: BotParams): String {
+        val setup = MatchSetup.create(
+            rows = 10,
+            cols = 10,
+            slots = listOf(BotId(slug)),
+            seed = 7,
+            budgetPerTurn = 1_000,
+            slotParams = listOf(params),
+        )
+        return SlotLabels(setup, Registry)[0]
     }
 
     @Test
@@ -86,11 +131,35 @@ class SlotLabelsTest {
     private fun setupFor(slugs: List<String>): MatchSetup =
         MatchSetup.create(rows = 10, cols = 10, slots = slugs.map(::BotId), seed = 1)
 
-    /** Two entries and a display name apiece, which is all a label needs from a registry. */
+    /**
+     * Three entries and a display name apiece, which is nearly all a label needs from a registry.
+     *
+     * The rest is the knobs, and the three shapes here are the three cases: `random` spends no
+     * allowance, so it has none to name; `uct` has one plus a number that is named only when it
+     * moves; `puct` adds a mode, which is named always. Shaped after the shipped registry rather
+     * than minimised, because which of the three a bot is, is exactly what these labels turn on.
+     */
     private object Registry : BotRegistry {
         override val entries: List<BotEntry> = listOf(
             BotEntry(BotId("random"), "Random", { Stationary }),
-            BotEntry(BotId("uct"), "UCT", { Stationary }),
+            BotEntry(
+                BotId("uct"),
+                "UCT",
+                { Stationary },
+                listOf(
+                    BotKnob.Search(min = 0, max = 10_000, step = 100),
+                    BotKnob.Decimal("exploration", "Exploration", "", 5.0, 0.1, 100.0, 0.1, tradeoff = true),
+                ),
+            ),
+            BotEntry(
+                BotId("puct"),
+                "PUCT",
+                { Stationary },
+                listOf(
+                    BotKnob.Search(min = 0, max = 10_000, step = 100),
+                    BotKnob.Choice("eval", "Evaluation", "", "expert", listOf("rollout", "expert"), tradeoff = true),
+                ),
+            ),
         )
 
         override fun get(id: BotId): BotEntry? = entries.firstOrNull { it.id == id }

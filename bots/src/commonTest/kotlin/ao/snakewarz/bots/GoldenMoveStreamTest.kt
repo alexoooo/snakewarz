@@ -51,12 +51,12 @@ class GoldenMoveStreamTest {
 
     @Test
     fun `flat Monte Carlo against random on 12x12`() {
-        // A smaller board and a smaller allowance than the rest, on purpose: this one simulates,
-        // and the suite it belongs to also runs in a real browser, where the engine is slower. It
-        // is still hundreds of thousands of simulated moves, which is plenty to pin.
+        // A smaller board than the rest, on purpose: this one simulates, and the suite it belongs to
+        // also runs in a real browser, where the engine is slower. Twenty rollouts a turn is still
+        // hundreds of thousands of simulated moves over a match, which is plenty to pin.
         assertEquals(
-            135969093263537927L,
-            hashOf("flat-monte-carlo", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = 500),
+            6424283122996719906L,
+            hashOf("flat-monte-carlo", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = SEARCH_BUDGET),
         )
     }
 
@@ -65,20 +65,19 @@ class GoldenMoveStreamTest {
         // The one that would catch a cross-target divergence in UCB1, which is why its logarithm
         // comes from `portableLog` and not from `kotlin.math`. This suite runs in Chrome too.
         assertEquals(
-            4890617335203011984L,
-            hashOf("uct", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = 500),
+            4446294306891950002L,
+            hashOf("uct", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = SEARCH_BUDGET),
         )
     }
 
     @Test
     fun `PUCT against random on 12x12`() {
-        // Ten times the allowance the other two searchers get on the same board, because this one
-        // charges itself for its evaluation: at `expert` a leaf costs `grid.playableCount`, so five
-        // hundred would buy three iterations a turn and pin next to nothing. Five thousand is about
-        // thirty-five, which is a search — and still trivial for the browser job this suite runs in.
+        // The same allowance as the other two searchers now, and that is the point: an allowance is
+        // a count of evaluations, so twenty means twenty iterations here as well — where it used to
+        // mean twenty simulated moves and buy this bot next to nothing.
         assertEquals(
-            -1952801837547873716L,
-            hashOf("puct", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = 5_000),
+            -900434540592784873L,
+            hashOf("puct", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = SEARCH_BUDGET),
         )
     }
 
@@ -113,7 +112,7 @@ class GoldenMoveStreamTest {
         seed: Long,
         rows: Int = 20,
         cols: Int = 20,
-        budgetPerTurn: Int = 1_000,
+        budgetPerTurn: Int = SEARCH_BUDGET,
         rules: ao.snakewarz.core.rules.RulesConfig = ao.snakewarz.core.rules.RulesConfig(),
     ): Long {
         val match = HeadlessMatch(
@@ -126,5 +125,16 @@ class GoldenMoveStreamTest {
         )
         match.run()
         return moveStreamHash(match.moves())
+    }
+
+    private companion object {
+        /**
+         * Evaluations a turn — twenty, which is twenty rollouts or twenty appraisals.
+         *
+         * One figure for all three searchers, which is new: an allowance used to be counted in
+         * simulated moves, so `puct` needed ten times the number the other two got to run a
+         * comparable search. It buys the same thing for all of them now.
+         */
+        const val SEARCH_BUDGET = 20
     }
 }

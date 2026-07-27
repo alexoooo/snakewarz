@@ -77,26 +77,25 @@ class UctBotTest {
     }
 
     @Test
-    fun `the shipped allowance buys a tree worth having, and a tenth of it does not`() {
-        // The number this phase most wants recorded, and the reason `BotLadderTest` measures
-        // strength at ten thousand rather than at the contract suite's thousand. One node is
-        // created per iteration, so the count *is* the iteration count.
+    fun `the allowance is the iteration count, and the iteration count is the tree`() {
+        // The number this phase most wants recorded, and the reason `BotLadderTest` measures strength
+        // at two hundred rather than at the contract suite's twenty. One rollout is charged per
+        // iteration and one node is created per iteration, so the allowance, the iteration count and
+        // the tree size are all the same number -- which is what makes a budget a thing you can
+        // reason about rather than a proxy for one.
         //
-        // At a thousand a turn the tree never gets past its own first layer -- four openings, one
-        // visit each, and a dozen iterations left over -- which is why UCT and flat Monte Carlo are
-        // indistinguishable down there. At ten thousand there is an actual search.
-        //
-        // If rollouts ever get truncated, these numbers move by an order of magnitude, and that is
-        // exactly the change worth being told about.
+        // At twenty a turn the tree never gets past its own first layer -- four openings, one visit
+        // each, and a dozen iterations left over -- which is why UCT and flat Monte Carlo are
+        // indistinguishable down there. At two hundred there is an actual search.
         val opening = boardOf(20, 20, 0 to 0, 19 to 19)
 
         val cramped = UctBot(setupFor(opening, opening.toAct, seed = 1))
-        cramped.chooseMove(turnOn(opening, opening.toAct, Budget(1_000)))
-        assertTrue(cramped.nodesSearched in 8..40, "a thousand a turn built ${cramped.nodesSearched} nodes")
+        cramped.chooseMove(turnOn(opening, opening.toAct, Budget(20)))
+        assertTrue(cramped.nodesSearched in 19..21, "twenty a turn built ${cramped.nodesSearched} nodes")
 
         val roomy = UctBot(setupFor(opening, opening.toAct, seed = 1))
-        roomy.chooseMove(turnOn(opening, opening.toAct, Budget(10_000)))
-        assertTrue(roomy.nodesSearched in 90..260, "ten thousand a turn built ${roomy.nodesSearched} nodes")
+        roomy.chooseMove(turnOn(opening, opening.toAct, Budget(200)))
+        assertTrue(roomy.nodesSearched in 199..201, "two hundred a turn built ${roomy.nodesSearched} nodes")
     }
 
     @Test

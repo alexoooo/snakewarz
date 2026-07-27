@@ -91,7 +91,7 @@ class TomSnakeBotTest {
     private fun winsFor(challenger: BotEntry, defender: BotEntry): Int {
         var wins = 0
         for (seed in 1L..20L) {
-            if (HeadlessMatch(listOf(challenger, defender), 12, 12, seed, budgetPerTurn = 10_000)
+            if (HeadlessMatch(listOf(challenger, defender), 12, 12, seed, budgetPerTurn = 200)
                     .run().winner == SnakeId(0)
             ) {
                 wins++

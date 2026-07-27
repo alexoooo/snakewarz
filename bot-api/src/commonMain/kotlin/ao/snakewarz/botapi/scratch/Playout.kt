@@ -16,14 +16,19 @@ import ao.snakewarz.core.snake.SnakeId
  * while (p.outcome == null) p.advance(policy.pick(p))
  * ```
  *
- * and the thing to notice is that **the loop condition is also the budget check**. [advance] charges
- * the turn's [ao.snakewarz.core.Budget] internally, and once that is spent [outcome] reports a draw
- * whether the game is over or not. So a search terminates *structurally*: for the great majority of
- * bots, whose cost is dominated by simulation, budget enforcement is automatic rather than trusted.
+ * and the thing to notice is that **the loop condition is also the budget check** — but at the top
+ * rather than throughout. [Scratch.playout] charges for the evaluation before handing this over, and
+ * refuses once there is not enough left, in which case [outcome] is non-null before a single move is
+ * made and the loop never runs. So a search terminates *structurally*: an iteration it cannot afford
+ * is an iteration it cannot start.
  *
- * The honest limit: single-threaded wasm cannot preempt a bot spinning in a loop that simulates
- * nothing. Nothing here pretends otherwise. The mitigations are the contract suite in CI and the
- * renderer's frame-time guard.
+ * Once the evaluation is paid for, [advance] charges nothing and [outcome] is the game's own —
+ * a rollout that has begun always finishes, bounded by the rules' turn limit rather than by an
+ * allowance expiring half way through a line nobody can credit.
+ *
+ * The honest limit: single-threaded wasm cannot preempt a bot spinning in a loop that asks for no
+ * playout at all. Nothing here pretends otherwise. The mitigations are the contract suite in CI and
+ * the renderer's frame-time guard.
  */
 public interface Playout {
     /** The position, live — it changes with every [advance] and [undo]. */
@@ -34,13 +39,14 @@ public interface Playout {
     /**
      * `null` while there is more to simulate.
      *
-     * Non-null either because the game genuinely ended or because the budget ran out, in which case
-     * it is a draw. A search that treats an exhausted rollout as a draw is doing the right thing:
-     * it has no information about who would have won, and saying so is better than guessing.
+     * Non-null either because the game genuinely ended or because the allowance would not stretch to
+     * this evaluation at all, in which case it is a draw carrying no information — see
+     * [BoardScratch.EXHAUSTED]. It cannot become the second of those part-way through: an evaluation
+     * is paid for before it starts.
      */
     public val outcome: MatchOutcome?
 
-    /** [toAct] moves, and the turn passes to the next living snake. Charges one unit of budget. */
+    /** [toAct] moves, and the turn passes to the next living snake. */
     public fun advance(direction: Direction): MoveOutcome
 
     /** As [advance], but naming the mover explicitly. It must be [toAct]. */
@@ -51,7 +57,4 @@ public interface Playout {
 
     /** How many moves can still be taken back. */
     public val undoDepth: Int
-
-    /** Returns to the live match position, discarding the whole line. Does not refund budget. */
-    public fun reset()
 }

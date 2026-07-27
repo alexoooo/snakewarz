@@ -111,11 +111,20 @@ board already follows.
 ### Naming seats, and building DOM
 
 **Seats are named by `SlotLabels`, not by the registry directly.** A seat is a *configured* bot, so
-two of them can be the same bot at two allowances, and the display name alone cannot say so. The
-qualifier is `Contestant.suffix` from `:match` — the very string the win-rate matrix uses — so the
-sidebar, the hover label, the winner line and the table cannot start disagreeing about what `@4k`
-means. The numbering does differ on purpose: `TournamentTable` leaves the first of a repeated column
-bare because it has a legend under it, while a list of four rows reads better as `Random ·1` and
+two of them can be the same bot at two allowances or two evaluations, and the display name alone
+cannot say so. The qualifier is `Contestant.suffix` from `:match` — the very string the win-rate
+matrix uses — so the sidebar, the hover label, the winner line and the table cannot start disagreeing
+about what `4k` means. `PUCT - 1k/rollout` is a full seat: allowance first, because that is what
+strength scales on, then the settings.
+
+What is *in* that suffix is the one thing `:ui` decides for itself, because it is the one thing that
+needs the registry: an allowance is named when the bot declares a `BotKnob.Search`, an offered
+`BotKnob.Choice` is named at its default too — a mode is what a seat *is* — and everything else is
+named only when it has been moved off its declared default. The matrix cannot make that call, since a
+`Contestant` has no registry to ask.
+
+The numbering does differ on purpose: `TournamentTable` leaves the first of a repeated column bare
+because it has a legend under it, while a list of four rows reads better as `Random ·1` and
 `Random ·2`.
 
 The static skeleton lives in `app/.../index.html`. Kotlin looks elements up by id once and then only

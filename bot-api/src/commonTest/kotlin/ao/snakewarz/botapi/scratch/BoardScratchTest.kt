@@ -65,7 +65,7 @@ class BoardScratchTest {
     }
 
     @Test
-    fun `reset returns to the live position, however far the line went`() {
+    fun `the next playout returns to the live position, however far the line went`() {
         val board = boardOf(6, 6, 0 to 0, 5 to 5)
         val scratch = BoardScratch(board, Budget(1000))
 
@@ -76,37 +76,74 @@ class BoardScratchTest {
         val playout = scratch.playout()
         val rng = SplitMix64(5)
         repeat(5) { playout.advance(rng.pick(playout.board.legalMoves(playout.toAct)) ?: Direction.NORTH) }
-        playout.reset()
 
-        assertEquals(board.hash, playout.board.hash)
-        assertEquals(board.turnIndex, playout.board.turnIndex)
-        assertEquals(0, playout.undoDepth, "a reset line has no history to unwind")
+        val next = scratch.playout()
+        assertEquals(board.hash, next.board.hash)
+        assertEquals(board.turnIndex, next.board.turnIndex)
+        assertEquals(0, next.undoDepth, "a fresh line has no history to unwind")
     }
 
     @Test
-    fun `an exhausted budget ends the playout, so a rollout loop terminates on its own`() {
-        // This is the whole point of the design: the loop condition *is* the budget check, so
-        // enforcement is structural rather than a promise every bot author has to keep.
+    fun `an allowance buys evaluations, and asking for one is what spends it`() {
+        // This is the whole point of the design: the charge lands on the playout rather than on the
+        // move, so an allowance means the same amount of search whatever a bot does inside one.
         val board = boardOf(20, 20, 0 to 0, 19 to 19)
         val budget = Budget(8)
-        val playout = BoardScratch(board, budget).playout()
+        val scratch = BoardScratch(board, budget)
 
-        var steps = 0
+        var evaluations = 0
         val rng = SplitMix64(11)
-        while (playout.outcome == null) {
-            playout.advance(rng.pick(playout.board.legalMoves(playout.toAct)) ?: Direction.NORTH)
-            steps++
+        while (true) {
+            val playout = scratch.playout()
+            if (playout.outcome != null) {
+                break
+            }
+            evaluations++
+            repeat(30) { playout.advance(rng.pick(playout.board.legalMoves(playout.toAct)) ?: Direction.NORTH) }
         }
 
-        assertEquals(8, steps, "the loop stopped because the allowance ran out, not because the game ended")
-        assertEquals(BoardScratch.EXHAUSTED, playout.outcome)
+        assertEquals(8, evaluations, "the loop stopped because the allowance ran out, not because a game did")
+        assertEquals(BoardScratch.EXHAUSTED, scratch.playout().outcome)
         assertTrue(budget.exhausted)
     }
 
     @Test
-    fun `a rollout to a real finish reports the real outcome`() {
+    fun `a refused playout charges nothing, so an unaffordable cost cannot overdraw`() {
+        val board = boardOf(8, 8, 0 to 0, 7 to 7)
+        val budget = Budget(10)
+        val scratch = BoardScratch(board, budget)
+
+        assertNull(scratch.playout(6).outcome, "six of ten is affordable")
+        assertEquals(6, budget.consumed)
+
+        assertSame(BoardScratch.EXHAUSTED, scratch.playout(6).outcome, "six more is not")
+        assertEquals(6, budget.consumed, "and a refusal is free")
+
+        assertNull(scratch.playout(4).outcome, "what is left still buys what fits")
+        assertEquals(10, budget.consumed)
+    }
+
+    @Test
+    fun `a playout the allowance refuses is still handed back at the live position`() {
+        // A bot that reads `board` before `outcome` must not see the previous iteration's line, which
+        // is a position nowhere in the match.
+        val board = boardOf(6, 6, 0 to 0, 5 to 5)
+        val scratch = BoardScratch(board, Budget(1))
+
+        val afforded = scratch.playout()
+        repeat(4) { afforded.advance(Direction.SOUTH.takeIf { afforded.toAct.index == 0 } ?: Direction.NORTH) }
+
+        val refused = scratch.playout()
+        assertSame(BoardScratch.EXHAUSTED, refused.outcome)
+        assertEquals(board.hash, refused.board.hash)
+    }
+
+    @Test
+    fun `a rollout that has been paid for runs to a real finish`() {
+        // Once the evaluation is bought it cannot be cut short by the allowance, so nothing has to
+        // tell an exhausted line from a real one half way through crediting it.
         val board = boardOf(4, 4, 0 to 0, 3 to 3)
-        val playout = BoardScratch(board, Budget(10_000)).playout()
+        val playout = BoardScratch(board, Budget(1)).playout()
 
         val rng = SplitMix64(3)
         while (playout.outcome == null) {
@@ -114,7 +151,7 @@ class BoardScratchTest {
         }
 
         val outcome = assertNotNull(playout.outcome)
-        assertEquals(false, outcome === BoardScratch.EXHAUSTED, "a 4x4 game finishes long before 10,000 moves")
+        assertEquals(false, outcome === BoardScratch.EXHAUSTED, "the game ended, the allowance did not")
     }
 
     @Test
@@ -128,15 +165,15 @@ class BoardScratchTest {
     }
 
     @Test
-    fun `the budget is shared with the turn, so simulation and search draw on one allowance`() {
+    fun `simulated moves are free, because the evaluation they belong to was already paid for`() {
         val board = boardOf(8, 8, 0 to 0, 7 to 7)
         val budget = Budget(50)
         val playout = BoardScratch(board, budget).playout()
 
         repeat(10) { playout.advance(Direction.SOUTH.takeIf { playout.toAct.index == 0 } ?: Direction.NORTH) }
 
-        assertEquals(10, budget.consumed)
-        assertEquals(40, budget.remaining)
+        assertEquals(1, budget.consumed, "one evaluation, however many moves it ran")
+        assertEquals(49, budget.remaining)
         assertNull(playout.outcome)
     }
 }

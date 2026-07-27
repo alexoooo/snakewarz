@@ -1,13 +1,26 @@
 package ao.snakewarz.core
 
 /**
- * A bot's search allowance for one turn, counted in **iterations and never in milliseconds**.
+ * A bot's search allowance for one turn, counted in **evaluations and never in milliseconds**.
  *
  * Counting work rather than time is what makes a match reproducible: a clock would make the number
  * of MCTS iterations depend on the machine, and the recorded move stream with it. It is also why no
  * module below `:ui` can reach a clock at all.
  *
- * A budget bounds simulation, which is where essentially all of a search bot's time goes. It cannot
+ * ### An evaluation, not a simulated move
+ *
+ * One unit buys one *judgement of a position* — a rollout played to the end, a static appraisal, one
+ * iteration of a tree search. That is the unit because it is the one every search bot has in common
+ * and the one that scales strength: doubling the evaluations roughly doubles the search whatever the
+ * bot does inside them, whereas doubling the *simulated moves* buys a rollout bot twice the search
+ * and a bot that never simulates nothing at all.
+ *
+ * Two evaluations of different kinds do not cost the same wall clock, and nothing here pretends they
+ * do. The exchange rate is the charge each bot passes to `Scratch.playout` — `bots/search`'s
+ * `EvaluationCost` is where the figures live and where calibrating them happens. They are all `1`
+ * today, which is a starting point rather than a measurement.
+ *
+ * A budget bounds iteration, which is where essentially all of a search bot's time goes. It cannot
  * preempt a bot spinning in a loop that consumes nothing — single-threaded wasm has no way to do
  * that, and pretending otherwise would be worse than stating it. The mitigations are the shared bot
  * contract suite in CI and the frame-time guard in the renderer.

@@ -13,9 +13,10 @@ import ao.snakewarz.core.rules.MatchOutcome
  * [ao.snakewarz.botapi.Turn], `Turn` is a class, and constructing one per simulated move would
  * allocate millions of them per match to carry four fields that are already in reach here.
  *
- * The loop condition is also the budget check. `Playout.advance` charges one unit and an exhausted
- * budget makes `outcome` non-null, so this returns rather than spinning — and the `outcome` is
- * re-read after **every** advance, never carried over, because advancing on a stale read throws.
+ * A rollout that has been paid for runs to the end, so this is bounded by the rules' turn limit
+ * rather than by an allowance — the caller charged one [EvaluationCost.ROLLOUT] when it asked for the
+ * playout. The `outcome` is re-read after **every** advance, never carried over, because advancing on
+ * a stale read throws.
  *
  * A trapped snake plays `NORTH` without consuming randomness. Every direction from a trapped
  * position eliminates it and leaves the board in exactly the same state, so there is nothing to

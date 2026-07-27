@@ -38,8 +38,12 @@ public class Contestant(
     public fun budgetIn(fallback: Int): Int = budgetPerTurn ?: fallback
 
     /**
-     * What makes this different from the bot as the batch would otherwise run it: `@4k` for an
-     * allowance of its own, `*` for anything tuned, and empty for a stock entry.
+     * The settings that make this what it is, shortest form: `1k/rollout`, `4k`, `rollout`, or
+     * empty for a stock entry.
+     *
+     * **The allowance leads, because it is the one setting every search bot scales on.** A bot at
+     * 4k and the same bot at 1k are the interesting pair in this testbed, and a label that said only
+     * that *something* had been tuned — which is what a bare `*` said — could not express it.
      *
      * Split out of [label] because a scoreboard has the bot's *display name* already and needs only
      * the part that tells two seats apart. Keeping one copy of the formatting is what makes the
@@ -47,10 +51,13 @@ public class Contestant(
      */
     public val suffix: String = buildString {
         if (budgetPerTurn != null) {
-            append('@').append(compact(budgetPerTurn))
+            append(compact(budgetPerTurn))
         }
-        if (!params.isEmpty) {
-            append('*')
+        for (name in params.names) {
+            if (isNotEmpty()) {
+                append('/')
+            }
+            append(shorten(name, params.string(name, "")))
         }
     }
 
@@ -59,10 +66,10 @@ public class Contestant(
      * enough.
      *
      * Kept short because the table is fixed-width text in a narrow panel — `uct` and `uct@4k` sit
-     * beside each other legibly, and the settings themselves go in a legend under the grid rather
+     * beside each other legibly, and the *full* settings still go in a legend under the grid rather
      * than into the column headings. Integer arithmetic only, like the rest of that table.
      */
-    public val label: String = bot.slug + suffix
+    public val label: String = if (suffix.isEmpty()) bot.slug else "${bot.slug}@$suffix"
 
     /** The configuration spelled out, for the legend under a matrix. Empty when there is none. */
     public val summary: String = buildString {
@@ -95,5 +102,21 @@ public class Contestant(
     private companion object {
         /** `40000` as `40k`, and anything that does not divide evenly as itself. */
         fun compact(value: Int): String = if (value >= 1_000 && value % 1_000 == 0) "${value / 1_000}k" else "$value"
+
+        /**
+         * One setting, as short as it can be said and still be read.
+         *
+         * A `BotKnob.Choice` value names itself — `rollout` and `expert` are what a person would
+         * call them — so the knob's name adds nothing but width. A number or a flag names nothing at
+         * all, and `uct@1k/7.5` is a worse label than no label, so those keep their key. Decided on
+         * the *value* rather than on the knob because a `Contestant` has no registry to ask, which is
+         * also what lets it describe a bot `:match` has never heard of.
+         */
+        fun shorten(name: String, value: String): String =
+            if (value.toDoubleOrNull() == null && value.toBooleanStrictOrNull() == null) {
+                value
+            } else {
+                "$name=$value"
+            }
     }
 }

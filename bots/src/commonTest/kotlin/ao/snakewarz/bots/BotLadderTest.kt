@@ -43,10 +43,9 @@ class BotLadderTest {
     @Test
     fun `the tree is worth nothing until it has room to grow, and a lot afterwards`() {
         // UCT and flat Monte Carlo share a rollout policy and an allowance. The only difference is
-        // that one of them remembers what it learned -- and at a few thousand simulated moves a turn
-        // there is nothing to remember, because a rollout runs a hundred-odd moves and four of them
-        // are spent giving each opening its first visit. The tree only starts paying once there are
-        // iterations left over to deepen it.
+        // that one of them remembers what it learned -- and at a hundred rollouts a turn there is
+        // nothing to remember, because four of them are spent giving each opening its first visit.
+        // The tree only starts paying once there are iterations left over to deepen it.
         //
         // This is why the shipped default matters and why the contract suite's smaller allowance is
         // not evidence about strength. Measured: 10 of 20 at a tenth, 15 of 20 at the full allowance.
@@ -112,8 +111,8 @@ class BotLadderTest {
         const val ROWS = 12
         const val COLS = 12
 
-        /** `MatchSetup.DEFAULT_BUDGET_PER_TURN`, which `:bots` may not import. */
-        const val BUDGET = 40_000
+        /** `MatchSetup.DEFAULT_BUDGET_PER_TURN`, which `:bots` may not import. Evaluations a turn. */
+        const val BUDGET = 1_000
 
         /** A tenth of the shipped allowance, which is what the raise to it has to be worth beating. */
         const val CRAMPED_BUDGET = BUDGET / 10

@@ -137,8 +137,8 @@ internal sealed interface LabCommand {
             and every other name is one of that bot's declared knobs. For example:
 
               play puct:eval=expert puct:eval=rollout --rounds 40
-              play uct uct:budget=4000
-              time puct:eval=expert --budget 40000
+              play uct uct:budget=100
+              time puct:eval=expert --budget 2000
         """.trimIndent()
 
         fun of(args: List<String>, registry: BotRegistry): LabCommand {

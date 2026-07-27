@@ -176,37 +176,43 @@ public class MatchSetup(
         public const val MAX_SIDE: Int = 256
 
         /**
-         * Simulated moves a bot may spend on one turn — **measured, not guessed**.
+         * Evaluations a bot may spend on one turn — **measured, not guessed**.
          *
          * The criterion is the scheduler's frame budget. `:ui` gives a frame 8 ms of stepping and
          * then stops, but it can only stop *between* turns, so a turn that overruns the slice
-         * overruns the frame. So `UctBot` was timed on a 20x20 in headless Chrome — the slower of
-         * the two targets, and the one people play on:
+         * overruns the frame. So `uct` was timed on a 20x20 in headless Chrome — the slower of the
+         * two targets, and the one people play on — with `ThroughputTest`, and the other search bots
+         * on the JVM with `:lab`'s `time`:
          *
-         * | allowance | Chrome | JVM |
-         * |---|---|---|
-         * | 10,000 | 1.2 ms/turn | 0.40 ms/turn |
-         * | 40,000 | 4.1 ms/turn | 1.6 ms/turn |
-         * | 60,000 | 5.2 ms/turn | 2.1 ms/turn |
-         * | 100,000 | 16.6 ms/turn | 4.1 ms/turn |
+         * | allowance | uct, Chrome | uct, JVM | flat-mc, JVM | puct rollout, JVM | puct expert, JVM |
+         * |---|---|---|---|---|---|
+         * | 250 | 1.1 ms | 0.41 ms | 0.42 ms | 0.42 ms | 1.8 ms |
+         * | 1,000 | 5.0 ms | 2.0 ms | 1.5 ms | 1.8 ms | 5.4 ms |
+         * | 2,000 | 9.8 ms | 4.3 ms | 3.4 ms | 4.4 ms | 12 ms |
+         * | 10,000 | 60 ms | 25 ms | 17 ms | 19 ms | 69 ms |
          *
-         * 40,000 is **half** the 8 ms slice rather than all of it, and that headroom is the whole
-         * argument: the machine those numbers came off is a desktop, and one four times slower still
-         * lands inside a single 60 Hz frame. Going to 60,000 would spend the headroom to buy a bot
-         * that `BotLadderTest` cannot tell apart from this one.
+         * 1,000 puts `uct` at 5 ms of the 8 ms slice in Chrome. That is inside it with less room
+         * than the previous default had, and the trade was made deliberately: the number is now a
+         * count of *iterations*, which is a thing a person can reason about — a thousand rollouts a
+         * turn — where 40,000 simulated moves was a number whose meaning changed with the bot
+         * reading it. The knob's ceiling of 10,000 is far past the slice, and that is what a ceiling
+         * is for: somewhere to reach deliberately, not somewhere to sit. `puct` at `eval=expert` is
+         * the one shipped configuration that overruns the slice at this figure, which is the honest
+         * reading of it being registered as experimental and of `EvaluationCost` being uncalibrated.
          *
-         * Four times the 10,000 originally guessed, and worth it — the guess was made against a
-         * search that allocated a board per node, and the arena made a simulated move cheap enough
-         * that nobody had re-derived it. `uct` at this allowance beats `uct` at a tenth
-         * of it, which is the assertion in `BotLadderTest` that says the extra iterations are real
-         * playing strength rather than a bigger number. Every shipped bot still degrades gracefully
-         * below it, down to and including zero.
+         * The unit changed under this figure and the number changed with it. An allowance used to
+         * count *simulated moves*, where 40,000 bought `uct` about 4 ms; counting evaluations makes
+         * the same allowance mean the same amount of search whatever a bot does inside an iteration,
+         * which is what a win-rate matrix needs it to mean. `uct` at this allowance beats `uct` at a
+         * tenth of it, which is the assertion in `BotLadderTest` that says the extra iterations are
+         * real playing strength rather than a bigger number. Every shipped bot still degrades
+         * gracefully below it, down to and including zero.
          *
          * Raising it invalidates no replay. `budgetPerTurn` is in the header, so a record carries the
          * allowance it was played under and `verify` re-runs against that, never against whatever
          * this constant says today.
          */
-        public const val DEFAULT_BUDGET_PER_TURN: Int = 40_000
+        public const val DEFAULT_BUDGET_PER_TURN: Int = 1_000
 
         /**
          * The RNG stream setup draws from.

@@ -63,7 +63,7 @@ as the replay URLs people have shared keep working.**
 - **No `HashMap`/`HashSet` *iteration* in `:core` or `:bots`.** Use `LinkedHashMap` or sorted arrays.
   The legacy code iterated a `HashMap` and was only *accidentally* stable, because
   `PlayerAvatar.hashCode()` happened to return a monotonic index.
-- **No wall clock in `:core`, `:bot-api`, `:bots` or `:match`.** Budgets are counted in iterations,
+- **No wall clock in `:core`, `:bot-api`, `:bots` or `:match`.** Budgets are counted in evaluations,
   never milliseconds. Time lives in `:ui` and `:lab` only — and `:lab` sits outside all four rather
   than inside one of them, because a tool that reports how long a batch took has to read a clock and
   a module a match runs through must not be able to.
@@ -182,23 +182,30 @@ is dense with index arithmetic where a transposed pair is a bug you find visuall
 
 ## SW-07 — A search pays for its own work
 
-**`turn.budget` is an allowance, which means it has to be a bound rather than a record.**
+**`turn.budget` is an allowance counted in evaluations, which means it has to be a bound rather than
+a record.**
 
-`Playout.advance` charges the budget itself, and an exhausted budget makes `outcome` a draw — so a
-rollout loop's condition *is* the budget check and the search terminates structurally. A search that
-does **not** simulate has to charge itself with `Turn.budget.tryConsume(units)`, and must do so
-**before** doing the work: `tryConsume` refuses and charges nothing once there is not enough left, so
-charging afterwards makes the allowance a note about work already done.
+One unit buys one judgement of a position — a rollout, a static appraisal, one iteration of a tree
+search — and `Scratch.playout(cost)` is what charges it. Charging on the *evaluation* rather than on
+the simulated move is what lets one number mean the same amount of search to a bot that plays a
+hundred moves out and a bot that sweeps the board once. It also charges **before** the work rather
+than after: a refused playout comes back reporting an outcome, so a rollout loop's first line is the
+budget check and the search terminates structurally, and an evaluation that has begun always
+finishes rather than being cut off half way through a line nobody can credit.
 
-Do not tune the charge down to make a bot look better in a matrix. Report the wall clock beside the
-win rate instead — that is what `:lab`'s `time` subcommand exists for.
+Pass your own `EvaluationCost` entry as the cost. Do not tune it down to make a bot look better in a
+matrix; report the wall clock beside the win rate instead — that is what `:lab`'s `time` subcommand
+exists for, and every entry is `1` today, so a matrix at "equal allowance" is equal *iterations* and
+says nothing about milliseconds.
 
 Enforced by `BotContractTest`: a bot spends budget **if and only if** it declares a `BotKnob.Search`,
 and a bot handed an allowance of zero must spend exactly zero and still play well.
 
 **Why:** Without it, `budgetPerTurn` quietly means something different for every bot that declares
 one, and the win-rate matrix — the entire point of the testbed — compares two bots that were not
-given the same thing.
+given the same thing. That is not hypothetical: under the previous per-move accounting `puct` at
+`eval=expert` was charged the board area for a leaf a rollout got for its length, and read as the
+weaker bot on a matrix that was measuring the charge rather than the bot.
 
 
 ## SW-08 — The bundle is a budget

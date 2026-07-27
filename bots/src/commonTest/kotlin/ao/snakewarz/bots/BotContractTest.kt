@@ -131,7 +131,7 @@ class BotContractTest {
         // with a flood fill and consume nothing; a slider for those would change no move they ever
         // play.
         forEachShippedBot { entry ->
-            val match = HeadlessMatch(listOf(entry, entry), rows = 10, cols = 10, seed = 606, budgetPerTurn = 2_000)
+            val match = HeadlessMatch(listOf(entry, entry), rows = 10, cols = 10, seed = 606, budgetPerTurn = 40)
             match.run()
 
             val spent = match.decisions.any { it.budgetConsumed > 0 }
@@ -161,13 +161,13 @@ class BotContractTest {
                 return@forEachShippedBot
             }
 
-            val stock = HeadlessMatch(listOf(entry, entry), rows = 10, cols = 10, seed = 8191, budgetPerTurn = 2_000)
+            val stock = HeadlessMatch(listOf(entry, entry), rows = 10, cols = 10, seed = 8191, budgetPerTurn = 40)
             val spelledOut = HeadlessMatch(
                 listOf(entry, entry),
                 rows = 10,
                 cols = 10,
                 seed = 8191,
-                budgetPerTurn = 2_000,
+                budgetPerTurn = 40,
                 paramsPerSlot = listOf(declared, declared),
             )
             stock.run()

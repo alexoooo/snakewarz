@@ -191,13 +191,7 @@ internal class SpaceOwnership(private val grid: Grid, private val snakeCount: In
         /** Reached by two snakes on the same step, so held by neither. Fits in the owner byte. */
         private const val CONTESTED = -1
 
-        /**
-         * A judged draw.
-         *
-         * Equal to `BoardScratch.EXHAUSTED` by value and deliberately not the same instance: an
-         * exhausted budget is checked for by identity, because "the allowance ran out" carries no
-         * information about the position and must not be credited, whereas this is a real reading.
-         */
+        /** A judged draw: nobody is ahead by enough to call, which is a real reading of a position. */
         private val DRAWN = MatchOutcome(SnakeId.NONE, MatchEnd.TURN_LIMIT)
     }
 }

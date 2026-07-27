@@ -5,9 +5,8 @@ import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Turn
 import ao.snakewarz.botapi.knob.BotKnob
-import ao.snakewarz.botapi.scratch.BoardScratch
-import ao.snakewarz.botapi.scratch.Playout
 import ao.snakewarz.bots.reactive.space.SpaceBot
+import ao.snakewarz.bots.search.EvaluationCost
 import ao.snakewarz.bots.search.uct.UctBot
 import ao.snakewarz.bots.search.uct.portableLog
 import ao.snakewarz.core.grid.Direction
@@ -32,14 +31,14 @@ import ao.snakewarz.core.snake.SnakeId
  * else. [MobilityEval] is the other end of the same question — near-free, so it buys about a hundred
  * times the tree.
  *
- * ### A static evaluation pays for itself
+ * ### Every evaluation pays the same, whatever it does
  *
- * A rollout spends the allowance a move at a time through `Playout.advance`, so the engine can see
- * what it costs. A board-wide sweep cannot be seen that way, and a bot that charged nothing for one
- * would quietly make `budgetPerTurn` mean something different for it than for every other bot — and
- * a tournament at "equal allowance" would stop being one. So this is the first bot to charge its own
- * budget: [judge] calls `Turn.budget.tryConsume(eval.cost)` **before** running the evaluation, which
- * is what makes the allowance a bound rather than a note about work already done.
+ * An allowance is counted in evaluations, and this is the bot where that matters: `eval=rollout`
+ * plays a hundred-odd moves out and `eval=mobility` reads sixteen squares, and both are one
+ * iteration of the same search. So the charge is [LeafEval.cost], paid by asking for the iteration's
+ * playout before descending, and the three settings differ in what they buy per unit rather than in
+ * how many units they can smuggle. What the units are *worth* against each other is [EvaluationCost],
+ * where the calibration is openly still to do.
  *
  * ### No logarithm
  *
@@ -105,8 +104,9 @@ public class PuctBot(setup: BotSetup) : Bot {
         priorsInto(turn.board, turn.self, legal)
         tree.open(PuctTree.ROOT, legal, priors)
 
-        while (turn.budget.remaining > 0 && iterate(turn)) {
-            // Every exit is inside iterate(): the allowance ran out, or a leaf could not be judged.
+        while (iterate(turn)) {
+            // The only exit is inside iterate(): the allowance would not stretch to another
+            // evaluation.
         }
 
         val best = tree.bestMoveAtRoot()
@@ -118,15 +118,19 @@ public class PuctBot(setup: BotSetup) : Bot {
     /**
      * One descend-judge-credit pass. Returns `false` when the search should stop.
      *
+     * The evaluation is paid for on the first line, before anything is known about where the descent
+     * will land — which is also what says whether there is one left to run. So every pass past that
+     * line produces a value and is credited, whether it ended in a real outcome or in a judgement.
+     *
      * The moves this applies are unwound by the next call's `playout()`, which resets the arena from
      * the live board — so `Playout.undo` is never called here, for [UctBot]'s reason: a reset is one
      * array copy, and it makes an off-by-one unwind impossible rather than merely unlikely.
      */
     private fun iterate(turn: Turn): Boolean {
-        val playout = turn.scratch.playout()
+        val playout = turn.scratch.playout(eval.cost)
         if (playout.outcome != null) {
-            // Over before a move is made — which an evaluation that charges the allowance can cause,
-            // because `outcome` reports EXHAUSTED the moment the budget is spent.
+            // Over before a move is made: the allowance would not stretch to another evaluation of
+            // this kind, so there is nothing left to run.
             return false
         }
 
@@ -140,7 +144,7 @@ public class PuctBot(setup: BotSetup) : Bot {
             playout.advance(direction)
 
             // Re-read after every advance, never carried over: advancing on a stale reading is an
-            // IllegalStateException, and the budget can expire on any move.
+            // IllegalStateException, and any move can be the one that ends the game.
             val result = playout.outcome
 
             val child = tree.childOrCreate(node, direction, mover)
@@ -149,11 +153,6 @@ public class PuctBot(setup: BotSetup) : Bot {
             }
 
             if (result != null) {
-                if (result === BoardScratch.EXHAUSTED) {
-                    // Not a draw -- no information at all. Crediting it would invent a result for
-                    // whichever line the allowance happened to expire on.
-                    return false
-                }
                 // A game that really ended is worth more than a judgement of it.
                 outcomeValues(result, slotCount, values)
                 break
@@ -161,9 +160,7 @@ public class PuctBot(setup: BotSetup) : Bot {
 
             if (child == PuctTree.NO_NODE || depth == path.size) {
                 // The pool or the path array is full. Judge from here rather than deepening.
-                if (!judge(turn, playout)) {
-                    return false
-                }
+                eval.valuesInto(playout, values)
                 break
             }
 
@@ -173,9 +170,7 @@ public class PuctBot(setup: BotSetup) : Bot {
                 priorsInto(playout.board, next, moves)
                 tree.open(child, moves, priors)
 
-                if (!judge(turn, playout)) {
-                    return false
-                }
+                eval.valuesInto(playout, values)
                 break
             }
 
@@ -186,21 +181,6 @@ public class PuctBot(setup: BotSetup) : Bot {
             tree.record(path[i], values)
         }
         return true
-    }
-
-    /**
-     * Charges for the evaluation and then runs it, answering `false` when there is nothing to credit.
-     *
-     * The charge comes **first**. `Budget.tryConsume` charges nothing and refuses once there is not
-     * enough left, so charging afterwards would make the allowance a record of work already done
-     * rather than a limit on work about to be done — and a bot could overrun it by a whole sweep on
-     * its last iteration.
-     */
-    private fun judge(turn: Turn, playout: Playout): Boolean {
-        if (!turn.budget.tryConsume(eval.cost)) {
-            return false
-        }
-        return eval.valuesInto(playout, values)
     }
 
     /**
@@ -250,7 +230,7 @@ public class PuctBot(setup: BotSetup) : Bot {
 
     internal companion object {
         /** The same range [UctBot] declares, so the two are comparable at the same numbers. */
-        val SEARCH = BotKnob.Search(min = 0, max = 400_000, step = 10_000)
+        val SEARCH = BotKnob.Search(min = 0, max = 10_000, step = 100)
 
         /**
          * The experiment, and therefore the tradeoff — three value functions rather than three

@@ -240,29 +240,36 @@ class TournamentTest {
     }
 
     @Test
-    fun `a contestant's suffix is the part of its label that is not the bot`() {
+    fun `a contestant's suffix is the settings, allowance first`() {
         assertEquals("", Contestant(BotId("cycle")).suffix, "a stock entry has nothing to add")
-        assertEquals("@4k", Contestant(BotId("cycle"), budgetPerTurn = 4_000).suffix)
-        assertEquals("*", Contestant(BotId("cycle"), params = BotParams(mapOf("a" to "1"))).suffix)
+        assertEquals("4k", Contestant(BotId("cycle"), budgetPerTurn = 4_000).suffix)
 
-        val both = Contestant(BotId("cycle"), budgetPerTurn = 4_000, params = BotParams(mapOf("a" to "1")))
-        assertEquals("@4k*", both.suffix)
-        assertEquals(both.bot.slug + both.suffix, both.label, "a label is the slug and then the suffix")
+        // A value that names itself goes in bare; a number would not, so it keeps its key.
+        assertEquals("expert", Contestant(BotId("cycle"), params = BotParams(mapOf("eval" to "expert"))).suffix)
+        assertEquals("a=1", Contestant(BotId("cycle"), params = BotParams(mapOf("a" to "1"))).suffix)
+        assertEquals("on=true", Contestant(BotId("cycle"), params = BotParams(mapOf("on" to "true"))).suffix)
+
+        val both = Contestant(BotId("cycle"), budgetPerTurn = 4_000, params = BotParams(mapOf("eval" to "expert")))
+        assertEquals("4k/expert", both.suffix, "the allowance leads, because it is what strength scales on")
+        assertEquals("cycle@4k/expert", both.label, "a label is the slug and then the settings")
     }
 
     @Test
     fun `two contestants that describe themselves the same way still get distinct columns`() {
+        // Rarer than it was, now that a label carries the settings rather than a bare `*` -- but two
+        // knobs can still share a value word, and the legend under the grid is what says which is
+        // which.
         val table = TournamentTable(
             listOf(
-                Contestant(BotId("cycle"), params = BotParams(mapOf("a" to "1"))),
-                Contestant(BotId("cycle"), params = BotParams(mapOf("a" to "2"))),
+                Contestant(BotId("cycle"), params = BotParams(mapOf("eval" to "expert"))),
+                Contestant(BotId("cycle"), params = BotParams(mapOf("policy" to "expert"))),
             ),
         )
 
         val heading = table.toString().lines().first()
 
-        assertTrue(heading.contains("cycle*"), heading)
-        assertTrue(heading.contains("cycle*·2"), "a repeated label is numbered rather than duplicated: $heading")
+        assertTrue(heading.contains("cycle@expert"), heading)
+        assertTrue(heading.contains("cycle@expert·2"), "a repeated label is numbered rather than duplicated: $heading")
     }
 
     @Test

@@ -41,11 +41,13 @@ And one is experimental:
 |---|---|
 | PUCT | AlphaZero's tree search with a hand-written appraisal of the position where the neural network would be |
 
-PUCT is not a rung because it has not earned one: measured over forty rounds a pairing it is level
-with UCT per unit of *time* and behind it at an equal allowance. Its `Evaluation` setting is the
-interesting part — `expert` is the hand-written appraisal, `rollout` makes it judge a leaf exactly as
-UCT does, and `mobility` is a near-free reading that buys a hundred times the tree. Setting two seats
-to the same bot at two evaluations and running a tournament is how those numbers were arrived at.
+PUCT is not a rung because it has not earned one: measured over forty rounds a pairing it is ahead of
+UCT at an equal allowance and only level with it per unit of *time*, and until those two readings
+agree it makes no claim a rung would make. Its `Evaluation` setting is the interesting part —
+`expert` is the hand-written appraisal, `rollout` makes it judge a leaf exactly as UCT does, and
+`mobility` is a near-free reading that gets the same search for a fraction of the clock. Setting two
+seats to the same bot at two evaluations and running a tournament is how those numbers were arrived
+at.
 
 ## Settings
 
@@ -60,9 +62,11 @@ each plays visibly differently, rather than a number a sweep settles better than
 tunables are still declared and still reachable — `:lab` sweeps them and a replay link carries them —
 they just do not take up a row in front of somebody with no way to judge them.
 
-The allowance is counted in simulated moves rather than milliseconds, which is what keeps a match
-reproducible on any machine. Everything you change travels in the replay link, so a shared match says
-what it was played under and opens one click away from a rematch under the same conditions.
+The allowance is counted in **evaluations** — rollouts, appraisals, tree iterations — rather than in
+milliseconds, which is what keeps a match reproducible on any machine and what makes one number mean
+the same amount of search to bots that do quite different things with it. Everything you change
+travels in the replay link, so a shared match says what it was played under and opens one click away
+from a rematch under the same conditions.
 
 ## Tournaments
 
@@ -83,11 +87,11 @@ A contestant is a *configured* seat rather than just a bot, so the same bot may 
 settings — which is the question this whole thing exists to answer:
 
 ```
-       |    uct | uct@4k |  score
-uct    |      - |      7 |    70%
-uct@4k |      3 |      - |    30%
+        |     uct | uct@100 |   score
+uct     |       - |       7 |     70%
+uct@100 |       3 |       - |     30%
 
-uct@4k   budget=4000
+uct@100   budget=100
 ```
 
 It runs on the animation frame in slices of a few milliseconds, so the page stays responsive
@@ -158,7 +162,7 @@ JVM and keeps a Kotlin/JS fallback target a config change rather than a rewrite.
 | `:app` | Entry point and wiring |
 | `:lab` | A JVM command line for running batches headlessly. Not shipped, and nothing depends on it |
 
-Time lives only in `:ui` and `:lab`: a bot is handed a budget counted in iterations and has no way to
+Time lives only in `:ui` and `:lab`: a bot is handed a budget counted in evaluations and has no way to
 reach a clock, so a match reproduces by construction rather than by discipline. `:lab` sits outside
 the shipped graph precisely so that reporting how long a batch took cannot put a clock inside it.
 
@@ -186,7 +190,8 @@ register("my-bot", "My Bot", ::MyBot)
 
 A bot instance lives for a whole match, so a search tree is just an instance field. To explore moves,
 take `turn.scratch.playout()` — a private copy of the board that plays forward and unwinds without
-allocating, and which stops on its own when the turn's budget runs out.
+allocating. Asking for one is what spends the turn's allowance, and one the allowance will not
+stretch to comes back already over, so a search loop stops on its own rather than on trust.
 
 That is the whole of it: no HTML to edit, because the pickers in the sidebar are built from the
 registry. Matches are deterministic from a seed, so results are reproducible and a whole game fits in

@@ -127,10 +127,10 @@ class ThroughputTest {
 
         const val SEED = 424_242L
 
-        /** `MatchSetup.DEFAULT_BUDGET_PER_TURN`, which `:bots` may not import. */
-        const val SHIPPED_BUDGET = 40_000
+        /** `MatchSetup.DEFAULT_BUDGET_PER_TURN`, which `:bots` may not import. Evaluations a turn. */
+        const val SHIPPED_BUDGET = 1_000
 
-        val BUDGETS = intArrayOf(10_000, 40_000, 60_000, 100_000)
+        val BUDGETS = intArrayOf(250, 1_000, 2_000, 10_000)
 
         const val WARMUP_MATCHES = 200
         const val ENGINE_MATCHES = 2_000
