@@ -251,7 +251,7 @@ The engine is called millions of times per turn from inside MCTS. In `:core` and
 ./gradlew build                              # both targets, JVM tests, checkModulePurity
 ./gradlew jvmTest                            # fast inner loop, with breakpoints
 ./gradlew allTests -PbrowserTests=true       # browser suite (needs Chrome; off by default)
-./gradlew :app:wasmJsBrowserDevelopmentRun   # local dev server
+./gradlew :app:wasmJsBrowserDevelopmentRun   # local dev server — yours. See below before an agent runs this
 ./gradlew :app:wasmJsBrowserDistribution     # production bundle -> app/build/dist/wasmJs/productionExecutable
 
 # The measuring instruments. Both print `[bench]` lines and run on either target.
@@ -261,6 +261,39 @@ The engine is called millions of times per turn from inside MCTS. In `:core` and
 
 Browser tests are disabled unless `-PbrowserTests=true`, because Karma startup dominates the runtime
 of small suites. Anything provable on the JVM should be proven there instead.
+
+### Never background `wasmJsBrowserDevelopmentRun` — serve the distribution instead
+
+The dev server is **not** a child of the `gradlew` you launched. Gradle runs the build inside its
+**daemon**, a detached process that outlives the client, and the daemon is what forks the webpack
+`serve` process. Kill the shell — close the terminal, stop the background job, hit Ctrl-C on a pipe —
+and the client dies while the daemon happily keeps a webpack server listening on 8080, or 8081, or
+whatever port was free. It is not in anybody's process tree and nothing reaps it. This has stranded a
+server more than once.
+
+`./gradlew --stop` is **not** the fix: it kills every daemon on the machine, including the one hosting
+a dev server somebody is deliberately using.
+
+So an agent that needs to see the app in a browser builds a static bundle and serves it itself:
+
+```bash
+./gradlew :app:wasmJsBrowserDevelopmentExecutableDistribution   # terminates; holds no port
+py -m http.server 8099 --bind 127.0.0.1 \
+   --directory app/build/dist/wasmJs/developmentExecutable      # a direct child, killable by port
+```
+
+**8099 is reserved for this** and for nothing else, which is what makes "kill whatever is on 8099"
+unambiguous — a human's dev server and an agent's look identical on the command line, because they are
+the same command in the same project. Python maps `.wasm` to `application/wasm`, so
+`instantiateStreaming` is happy; there is no live reload, which is the whole point — rebuild and
+reload by hand.
+
+Kill it when finished, and do not rely on the task runner to do it:
+
+```powershell
+Get-NetTCPConnection -State Listen -LocalPort 8099 |
+    ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+```
 
 Prefer `jvmTest` while developing; most modules answer in seconds. **`:bots` does not** — it is a
 couple of minutes, because `BotLadderTest` and `RolloutTruncationTest` play several hundred complete

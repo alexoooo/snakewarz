@@ -37,6 +37,18 @@ internal class Palette private constructor(
         const val CORPSE_ALPHA: Double = 0.28
 
         /**
+         * How much of its colour a living snake's oldest square keeps, with two of its own moves
+         * left and then with one.
+         *
+         * The trail retracts on alternating turns — `RulesConfig.growEveryNthMove` — so the square a
+         * snake is about to give back is knowable a move ahead of it going, and fading it in two
+         * steps says so. Both stay well clear of [CORPSE_ALPHA]: a fading square is one that is
+         * about to open, and a corpse is one that never will.
+         */
+        const val AGING_ALPHA: Double = 0.70
+        const val DYING_ALPHA: Double = 0.42
+
+        /**
          * A snake's trail colour, which is the same under either theme — only the head, the
          * gridlines and the board behind them change. That is why the scoreboard swatches can be
          * painted without a palette instance, and why they never need repainting on a theme change.

@@ -4,6 +4,7 @@ import ao.snakewarz.core.BoardView
 import ao.snakewarz.core.Cell
 import ao.snakewarz.core.Grid
 import ao.snakewarz.core.SnakeId
+import ao.snakewarz.core.SnakeView
 import ao.snakewarz.match.TurnEvents
 import kotlinx.browser.window
 import org.w3c.dom.CanvasRenderingContext2D
@@ -24,6 +25,13 @@ import org.w3c.dom.HTMLElement
  * drawn once per resize and every later fill lands strictly inside them. The design doc reached the
  * same end with a second underlay canvas; inset fills get there with one canvas, no stacking context
  * and no second device-pixel-ratio dance, which is worth more than the symmetry.
+ *
+ * ### Age is read off the position, not remembered
+ *
+ * A snake's oldest square fades in two steps before it clears — see [tailAlpha]. That is derived
+ * from the board every time it is painted rather than kept in a counter here, so seeking a replay,
+ * resizing the window and painting a tournament's current match all land on the same colours as
+ * playing the match forwards would have.
  *
  * The renderer knows nothing about matches, bots or time. It is handed a read-only projection of the
  * position and a list of dirty cells, and neither contains a pixel or a colour.
@@ -127,7 +135,8 @@ internal class BoardRenderer(private val canvas: HTMLCanvasElement) {
         val alpha = if (snake.alive) 1.0 else Palette.CORPSE_ALPHA
 
         for (i in 0 until snake.length) {
-            fill(snake.cellAt(i), colour, alpha)
+            // cellAt(0) is the tail, and the tail is the one square whose colour is not the body's.
+            fill(snake.cellAt(i), colour, if (i == 0) tailAlpha(view, snake) else alpha)
         }
         if (snake.alive) {
             fill(snake.head, palette.head(id.index), 1.0)
@@ -135,7 +144,7 @@ internal class BoardRenderer(private val canvas: HTMLCanvasElement) {
         heads[id.index] = snake.head.index
     }
 
-    /** The one or two squares a surviving move changed, plus the head handoff behind it. */
+    /** The one or two squares a surviving move changed, plus the head handoff and the fading tail. */
     fun paintMove(view: BoardView, mover: SnakeId, events: TurnEvents) {
         for (i in 0 until events.size) {
             paintOwner(view, events.cellAt(i))
@@ -143,6 +152,11 @@ internal class BoardRenderer(private val canvas: HTMLCanvasElement) {
         paintOwner(view, Cell(heads[mover.index]))
 
         val snake = view.snake(mover)
+        // The tail dims where it stands, so on a growing turn the engine reports no dirty cell for
+        // it — the square did not change hands, only how much longer the mover will hold it. The
+        // square the fade came *from* is either this same one or the one the engine just vacated,
+        // and that one is in `events`, so there is no third square to chase and nothing to track.
+        paintOwner(view, snake.tail)
         fill(snake.head, palette.head(mover.index), 1.0)
         heads[mover.index] = snake.head.index
     }
@@ -152,9 +166,39 @@ internal class BoardRenderer(private val canvas: HTMLCanvasElement) {
         val owner = view.ownerOf(cell)
         if (owner.isNone) {
             fill(cell, palette.background, 1.0)
-        } else {
-            fill(cell, palette.body(owner.index), if (view.snake(owner).alive) 1.0 else Palette.CORPSE_ALPHA)
+            return
         }
+
+        val snake = view.snake(owner)
+        val alpha = when {
+            !snake.alive -> Palette.CORPSE_ALPHA
+            cell == snake.tail -> tailAlpha(view, snake)
+            else -> 1.0
+        }
+        fill(cell, palette.body(owner.index), alpha)
+    }
+
+    /**
+     * How much colour a snake's oldest square keeps: full, then [Palette.AGING_ALPHA], then
+     * [Palette.DYING_ALPHA], and then the square is empty board.
+     *
+     * The board already knows this and nothing has to be remembered between turns to read it:
+     * `growsOnNextMove` is false exactly when the next move drags the body instead of extending it,
+     * which is the move that gives this square back. So a snake's tail spends one of its own moves
+     * aging and the next one dying, and a player can see where space is about to open up instead of
+     * counting growth turns.
+     *
+     * Two rules out. A dead snake is a permanent obstacle, so a corpse keeps the corpse colour all
+     * the way to its tail. And a trail that never retracts — `growEveryNthMove = 1`, classic Tron —
+     * has no square about to clear, so fading one would be a lie about the rules in play.
+     */
+    private fun tailAlpha(view: BoardView, snake: SnakeView): Double = when {
+        !snake.alive -> Palette.CORPSE_ALPHA
+        view.rules.growEveryNthMove < 2 -> 1.0
+        // A one-square snake is all head, and the head is painted over this anyway.
+        snake.length < 2 -> 1.0
+        snake.growsOnNextMove -> Palette.AGING_ALPHA
+        else -> Palette.DYING_ALPHA
     }
 
     private fun fill(cell: Cell, colour: String, alpha: Double) {
