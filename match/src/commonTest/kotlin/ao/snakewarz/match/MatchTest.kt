@@ -1,6 +1,7 @@
 package ao.snakewarz.match
 
 import ao.snakewarz.botapi.BotId
+import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.core.Direction
 import ao.snakewarz.core.EliminationReason
 import ao.snakewarz.core.MatchEnd
@@ -247,5 +248,44 @@ class MatchTest {
             assertIs<StepResult.Advanced>(firstOpening).direction,
             assertIs<StepResult.Advanced>(secondOpening).direction,
         )
+    }
+
+    @Test
+    fun `each slot is handed its own allowance, not the match default`() {
+        val registry = ReportingRegistry()
+        val setup = MatchSetup.create(
+            8,
+            8,
+            List(2) { BotId("reporter") },
+            seed = 3,
+            budgetPerTurn = 1_000,
+            budgets = intArrayOf(750, 25),
+        )
+
+        val match = Match(setup, registry)
+        repeat(2) { match.step() }
+
+        assertEquals(750, registry.made[0].allowance)
+        assertEquals(25, registry.made[1].allowance)
+    }
+
+    @Test
+    fun `each slot is handed its own parameters`() {
+        // The line that made this feature possible: Match passed BotParams.EMPTY unconditionally, so
+        // no shipped path could configure a bot at all.
+        val registry = ReportingRegistry()
+        val tuned = BotParams(mapOf("exploration" to "1.5"))
+        val setup = MatchSetup.create(
+            8,
+            8,
+            List(2) { BotId("reporter") },
+            seed = 3,
+            slotParams = listOf(BotParams.EMPTY, tuned),
+        )
+
+        Match(setup, registry)
+
+        assertEquals(BotParams.EMPTY, registry.made[0].params)
+        assertEquals(tuned, registry.made[1].params)
     }
 }

@@ -1,10 +1,13 @@
 package ao.snakewarz.match
 
 import ao.snakewarz.botapi.BotId
+import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.core.Grid
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class MatchSetupTest {
@@ -96,6 +99,89 @@ class MatchSetupTest {
         }
         assertFailsWith<IllegalArgumentException>("negative budget") {
             MatchSetup(1, 5, 5, ao.snakewarz.core.RulesConfig(), -1, slots, intArrayOf(0, 1), intArrayOf(0, 3))
+        }
+    }
+
+    @Test
+    fun `an unconfigured match hands every slot the match default`() {
+        val setup = MatchSetup.create(10, 10, List(3) { BotId("bot$it") }, seed = 1, budgetPerTurn = 40_000)
+
+        assertEquals(listOf(40_000, 40_000, 40_000), setup.budgets().toList())
+        assertEquals(40_000, setup.budgetFor(1))
+        assertEquals(BotParams.EMPTY, setup.paramsFor(1))
+        assertFalse(setup.configured)
+    }
+
+    @Test
+    fun `a per-slot allowance is honoured, and each slot gets its own`() {
+        val setup = MatchSetup.create(
+            10,
+            10,
+            List(2) { BotId("bot$it") },
+            seed = 1,
+            budgets = intArrayOf(40_000, 4_000),
+        )
+
+        assertEquals(40_000, setup.budgetFor(0))
+        assertEquals(4_000, setup.budgetFor(1))
+        assertTrue(setup.configured)
+    }
+
+    @Test
+    fun `spelling the default out for every slot is the same setup as leaving it alone`() {
+        // Load-bearing for the codec: an unconfigured payload decodes into the broadcast form and
+        // every round trip asserts the result equals the record it came from.
+        val slots = List(2) { BotId("bot$it") }
+        val implicit = MatchSetup.create(10, 10, slots, seed = 7, budgetPerTurn = 1_000)
+        val explicit = MatchSetup.create(
+            10,
+            10,
+            slots,
+            seed = 7,
+            budgetPerTurn = 1_000,
+            budgets = intArrayOf(1_000, 1_000),
+            slotParams = listOf(BotParams.EMPTY, BotParams.EMPTY),
+        )
+
+        assertEquals(implicit, explicit)
+        assertEquals(implicit.hashCode(), explicit.hashCode())
+        assertFalse(explicit.configured)
+    }
+
+    @Test
+    fun `setups differing only in one slot's configuration are not equal`() {
+        // MatchSetup.equals enumerates every field by hand, so a new one that nobody added there
+        // would make two different matches compare the same and quietly break every round trip.
+        val slots = List(2) { BotId("bot$it") }
+        val plain = MatchSetup.create(10, 10, slots, seed = 7, budgetPerTurn = 1_000)
+        val budgeted = MatchSetup.create(10, 10, slots, seed = 7, budgetPerTurn = 1_000, budgets = intArrayOf(1_000, 9))
+        val tuned = MatchSetup.create(
+            10,
+            10,
+            slots,
+            seed = 7,
+            budgetPerTurn = 1_000,
+            slotParams = listOf(BotParams.EMPTY, BotParams(mapOf("exploration" to "1.5"))),
+        )
+
+        assertNotEquals(plain, budgeted)
+        assertNotEquals(plain, tuned)
+        assertNotEquals(budgeted, tuned)
+        assertTrue(tuned.configured)
+    }
+
+    @Test
+    fun `a configuration that does not fit the field is refused`() {
+        val slots = List(2) { BotId("bot$it") }
+
+        assertFailsWith<IllegalArgumentException>("too few allowances") {
+            MatchSetup.create(10, 10, slots, seed = 1, budgets = intArrayOf(10))
+        }
+        assertFailsWith<IllegalArgumentException>("too few parameter sets") {
+            MatchSetup.create(10, 10, slots, seed = 1, slotParams = listOf(BotParams.EMPTY))
+        }
+        assertFailsWith<IllegalArgumentException>("negative allowance") {
+            MatchSetup.create(10, 10, slots, seed = 1, budgets = intArrayOf(10, -1))
         }
     }
 

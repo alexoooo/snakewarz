@@ -1,6 +1,5 @@
 package ao.snakewarz.match
 
-import ao.snakewarz.botapi.BotId
 import ao.snakewarz.core.RulesConfig
 
 /**
@@ -17,8 +16,11 @@ import ao.snakewarz.core.RulesConfig
  * the same amount of compute.
  */
 public class TournamentConfig(
-    /** At least two, all different. A bot cannot be entered twice under one id. */
-    public val contestants: List<BotId>,
+    /**
+     * At least two, all different — but different as *configurations*, so one bot may enter twice
+     * at two allowances. See [Contestant].
+     */
+    public val contestants: List<Contestant>,
     public val rows: Int,
     public val cols: Int,
     /** Matches per pairing. Even, because each seed is played from both seats. */
@@ -26,6 +28,7 @@ public class TournamentConfig(
     /** The first seed. The rest are [seed] onwards, one per pair of seat-swapped matches. */
     public val seed: Long = 1L,
     public val rules: RulesConfig = RulesConfig(),
+    /** What a match grants a slot before [Contestant.budgetPerTurn] overrides it. */
     public val budgetPerTurn: Int = MatchSetup.DEFAULT_BUDGET_PER_TURN,
 ) {
     init {

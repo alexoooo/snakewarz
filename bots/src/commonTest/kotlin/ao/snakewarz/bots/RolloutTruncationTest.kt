@@ -1,10 +1,8 @@
 package ao.snakewarz.bots
 
 import ao.snakewarz.botapi.BotEntry
-import ao.snakewarz.botapi.BotFactory
 import ao.snakewarz.botapi.BotId
 import ao.snakewarz.botapi.BotParams
-import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.core.Direction
 import ao.snakewarz.core.RulesConfig
 import ao.snakewarz.core.SnakeId
@@ -35,8 +33,8 @@ import kotlin.time.TimeSource
 class RolloutTruncationTest {
     @Test
     fun `truncating the rollout is measured against playing it out`() {
-        val full = uctWith("full")
-        val truncated = DEPTHS.map { uctWith("d$it", "rolloutDepth" to it.toString()) }
+        val full = Rival("full", BotParams.EMPTY)
+        val truncated = DEPTHS.map { Rival("d$it", BotParams(mapOf(UctBot.ROLLOUT_DEPTH.name to it.toString()))) }
 
         // Time everything once before timing anything for real. Introducing a second implementation
         // of the rollout part-way through a run turns shared call sites polymorphic and the JIT
@@ -131,9 +129,18 @@ class RolloutTruncationTest {
 
     // -- internals ------------------------------------------------------------------------------
 
+    /**
+     * One [UctBot] configuration under a name, for the printed table.
+     *
+     * It used to be a whole fabricated [BotEntry] wrapping a hand-rebuilt `BotSetup`, because the
+     * shipped registry had no way to offer a bot its parameters. It has one now — the same one the
+     * sidebar uses — so this is a label and a `BotParams` and nothing else.
+     */
+    private class Rival(val label: String, val params: BotParams)
+
     private fun winsFor(
-        challenger: BotEntry,
-        defender: BotEntry,
+        challenger: Rival,
+        defender: Rival,
         challengerBudget: Int = BUDGET,
         defenderBudget: Int = BUDGET,
     ): Int {
@@ -149,14 +156,15 @@ class RolloutTruncationTest {
         return wins
     }
 
-    private fun play(first: BotEntry, second: BotEntry, firstBudget: Int, secondBudget: Int, seed: Long): SnakeId =
+    private fun play(first: Rival, second: Rival, firstBudget: Int, secondBudget: Int, seed: Long): SnakeId =
         HeadlessMatch(
-            entries = listOf(first, second),
+            entries = listOf(uct, uct),
             rows = SIZE,
             cols = SIZE,
             seed = seed,
             recording = false,
             budgetPerSlot = intArrayOf(firstBudget, secondBudget),
+            paramsPerSlot = listOf(first.params, second.params),
         ).run().winner
 
     /**
@@ -166,16 +174,17 @@ class RolloutTruncationTest {
      * search and not a round of two. Two searchers in one match makes the elapsed time the sum of
      * both, which is a number about the pairing rather than about either bot.
      */
-    private fun microsPerTurn(searcher: BotEntry, budget: Int): Long {
+    private fun microsPerTurn(searcher: Rival, budget: Int): Long {
         var best = Long.MAX_VALUE
 
         repeat(TIMED_PASSES) {
             val match = HeadlessMatch(
-                entries = listOf(searcher, ShippedBots.entryOf(BotId("space"))),
+                entries = listOf(uct, ShippedBots.entryOf(BotId("space"))),
                 rows = SIZE,
                 cols = SIZE,
                 seed = SEED,
                 budgetPerSlot = intArrayOf(budget, 0),
+                paramsPerSlot = listOf(searcher.params, BotParams.EMPTY),
             )
 
             val started = TimeSource.Monotonic.markNow()
@@ -192,26 +201,10 @@ class RolloutTruncationTest {
         return best
     }
 
-    /** [UctBot] under a name and some parameters, which the shipped registry has no way to offer. */
-    private fun uctWith(label: String, vararg params: Pair<String, String>): BotEntry =
-        BotEntry(
-            BotId("uct-$label"),
-            "UCT ($label)",
-            BotFactory { setup ->
-                UctBot(
-                    BotSetup(
-                        self = setup.self,
-                        grid = setup.grid,
-                        rules = setup.rules,
-                        opponents = setup.opponents,
-                        rng = setup.rng,
-                        params = BotParams(mapOf(*params)),
-                    ),
-                )
-            },
-        )
-
     private companion object {
+        /** The shipped entry, configured per slot rather than fabricated per variant. */
+        val uct: BotEntry = ShippedBots.entryOf(BotId("uct"))
+
         const val SIZE = 12
         const val SEED = 424_242L
 

@@ -35,6 +35,18 @@ what they are, and they play the same contract suite as everything else:
 | Burnin Hell | First open direction, always north, south, east, west — which comes out as a serpentine sweep of the board |
 | Tom Snake | Pressure one turn in five, Random the other four |
 
+## Settings
+
+A bot that has anything worth tuning says so, and the sidebar offers it: pick UCT in a slot, open
+**Settings** under it, and there is its search allowance, its exploration constant, its tree ceiling
+and its rollout depth. Each seat is configured on its own, so one bot can play another copy of itself
+set up differently. Nothing about this is hard-coded in the page — the rows come off the same
+registry the pickers do, so a contributed bot's knobs appear by declaring them and nothing else.
+
+The allowance is counted in simulated moves rather than milliseconds, which is what keeps a match
+reproducible on any machine. Everything you change travels in the replay link, so a shared match says
+what it was played under and opens one click away from a rematch under the same conditions.
+
 ## Tournaments
 
 "Is this bot better than that one" is a question about a few hundred matches, not about one, and the
@@ -48,6 +60,17 @@ win-rate matrix fills in as it goes.
 wallhug |       - |       7 |       4 |     55%
 random  |       3 |       - |       2 |     25%
 space   |       6 |       8 |       - |     70%
+```
+
+A contestant is a *configured* seat rather than just a bot, so the same bot may enter twice at two
+settings — which is the question this whole thing exists to answer:
+
+```
+       |    uct | uct@4k |  score
+uct    |      - |      7 |    70%
+uct@4k |      3 |      - |    30%
+
+uct@4k   budget=4000
 ```
 
 It runs on the animation frame in slices of a few milliseconds, so the page stays responsive
@@ -67,9 +90,14 @@ Needs a JDK 17–26 on `PATH`. Everything else, including the Kotlin and Node to
 the Gradle wrapper.
 
 ```bash
-./gradlew build          # compiles wasmJs + jvm, runs JVM tests, checks module purity
-./gradlew jvmTest        # inner loop, with IDE breakpoints
-./gradlew :app:wasmJsBrowserDevelopmentRun   # local dev server with hot reload
+# compiles wasmJs + jvm, runs JVM tests, checks module purity
+./gradlew build
+
+# inner loop, with IDE breakpoints
+./gradlew jvmTest
+
+# local dev server with hot reload
+./gradlew :app:wasmJsBrowserDevelopmentRun
 ```
 
 Most modules test in seconds. `:bots` takes a couple of minutes, because the tests that claim one bot

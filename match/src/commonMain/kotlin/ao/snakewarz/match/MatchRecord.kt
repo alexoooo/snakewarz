@@ -57,6 +57,12 @@ public class MatchRecord(
      * that shifted, a tuned constant that changed a bot's behaviour, and a codegen difference
      * between two Kotlin versions — all as a plain assertion over a couple of hundred bytes.
      *
+     * It re-runs under the configuration the match was *played* under and never under today's
+     * defaults, and that comes for free: the per-slot allowances and knob values live on [setup], so
+     * `Match` reads them here exactly as it read them the first time. Which is the argument for
+     * keeping the allowance on the setup rather than beside it — a tuned match that verified against
+     * stock bots would report a divergence that is not one.
+     *
      * A divergence is not automatically a bug. It is always a question worth answering.
      */
     public fun verify(registry: BotRegistry): ReplayVerification {

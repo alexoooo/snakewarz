@@ -1,7 +1,5 @@
 package ao.snakewarz.match
 
-import ao.snakewarz.botapi.BotId
-
 /**
  * The win-rate matrix: who beat whom, how often.
  *
@@ -15,7 +13,7 @@ import ao.snakewarz.botapi.BotId
  * and it is the only place the two are mixed.
  */
 public class TournamentTable internal constructor(
-    public val contestants: List<BotId>,
+    public val contestants: List<Contestant>,
 ) {
     public val size: Int = contestants.size
 
@@ -25,8 +23,8 @@ public class TournamentTable internal constructor(
     /** Symmetric: a draw is recorded in both directions, so every query below reads one cell. */
     private val drawCounts = IntArray(size * size)
 
-    /** The index [bot] plays under, or `-1` if it is not in this tournament. */
-    public fun indexOf(bot: BotId): Int = contestants.indexOf(bot)
+    /** The index [contestant] plays under, or `-1` if it is not in this tournament. */
+    public fun indexOf(contestant: Contestant): Int = contestants.indexOf(contestant)
 
     public fun wins(winner: Int, loser: Int): Int = winCounts[winner * size + loser]
 
@@ -89,9 +87,13 @@ public class TournamentTable internal constructor(
      * Integer arithmetic only, and no `Double` ever reaches a string: number formatting is a
      * surprisingly large thing to drag into a wasm bundle, and a percentage rounded here reads the
      * same as one formatted properly.
+     *
+     * Anything configured is named in a legend under the grid rather than in its column heading. One
+     * bot may enter twice at two allowances, and `uct` beside `uct@4k` stays readable in a narrow
+     * panel where `uct budget=4000 exploration=1.4` would not.
      */
     override fun toString(): String {
-        val names = contestants.map { it.slug }
+        val names = headings()
         val width = maxOf(names.maxOf { it.length }, MIN_COLUMN)
 
         return buildString {
@@ -107,6 +109,30 @@ public class TournamentTable internal constructor(
                 }
                 append(" | ").append("${percent(scoreRate(row))}%".padStart(width)).appendLine()
             }
+
+            val configured = (0 until size).filter { contestants[it].configured }
+            if (configured.isNotEmpty()) {
+                appendLine()
+                for (row in configured) {
+                    append(names[row].padEnd(width)).append("   ").appendLine(contestants[row].summary)
+                }
+            }
+        }
+    }
+
+    /**
+     * Column headings, distinct even when two contestants describe themselves the same way.
+     *
+     * [Contestant.label] is short by design and so cannot promise uniqueness — two seats differing
+     * only in an exploration constant are both `uct*`. A repeat gets `·2`, `·3`, and the legend says
+     * which is which. Numbered by position, so the same field always reads the same way.
+     */
+    private fun headings(): List<String> {
+        val seen = LinkedHashMap<String, Int>()
+        return contestants.map { contestant ->
+            val count = (seen[contestant.label] ?: 0) + 1
+            seen[contestant.label] = count
+            if (count == 1) contestant.label else "${contestant.label}·$count"
         }
     }
 

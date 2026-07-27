@@ -1,6 +1,7 @@
 package ao.snakewarz.match
 
 import ao.snakewarz.botapi.BotId
+import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.core.Direction
 import ao.snakewarz.core.EliminationReason
 import ao.snakewarz.core.MatchEnd
@@ -8,6 +9,7 @@ import ao.snakewarz.core.MatchOutcome
 import ao.snakewarz.core.RulesConfig
 import ao.snakewarz.core.SnakeId
 import ao.snakewarz.core.SplitMix64
+import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -56,13 +58,31 @@ class ReplayCodecTest {
                 return@repeat
             }
 
+            val budgetPerTurn = rng.nextInt(100_000)
+
+            // Configured about half the time, and left alone the other half, so both layouts are
+            // fuzzed and neither is only ever exercised by a hand-written case.
+            val configured = rng.nextInt(2) == 0
+            val budgets = if (!configured) IntArray(0) else IntArray(slotCount) { rng.nextInt(100_000) }
+            val slotParams = if (!configured) {
+                emptyList()
+            } else {
+                List(slotCount) {
+                    val values = LinkedHashMap<String, String>()
+                    repeat(rng.nextInt(4)) { knob -> values["knob$knob"] = rng.nextInt(1000).toString() }
+                    BotParams(values)
+                }
+            }
+
             val setup = MatchSetup.create(
                 rows = rows,
                 cols = cols,
                 slots = List(slotCount) { BotId("bot$it") },
                 seed = rng.nextLong(),
                 rules = RulesConfig(growEveryNthMove = 1 + rng.nextInt(4), maxTurns = 1 + rng.nextInt(5000)),
-                budgetPerTurn = rng.nextInt(100_000),
+                budgetPerTurn = budgetPerTurn,
+                budgets = budgets,
+                slotParams = slotParams,
             )
 
             // A real match cannot hold more moves than its own turn limit, and the decoder rejects a
@@ -95,6 +115,83 @@ class ReplayCodecTest {
     }
 
     @Test
+    fun `a configured match carries what it was played under`() {
+        val setup = MatchSetup.create(
+            12,
+            12,
+            listOf(BotId("cycle"), BotId("south")),
+            seed = 77,
+            budgetPerTurn = 40_000,
+            budgets = intArrayOf(40_000, 4_000),
+            slotParams = listOf(BotParams(mapOf("exploration" to "1.5", "rolloutDepth" to "25")), BotParams.EMPTY),
+        )
+        val match = Match(setup, TestRegistry.ALL).also { it.runToCompletion() }
+        val record = match.record()
+
+        val decoded = ReplayCodec.decode(ReplayCodec.encode(record))
+
+        assertEquals(record, decoded)
+        assertEquals(4_000, decoded.setup.budgetFor(1))
+        assertEquals("1.5", decoded.setup.paramsFor(0).string("exploration", "?"))
+        assertTrue(decoded.setup.paramsFor(1).isEmpty)
+    }
+
+    @Test
+    fun `configuring a match costs bytes, and not configuring one costs none`() {
+        val slots = listOf(BotId("cycle"), BotId("south"))
+        val plain = MatchSetup.create(12, 12, slots, seed = 77, budgetPerTurn = 40_000)
+        val tuned = MatchSetup.create(
+            12,
+            12,
+            slots,
+            seed = 77,
+            budgetPerTurn = 40_000,
+            budgets = intArrayOf(40_000, 4_000),
+        )
+
+        val plainPayload = ReplayCodec.encode(Match(plain, TestRegistry.ALL).also { it.runToCompletion() }.record())
+        val tunedPayload = ReplayCodec.encode(Match(tuned, TestRegistry.ALL).also { it.runToCompletion() }.record())
+
+        // The whole reason for two versions: an unconfigured replay is what it always was.
+        assertEquals('A', plainPayload.first(), "an unconfigured payload still opens with version 1")
+        assertTrue(
+            tunedPayload.length - plainPayload.length < 24,
+            "configuring two slots cost ${tunedPayload.length - plainPayload.length} characters",
+        )
+    }
+
+    @Test
+    fun `a version 1 payload may not claim a configuration block`() {
+        val setup = MatchSetup.create(
+            8,
+            8,
+            listOf(BotId("cycle"), BotId("south")),
+            seed = 4,
+            budgets = intArrayOf(10, 20),
+        )
+        val record = Match(setup, TestRegistry.ALL).also { it.runToCompletion() }.record()
+
+        val bytes = base64.decode(ReplayCodec.encode(record))
+        assertEquals(ReplayCodec.FORMAT_VERSION.toByte(), bytes[0], "a configured record is written at version 2")
+        bytes[0] = 1
+
+        assertFailsWith<IllegalArgumentException> { ReplayCodec.decode(base64.encode(bytes)) }
+    }
+
+    @Test
+    fun `an already-shared link still decodes, byte for byte`() {
+        // The one test that protects links people have already sent each other. Captured from the
+        // encoder as it shipped, and asserted from both ends: this payload must keep decoding, and
+        // an unconfigured match must keep encoding to exactly it. Do not regenerate it to make a
+        // change pass -- a change that moves these bytes has broken every replay URL in existence.
+        val match = matchOf(10, 10, "cycle", "south", seed = 2005)
+        match.runToCompletion()
+
+        assertEquals(SHIPPED_PAYLOAD, ReplayCodec.encode(match.record()))
+        assertEquals(match.record(), ReplayCodec.decode(SHIPPED_PAYLOAD))
+    }
+
+    @Test
     fun `a payload is URL safe and short enough to share`() {
         val match = matchOf(20, 20, "cycle", "cycle", seed = 4)
         match.runToCompletion()
@@ -124,16 +221,21 @@ class ReplayCodecTest {
         val match = matchOf(6, 6, "cycle", "cycle")
         match.runToCompletion()
 
-        val bytes = kotlin.io.encoding.Base64.UrlSafe
-            .withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT)
-            .decode(ReplayCodec.encode(match.record()))
+        val bytes = base64.decode(ReplayCodec.encode(match.record()))
         bytes[0] = (ReplayCodec.FORMAT_VERSION + 1).toByte()
 
-        assertFailsWith<IllegalArgumentException> {
-            ReplayCodec.decode(
-                kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT)
-                    .encode(bytes),
-            )
-        }
+        assertFailsWith<IllegalArgumentException> { ReplayCodec.decode(base64.encode(bytes)) }
+    }
+
+    private companion object {
+        /**
+         * A replay of a match played before per-slot configuration existed.
+         *
+         * Captured from the encoder as it shipped. Asserted from both ends, so it is not merely a
+         * decoder test: an unconfigured match must keep encoding to exactly these bytes.
+         */
+        const val SHIPPED_PAYLOAD = "AQAJCdUHAAAAAAAAAoAgwLgCAgVjeWNsZQVzb3V0aABjAAECBQABAQA"
+
+        val base64 = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
     }
 }

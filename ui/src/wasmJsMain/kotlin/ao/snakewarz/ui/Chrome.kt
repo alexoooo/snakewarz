@@ -1,9 +1,11 @@
 package ao.snakewarz.ui
 
 import ao.snakewarz.botapi.BotId
+import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.botapi.BotRegistry
 import ao.snakewarz.core.Direction
 import ao.snakewarz.core.EliminationReason
+import ao.snakewarz.match.Contestant
 import ao.snakewarz.match.MatchSetup
 import ao.snakewarz.match.MatchStats
 import ao.snakewarz.match.PlayableRegistry
@@ -58,6 +60,7 @@ internal class Chrome(
     private val seedInput: HTMLInputElement = elementById("seed")
     private val reseedButton: HTMLButtonElement = elementById("reseed")
     private val botSelects: List<HTMLSelectElement> = List(SCOREBOARD_ROWS) { elementById("bot-$it") }
+    private val seats: List<SlotForm> = List(SCOREBOARD_ROWS) { SlotForm(it, registry, botSelects[it]) }
     private val startButton: HTMLButtonElement = elementById("new-match")
 
     private val roundsSelect: HTMLSelectElement = elementById("rounds")
@@ -72,6 +75,8 @@ internal class Chrome(
 
     init {
         fillPickers(registry)
+        // After the pickers are filled and seated, so each panel opens on the bot actually selected.
+        seats.forEach(SlotForm::refresh)
         seedInput.value = freshSeed().toString()
         speedValue.textContent = speedLabel()
 
@@ -114,7 +119,9 @@ internal class Chrome(
             rows = size,
             cols = size,
             seed = seed,
-            slots = botSelects.mapNotNull { select -> select.value.takeIf { it.isNotEmpty() } }.map(::BotId),
+            // Each seat answers with its bot *and* its settings or with nothing at all, so an empty
+            // picker drops the whole seat and there is no index left to keep aligned downstream.
+            slots = seats.mapNotNull(SlotForm::read),
         )
     }
 
@@ -132,7 +139,18 @@ internal class Chrome(
             rows = match.rows,
             cols = match.cols,
             seed = match.seed,
-            contestants = match.slots.filter { it != PlayableRegistry.HUMAN_ID }.distinct(),
+            // An allowance left at the default is left unsaid, so a stock seat enters as plain
+            // `uct` rather than as `uct@40k` and the matrix reads the way it always has.
+            contestants = match.slots
+                .filter { it.bot != PlayableRegistry.HUMAN_ID }
+                .map { seat ->
+                    Contestant(
+                        bot = seat.bot,
+                        budgetPerTurn = seat.budgetPerTurn.takeIf { it != MatchSetup.DEFAULT_BUDGET_PER_TURN },
+                        params = seat.params,
+                    )
+                }
+                .distinct(),
             rounds = roundsSelect.value.toIntOrNull() ?: DEFAULT_ROUNDS,
         )
     }
@@ -140,14 +158,22 @@ internal class Chrome(
     /**
      * Points the new-match form at [setup], so that loading somebody's replay leaves you one click
      * away from a rematch under the same conditions.
+     *
+     * Which now includes what those conditions *were*: a replay of UCT at a tenth of its allowance
+     * that rematched at the full one would be the feature half-built.
      */
     fun applySetup(setup: MatchSetup) {
         if (setup.rows == setup.cols) {
             selectIfOffered(sizeSelect, setup.rows.toString())
         }
         seedInput.value = setup.seed.toString()
-        for (slot in botSelects.indices) {
-            selectIfOffered(botSelects[slot], setup.slots.getOrNull(slot)?.slug ?: "")
+        for (slot in seats.indices) {
+            val bot = setup.slots.getOrNull(slot)
+            seats[slot].apply(
+                bot = bot,
+                budgetPerTurn = if (bot == null) setup.budgetPerTurn else setup.budgetFor(slot),
+                params = if (bot == null) BotParams.EMPTY else setup.paramsFor(slot),
+            )
         }
     }
 
@@ -375,9 +401,6 @@ internal class Chrome(
         val EDITABLE_TAGS = setOf("INPUT", "SELECT", "TEXTAREA")
     }
 }
-
-private inline fun <reified T : Element> elementById(id: String): T =
-    document.getElementById(id) as? T ?: error("index.html is missing #$id")
 
 /**
  * Offers [text] to the clipboard, and shrugs if the browser declines.

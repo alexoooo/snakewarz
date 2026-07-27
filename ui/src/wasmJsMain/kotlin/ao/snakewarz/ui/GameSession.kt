@@ -239,8 +239,19 @@ public class GameSession(
         chrome.copyShareUrl()
     }
 
+    /**
+     * The whole of what the sidebar gets to say about a match, and deliberately the only place that
+     * says it: everything upstream of here is a form, everything downstream is a match.
+     */
     private fun setupFrom(options: MatchOptions): MatchSetup =
-        MatchSetup.create(options.rows, options.cols, options.slots, options.seed)
+        MatchSetup.create(
+            rows = options.rows,
+            cols = options.cols,
+            slots = options.slots.map { it.bot },
+            seed = options.seed,
+            budgets = IntArray(options.slots.size) { options.slots[it].budgetPerTurn },
+            slotParams = options.slots.map { it.params },
+        )
 
     // -- the batch ------------------------------------------------------------------------------
 

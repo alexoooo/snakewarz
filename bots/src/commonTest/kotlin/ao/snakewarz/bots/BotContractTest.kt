@@ -1,6 +1,7 @@
 package ao.snakewarz.bots
 
 import ao.snakewarz.botapi.BotEntry
+import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.botapi.Decision
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -117,6 +118,63 @@ class BotContractTest {
 
                 match.run()
             }
+        }
+    }
+
+    @Test
+    fun `a bot spends budget if and only if it declares an allowance`() {
+        // `BotEntry.search` is what decides whether the sidebar offers an allowance field at all, so
+        // it had better describe the bot rather than merely claim something about it. Seven of the
+        // nine answer with a flood fill and consume nothing; a slider for those would change no move
+        // they ever play.
+        forEachShippedBot { entry ->
+            val match = HeadlessMatch(listOf(entry, entry), rows = 10, cols = 10, seed = 606, budgetPerTurn = 2_000)
+            match.run()
+
+            val spent = match.decisions.any { it.budgetConsumed > 0 }
+            assertEquals(
+                entry.search != null,
+                spent,
+                if (spent) {
+                    "${entry.id} spends budget but declares no allowance, so it cannot be tuned"
+                } else {
+                    "${entry.id} declares an allowance it never spends, so the form offers a dead control"
+                },
+            )
+        }
+    }
+
+    @Test
+    fun `every knob at its declared default plays the match no knobs at all plays`() {
+        // The drift gate. A knob is its own reader precisely so the number on the form and the
+        // number in the field initializer cannot disagree — this catches the one way left to break
+        // that, which is a bot reading `setup.params.double("exploration", 5.0)` behind the knob's
+        // back and putting the literal somewhere it can rot.
+        //
+        // A non-zero allowance, because at zero UctBot falls back on SpaceBot and never reads a knob.
+        forEachShippedBot { entry ->
+            val declared = BotParams(entry.params.associate { it.name to it.defaultText })
+            if (declared.isEmpty) {
+                return@forEachShippedBot
+            }
+
+            val stock = HeadlessMatch(listOf(entry, entry), rows = 10, cols = 10, seed = 8191, budgetPerTurn = 2_000)
+            val spelledOut = HeadlessMatch(
+                listOf(entry, entry),
+                rows = 10,
+                cols = 10,
+                seed = 8191,
+                budgetPerTurn = 2_000,
+                paramsPerSlot = listOf(declared, declared),
+            )
+            stock.run()
+            spelledOut.run()
+
+            assertEquals(
+                stock.moves(),
+                spelledOut.moves(),
+                "${entry.id} plays differently at its own declared defaults, so one of them is wrong",
+            )
         }
     }
 

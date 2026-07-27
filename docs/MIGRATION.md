@@ -1046,3 +1046,47 @@ that falls out: **nothing in `:bots` may call `kotlin.math.ln`, `exp` or `pow`.*
 
 **Replay URL length** is bounded by `maxTurns`; if a match still exceeds comfortable hash length,
 offer a downloadable record file instead of a link.
+
+---
+
+## After release 1 — visual bot configuration
+
+Not a phase; release 1 was feature-complete and this is new work on top of it.
+
+`BotParams` shipped in Phase 4 and was never reachable. `Match` passed `BotParams.EMPTY` at its only
+production construction site, so `UctBot`'s `exploration`, `maxNodes` and `rolloutDepth` — and the
+knobs on `PressureBot`, `ChaseBot` and `TomSnakeBot` — could only be set from a JVM test, which
+`RolloutTruncationTest` did by fabricating bot ids. The per-turn allowance had the same problem one
+level up: a single match-wide `Int`, so `HeadlessMatch.budgetPerSlot` could ask "is a bigger allowance
+worth anything?" and the browser could not.
+
+Four decisions worth keeping the reasoning for.
+
+**The declaration is the reader.** A knob is a `BotKnob` object that a bot both declares to the
+registry and reads its own value out of — `EXPLORATION.read(setup.params)`. The alternative was a
+separate schema beside a constructor still holding `params.double("exploration", 5.0)`, where the
+number on the form and the number in the fallback are two facts that can disagree. This way there is
+one of them, and the drift is unrepresentable rather than merely tested.
+
+**`BotKnob.Search` is in the knob list but is not a parameter.** An allowance is granted by the engine
+and lives in the replay header; a bot never reads one. It is declared anyway because that list is the
+only place that knows a bot searches at all, which is how the form knows not to offer Wall Hugger a
+budget field. `BotContractTest` then checks the declaration against what the bot actually spends, so
+it cannot rot into a lie.
+
+**`BotKnob.Param.read` is total, and `BotParams`' own readers are not.** `Match` builds its bots in a
+field initializer, outside the `try` that guards `chooseMove`, and one route into it is an arbitrary
+`#r=` fragment. A throw there has nothing above it to catch it. So `read` coerces and `reject` — which
+the form calls, and which corrects the field in front of the player — carries the strictness.
+
+**The replay format grew without any replay changing.** A match nobody configured is still written as
+version 1 with a zero flags byte, byte for byte what shipped; a configured one is version 2 with the
+reserved flags bit set and a per-slot block after the turn order. Writing the *oldest version that can
+express the record* is what makes that work, and `ReplayCodecTest` now pins a literal v1 payload from
+both ends — it must keep decoding, and a stock match must keep encoding to exactly it. That golden was
+missing before, and nothing else in the suite would have caught a silent change to already-shared
+links.
+
+One thing this removed rather than added: `RolloutTruncationTest.uctWith`, which built a whole fake
+`BotEntry` around a hand-rebuilt `BotSetup` purely because the shipped registry had no way to offer a
+bot its parameters. It is a label and a `BotParams` now.

@@ -12,6 +12,7 @@
     --accent: #2f6f4f;
     --accent-ink: #ffffff;
     --board: #ffffff;
+    --danger: #b3423a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,6 +25,7 @@
         --accent: #3f9e6c;
         --accent-ink: #06120c;
         --board: #171b1f;
+        --danger: #d3695f;
     }
 }
 
@@ -263,7 +265,8 @@ button.wide {
 }
 
 select,
-input[type="text"] {
+input[type="text"],
+input[type="number"] {
     width: 100%;
     padding: 0.3rem 0.4rem;
     background: var(--bg);
@@ -380,6 +383,72 @@ input[type="text"] {
 .seed-row button {
     padding: 0.3rem 0.55rem;
     line-height: 1;
+}
+
+/*
+ * A seat's settings. The disclosure is a third kind of .setup child -- neither a label nor a
+ * control -- so it has to be told to span both tracks, or it lands in the label column and shifts
+ * every row under it. Its own rows live in a nested grid, so nothing Kotlin appends can reach the
+ * form around it.
+ */
+.setup > details.knobs {
+    grid-column: 1 / -1;
+    margin: -0.15rem 0 0.15rem;
+}
+
+.knobs > summary {
+    color: var(--ink-dim);
+    font-size: 0.8rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.knobs > summary:hover {
+    color: var(--ink);
+}
+
+.knob-grid {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.35rem 0.7rem;
+    margin: 0.5rem 0 0.25rem 0.9rem;
+}
+
+.knob {
+    display: contents;
+}
+
+.knob > span {
+    color: var(--ink-dim);
+    font-size: 0.8rem;
+}
+
+/*
+ * The allowance is the match's grant rather than one of the bot's own settings, so it is ruled off
+ * from them rather than merely listed first.
+ */
+.knob.granted > span,
+.knob.granted > input {
+    margin-bottom: 0.3rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.knob > input[type="checkbox"] {
+    width: auto;
+    justify-self: start;
+}
+
+/* A rejected value corrects itself on Start, and says so until it does. */
+.knob > input.rejected {
+    border-color: var(--danger);
+}
+
+.knobs button.reset {
+    margin: 0.15rem 0 0 0.9rem;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.75rem;
 }
 
 #share-url {

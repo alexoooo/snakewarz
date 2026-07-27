@@ -13,10 +13,17 @@
       so the page is never blank. Kotlin looks these elements up by id once at startup and then only
       writes text, values and hidden flags -- it never constructs structure.
 
-      The single exception is the <option> list inside each bot picker, which comes from the
-      BotRegistry. That is deliberate: hard-coding the bots here would turn "fork, add a file,
-      register it, open a PR" into "and also edit the markup", and keeping that workflow cheap is
-      most of why this project exists.
+      The exceptions both come off the BotRegistry, and both for the same reason: hard-coding what
+      is in it here would turn "fork, add a file, register it, open a PR" into "and also edit the
+      markup", and keeping that workflow cheap is most of why this project exists.
+
+        1. The <option> list inside each bot picker.
+        2. The rows inside each seat's settings panel. A bot's declared knobs are content in exactly
+           the sense its display name is, and there is no honest number of rows to pre-write here:
+           a fixed pool would silently drop the fifth knob of a bot that declares five.
+
+      The containers around both are still static, which is the part that matters -- #knobs-N below
+      is written once and Kotlin only ever fills it.
     -->
 </head>
 <body>
@@ -145,12 +152,35 @@
 
                     <label for="bot-0">Slot 1</label>
                     <select id="bot-0"></select>
+                    <details class="knobs" id="knobs-0" hidden>
+                        <summary>Settings</summary>
+                        <div class="knob-grid"></div>
+                        <button type="button" class="reset">Reset to defaults</button>
+                    </details>
+
                     <label for="bot-1">Slot 2</label>
                     <select id="bot-1"></select>
+                    <details class="knobs" id="knobs-1" hidden>
+                        <summary>Settings</summary>
+                        <div class="knob-grid"></div>
+                        <button type="button" class="reset">Reset to defaults</button>
+                    </details>
+
                     <label for="bot-2">Slot 3</label>
                     <select id="bot-2"></select>
+                    <details class="knobs" id="knobs-2" hidden>
+                        <summary>Settings</summary>
+                        <div class="knob-grid"></div>
+                        <button type="button" class="reset">Reset to defaults</button>
+                    </details>
+
                     <label for="bot-3">Slot 4</label>
                     <select id="bot-3"></select>
+                    <details class="knobs" id="knobs-3" hidden>
+                        <summary>Settings</summary>
+                        <div class="knob-grid"></div>
+                        <button type="button" class="reset">Reset to defaults</button>
+                    </details>
 
                     <label for="seed">Seed</label>
                     <span class="seed-row">

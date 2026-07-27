@@ -3,6 +3,7 @@ package ao.snakewarz.botapi
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class BotParamsTest {
@@ -41,5 +42,26 @@ class BotParamsTest {
         val params = BotParams(linkedMapOf("zeta" to "1", "alpha" to "2", "mu" to "3"))
 
         assertEquals(listOf("zeta", "alpha", "mu"), params.names.toList())
+    }
+
+    @Test
+    fun `equality is by what is set, and ignores the order it was set in`() {
+        // MatchSetup.equals compares per-slot params, so identity equality would make every
+        // configured replay fail its own round trip.
+        val one = BotParams(linkedMapOf("exploration" to "1.5", "maxNodes" to "1024"))
+        val other = BotParams(linkedMapOf("maxNodes" to "1024", "exploration" to "1.5"))
+
+        assertEquals(one, other)
+        assertEquals(one.hashCode(), other.hashCode())
+        assertEquals(BotParams.EMPTY, BotParams(emptyMap()))
+    }
+
+    @Test
+    fun `params differing in one value are not equal`() {
+        val one = BotParams(mapOf("exploration" to "1.5"))
+        val other = BotParams(mapOf("exploration" to "1.6"))
+
+        assertNotEquals(one, other)
+        assertNotEquals(one, BotParams.EMPTY)
     }
 }

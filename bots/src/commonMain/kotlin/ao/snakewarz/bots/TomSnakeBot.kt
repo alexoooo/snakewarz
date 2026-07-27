@@ -1,6 +1,7 @@
 package ao.snakewarz.bots
 
 import ao.snakewarz.botapi.Bot
+import ao.snakewarz.botapi.BotKnob
 import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Turn
@@ -54,7 +55,7 @@ public class TomSnakeBot(setup: BotSetup) : Bot {
     private val rng = setup.rng
     private val pressure = PressureBot(setup)
     private val random = RandomBot(setup)
-    private val forkShare = setup.params.double("forkShare", FORK_SHARE)
+    private val forkShare = FORK_SHARE.read(setup.params)
 
     override fun chooseMove(turn: Turn): Decision =
         if (rng.nextDouble() < forkShare) {
@@ -65,8 +66,18 @@ public class TomSnakeBot(setup: BotSetup) : Bot {
 
     override fun toString(): String = "TomSnakeBot"
 
-    private companion object {
+    internal companion object {
         /** Legacy's `Rand.nextBoolean(2.0/10)` at `TomSnakeAi.java:34`. */
-        const val FORK_SHARE = 0.2
+        val FORK_SHARE = BotKnob.Decimal(
+            name = "forkShare",
+            label = "Pressure share",
+            help = "How often it plays Pressure instead of Random. 1 is Pressure every turn.",
+            default = 0.2,
+            min = 0.0,
+            max = 1.0,
+            step = 0.05,
+        )
+
+        val KNOBS: List<BotKnob> = listOf(FORK_SHARE)
     }
 }

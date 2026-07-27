@@ -23,7 +23,7 @@ hundred matches without the page stopping.
 | Path | Status |
 |---|---|
 | `core/` | `:core` module. Padded-grid primitives plus the rules engine: `Occupancy`, `Board`, `MatchState`, `SplitMix64`, `Budget` |
-| `bot-api/` | `:bot-api` module. `Bot`, `Decision`, `Turn`, `BotSetup`, `BotRegistry`, plus `Scratch`/`Playout` — the search arena that makes the budget structural |
+| `bot-api/` | `:bot-api` module. `Bot`, `Decision`, `Turn`, `BotSetup`, `BotRegistry`, `BotKnob` — what a bot lets you tune — plus `Scratch`/`Playout`, the search arena that makes the budget structural |
 | `bots/` | `:bots` module. Nine bots and `ShippedBots`, the `BotRegistry` implementation, over the `internal` search primitives `FloodFill`, `ShortestPaths`, `SpaceOwnership`, `nearestOpponent`, `randomPlayout`, `truncatedPlayout`, `portableLog` and `UctTree` |
 | `match/` | `:match` module. `Match` driver, `MatchSetup`, `MatchRecord`, `ReplayCodec`, spawn placement, `MatchStats`, `Tournament`, and human input — `InputBuffer`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM |
 | `ui/` | `:ui` module. `GameSession` — the only public class — over `BoardRenderer`, `TurnScheduler`, `TournamentRunner`, `Chrome` and `Palette` |
@@ -40,7 +40,8 @@ same contract suite as everything else.
 
 `random` must stay `entries.first()`, because `:ui` seats the second slot from it. Append new bots;
 do not prepend. Of the nine, only `flat-monte-carlo` and `uct` touch `Turn.scratch` — the other seven
-consume no budget at all.
+consume no budget at all, and `BotContractTest` enforces that rather than merely asserting it here:
+a bot spends budget **if and only if** it declares a `BotKnob.Search`.
 
 Do not assume anything else exists; check the tree.
 
@@ -51,7 +52,8 @@ notes are that, one directory level shifted.
 **Phase tracker** — update this line as phases land, and mirror it in `docs/MIGRATION.md`:
 
 > Current phase: **6 — done**. Release 1 is feature-complete; further work is new work, not the
-> remainder of a plan.
+> remainder of a plan. Landed since: **visual bot configuration** — `BotKnob`, per-slot allowances
+> and parameters, configured tournament contestants. See the last section of `docs/MIGRATION.md`.
 
 ## What it is built on
 
@@ -153,6 +155,15 @@ assert the seat-swapping without catching the driver between two steps.
 
 The contestants are the **slot pickers**, not a second list of bots: a tournament is the question the
 sidebar already asks, over a few hundred matches. A human seat and a duplicate both drop out.
+
+A `Contestant` is a **configured** seat — a `BotId`, an optional allowance and a `BotParams` — and its
+identity is all three. That is what lets `uct` enter twice at two allowances, which is the first
+question a testbed of search bots should be able to answer and the one a list of ids could not even
+express. Two *identically* configured entries are still a duplicate and still refused. The allowance
+is `null` rather than pre-filled, so `TournamentConfig.budgetPerTurn` still has something to do.
+`TournamentTable` heads its columns with `Contestant.label` — `uct` beside `uct@4k` — numbers a
+repeated label `·2`, and spells the settings out in a legend under the grid rather than in the
+headings, which have a narrow panel to fit in.
 
 ## Four non-obvious facts
 
@@ -296,8 +307,43 @@ than aesthetic — see `UctBot.ROLLOUT_DEPTH`. Do not turn them on without re-ru
 
 Every registry entry is run against the shared contract suite in CI (`bots/src/commonTest/.../BotContractTest`):
 never returns an illegal move when a legal one exists, survives a budget of zero, is deterministic given
-an identical seed, retains no cross-match state, does not claim to be interactive, and terminates on every
-board shape. That suite is what makes "fork → add a bot → PR" safe to accept.
+an identical seed, retains no cross-match state, does not claim to be interactive, terminates on every
+board shape, spends budget exactly when it declares an allowance, and plays the same match at its own
+declared defaults as it does with nothing set. That suite is what makes "fork → add a bot → PR" safe
+to accept.
+
+### Declaring a knob
+
+Anything worth tuning is declared as a `BotKnob` and passed to `register`. **The declaration is the
+reader** — that is the whole design, and it is why the constructor holds no literal:
+
+```kotlin
+private val exploration = EXPLORATION.read(setup.params)
+
+internal companion object {
+    val SEARCH = BotKnob.Search(min = 0, max = 400_000, step = 10_000)
+    val EXPLORATION = BotKnob.Decimal("exploration", "Exploration", "...", default = 5.0, min = 0.1, max = 100.0, step = 0.1)
+    val KNOBS: List<BotKnob> = listOf(SEARCH, EXPLORATION)
+}
+
+// bots/ShippedBots.kt
+register("my-bot", "My Bot", ::MyBot, MyBot.KNOBS)
+```
+
+The default on the form and the default in the field initializer cannot drift apart, because there is
+only one of them. Four things about the shape:
+
+- **`BotKnob.Search` is the allowance, and is not a `BotParams` value.** The engine grants it; a bot
+  never reads one. Declaring it is how the sidebar knows to offer an allowance field at all — and the
+  contract suite checks the claim against what the bot actually spends, so it cannot become a lie.
+- **`read` is total.** An unparseable or out-of-range value falls back on the default rather than
+  throwing, which is a deliberate departure from `BotParams`' own strict readers. `Match` builds its
+  bots in a field initializer, *outside* the `try` that guards `chooseMove`, and one route in is
+  whatever somebody pasted into the address bar — a throw there has nothing above it to catch it and
+  takes the page down. Strict reading lives in `reject`, which is what the form calls.
+- Knob names are **frozen once released**, like a `BotId` and for the same reason: they travel in the
+  replay URL of every match somebody configured.
+- Nothing else has to change. No HTML, no `:ui` code, no codec work.
 
 For a rollout, take `turn.scratch.playout()` and spin on `outcome`:
 
@@ -310,7 +356,8 @@ while (p.outcome == null) p.advance(policy.pick(p.board.legalMoves(p.toAct)) ?: 
 condition *is* the budget check and the search terminates structurally rather than on trust.
 
 Adding a bot needs **no HTML change**: the pickers in the sidebar are filled from `BotRegistry.entries`
-at startup. That is the one place `:ui` builds DOM, and it is why.
+at startup, and each seat's settings rows are built from that entry's `knobs`. Those are the only two
+places `:ui` builds DOM, and this is why.
 
 ## Working on the UI
 
@@ -343,6 +390,25 @@ The static skeleton lives in `app/.../index.html`. Kotlin looks elements up by i
 writes text, values and `hidden`; do not start constructing structure there. The win-rate matrix is
 the case that most invites breaking that rule and does not: `TournamentTable.toString()` lays it out
 in `:match` and the chrome writes the text into one `<pre>`.
+
+**There are exactly two exceptions, and both come off `BotRegistry.entries`**: the `<option>` list in
+each picker, and the knob rows inside each seat's `<details class="knobs">`. Both exist to keep
+"fork, add a file, register it, open a PR" from also meaning "and edit the markup". A pre-written pool
+of rows would have been the doctrinal answer and is the wrong one — the day a bot declares one knob
+more than the pool holds, it silently loses it, which is the exact coupling the rule is there to
+prevent. The *containers* are still static, and adding a third exception needs a better reason than
+either of these had.
+
+`SlotForm` owns all of that, one per seat, and nothing in it dispatches a `UiIntent`. Which bot is
+picked and what its knobs are set to is **form state**, like the reseed button writing `#seed`; it
+becomes app state only when Start match calls `read()`. Two things there are load-bearing:
+
+- **A value is corrected in the field, not just in the read.** `SlotForm` runs `BotKnob.reject`
+  first, falls back to the declared default, and writes the correction back — a match that quietly
+  played at a number nobody typed would be worse than one that refused to start.
+- **Values equal to the declared default are omitted**, so an untouched seat yields
+  `BotParams.EMPTY`, `MatchSetup.configured` stays false, and the replay URL of a stock match is
+  byte-identical to the one the codec produced before any of this existed.
 
 ## Working with the legacy Java
 

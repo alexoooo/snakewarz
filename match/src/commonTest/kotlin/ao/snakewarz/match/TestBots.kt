@@ -4,7 +4,9 @@ import ao.snakewarz.botapi.Bot
 import ao.snakewarz.botapi.BotEntry
 import ao.snakewarz.botapi.BotFactory
 import ao.snakewarz.botapi.BotId
+import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.botapi.BotRegistry
+import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Turn
 import ao.snakewarz.core.Direction
@@ -114,4 +116,40 @@ internal class ThrowingBot : Bot {
 
 internal class StallingBot(override val interactive: Boolean) : Bot {
     override fun chooseMove(turn: Turn): Decision = Decision.Pending
+}
+
+/**
+ * Survives like [CyclingBot], and remembers what the driver handed it on the way in.
+ *
+ * The only way to see per-slot configuration arrive: a `BotSetup` is built inside `Match` and handed
+ * to a factory, so a test can either assert on what a bot *received* or on nothing at all.
+ */
+internal class SetupReportingBot(setup: BotSetup) : Bot {
+    val params: BotParams = setup.params
+
+    var allowance: Int = -1
+        private set
+
+    override fun chooseMove(turn: Turn): Decision {
+        allowance = turn.budget.limit
+
+        val legal = turn.legalMoves
+        return Decision.Move(if (legal.isEmpty) Direction.NORTH else legal.nth(0))
+    }
+}
+
+/**
+ * A registry of [SetupReportingBot]s under one slug, keeping every instance it makes.
+ *
+ * One instance per slot per match, in slot order — which is the order `Match` builds them in, and
+ * therefore how a test reads back what slot 0 and slot 1 were each given.
+ */
+internal class ReportingRegistry(slug: String = "reporter") : BotRegistry {
+    val made: MutableList<SetupReportingBot> = mutableListOf()
+
+    override val entries: List<BotEntry> = listOf(
+        BotEntry(BotId(slug), slug, BotFactory { setup -> SetupReportingBot(setup).also(made::add) }),
+    )
+
+    override fun get(id: BotId): BotEntry? = entries.firstOrNull { it.id == id }
 }

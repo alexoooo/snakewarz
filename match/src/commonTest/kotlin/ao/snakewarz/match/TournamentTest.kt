@@ -1,6 +1,7 @@
 package ao.snakewarz.match
 
 import ao.snakewarz.botapi.BotId
+import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.core.RulesConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -167,13 +168,89 @@ class TournamentTest {
 
     @Test
     fun `a config has to describe a measurable tournament`() {
-        assertFailsWith<IllegalArgumentException> { TournamentConfig(listOf(BotId("cycle")), 9, 9) }
-        assertFailsWith<IllegalArgumentException> {
-            TournamentConfig(listOf(BotId("cycle"), BotId("cycle")), 9, 9)
+        assertFailsWith<IllegalArgumentException> { TournamentConfig(listOf(Contestant(BotId("cycle"))), 9, 9) }
+        assertFailsWith<IllegalArgumentException>("the same bot at the same settings, twice") {
+            TournamentConfig(listOf(Contestant(BotId("cycle")), Contestant(BotId("cycle"))), 9, 9)
         }
         assertFailsWith<IllegalArgumentException> {
-            TournamentConfig(listOf(BotId("cycle"), BotId("last")), 9, 9, rounds = 3)
+            TournamentConfig(listOf(Contestant(BotId("cycle")), Contestant(BotId("last"))), 9, 9, rounds = 3)
         }
+    }
+
+    @Test
+    fun `one bot may enter twice at two allowances`() {
+        // The experiment the testbed exists for, and the one a list of ids could not express: until
+        // contestant identity became the whole configuration, this was refused as a duplicate.
+        val field = listOf(
+            Contestant(BotId("cycle"), budgetPerTurn = 40_000),
+            Contestant(BotId("cycle"), budgetPerTurn = 4_000),
+        )
+        val tournament = fieldOf(field, rounds = 2)
+
+        assertEquals(1, tournament.config.pairingCount)
+        assertEquals(40_000, tournament.setupFor(0).budgetFor(0))
+        assertEquals(4_000, tournament.setupFor(0).budgetFor(1))
+
+        // ...and the seat swap carries the allowance with the contestant rather than the seat.
+        assertEquals(4_000, tournament.setupFor(1).budgetFor(0))
+        assertEquals(40_000, tournament.setupFor(1).budgetFor(1))
+    }
+
+    @Test
+    fun `a contestant's parameters reach the match it plays`() {
+        val tuned = BotParams(mapOf("exploration" to "1.5"))
+        val tournament = fieldOf(
+            listOf(Contestant(BotId("cycle")), Contestant(BotId("cycle"), params = tuned)),
+            rounds = 2,
+        )
+
+        assertEquals(BotParams.EMPTY, tournament.setupFor(0).paramsFor(0))
+        assertEquals(tuned, tournament.setupFor(0).paramsFor(1))
+    }
+
+    @Test
+    fun `an unconfigured contestant takes whatever the batch grants`() {
+        // Which is why the allowance is absent rather than pre-filled: a contestant that always
+        // carried a figure would override TournamentConfig.budgetPerTurn and leave it unusable.
+        val tournament = fieldOf(listOf(Contestant(BotId("cycle")), Contestant(BotId("last"))), rounds = 2)
+
+        assertEquals(0, tournament.setupFor(0).budgetFor(0), "the config's budgetPerTurn, which is 0 here")
+        assertFalse(tournament.setupFor(0).configured)
+    }
+
+    @Test
+    fun `the matrix names configured contestants apart and spells them out underneath`() {
+        val table = fieldOf(
+            listOf(
+                Contestant(BotId("cycle")),
+                Contestant(BotId("north"), budgetPerTurn = 4_000),
+            ),
+            rounds = 2,
+        ).runToCompletion()
+
+        val rendered = table.toString().trimEnd().lines()
+
+        assertTrue(rendered[0].contains("cycle"), rendered[0])
+        assertTrue(rendered[0].contains("north@4k"), "an overridden allowance is in the heading: ${rendered[0]}")
+        assertTrue(
+            rendered.last().contains("budget=4000"),
+            "and spelled out in the legend: ${rendered.last()}",
+        )
+    }
+
+    @Test
+    fun `two contestants that describe themselves the same way still get distinct columns`() {
+        val table = TournamentTable(
+            listOf(
+                Contestant(BotId("cycle"), params = BotParams(mapOf("a" to "1"))),
+                Contestant(BotId("cycle"), params = BotParams(mapOf("a" to "2"))),
+            ),
+        )
+
+        val heading = table.toString().lines().first()
+
+        assertTrue(heading.contains("cycle*"), heading)
+        assertTrue(heading.contains("cycle*·2"), "a repeated label is numbered rather than duplicated: $heading")
     }
 
     @Test
@@ -190,7 +267,7 @@ class TournamentTest {
 
     @Test
     fun `an unplayed contestant scores zero rather than dividing by nothing`() {
-        val table = TournamentTable(listOf(BotId("cycle"), BotId("north")))
+        val table = TournamentTable(listOf(Contestant(BotId("cycle")), Contestant(BotId("north"))))
 
         assertEquals(0, table.played(0))
         assertEquals(0.0, table.scoreRate(0))
@@ -201,9 +278,15 @@ class TournamentTest {
         contestants: List<String>,
         rounds: Int,
         rules: RulesConfig = RulesConfig(),
+    ): Tournament = fieldOf(contestants.map { Contestant(BotId(it)) }, rounds, rules)
+
+    private fun fieldOf(
+        contestants: List<Contestant>,
+        rounds: Int,
+        rules: RulesConfig = RulesConfig(),
     ): Tournament = Tournament(
         TournamentConfig(
-            contestants = contestants.map(::BotId),
+            contestants = contestants,
             rows = ROWS,
             cols = COLS,
             rounds = rounds,

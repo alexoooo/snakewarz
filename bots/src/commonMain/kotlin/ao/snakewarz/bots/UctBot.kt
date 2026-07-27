@@ -2,6 +2,7 @@ package ao.snakewarz.bots
 
 import ao.snakewarz.botapi.BoardScratch
 import ao.snakewarz.botapi.Bot
+import ao.snakewarz.botapi.BotKnob
 import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Playout
@@ -40,12 +41,12 @@ import ao.snakewarz.core.MatchOutcome
 public class UctBot(setup: BotSetup) : Bot {
     private val rng = setup.rng
     private val unbudgeted = SpaceBot(setup)
-    private val exploration = setup.params.double("exploration", EXPLORATION)
-    private val tree = UctTree(setup.params.int("maxNodes", UctTree.MAX_NODES))
+    private val exploration = EXPLORATION.read(setup.params)
+    private val tree = UctTree(MAX_NODES.read(setup.params))
     private val path = IntArray(MAX_DEPTH)
 
     /** Moves a rollout is cut short at, or [ROLLOUT_TO_THE_END] to play every one of them out. */
-    private val rolloutDepth = setup.params.int("rolloutDepth", ROLLOUT_DEPTH)
+    private val rolloutDepth = ROLLOUT_DEPTH.read(setup.params)
 
     /** Allocated only when a rollout is going to be cut short, since that is the only reader. */
     private val space =
@@ -149,8 +150,41 @@ public class UctBot(setup: BotSetup) : Bot {
     override fun toString(): String = "UctBot"
 
     internal companion object {
-        /** Legacy's `5` at `Node.java:423` — an exploration constant of `sqrt(1/5)`. */
-        const val EXPLORATION = 5.0
+        /**
+         * How much of a turn this may spend, and over what range moving it is worth anything.
+         *
+         * Ten times the shipped allowance at the top, which is around 40 ms a turn in Chrome — slow
+         * enough to watch and well short of hanging a frame. `MatchSetup.DEFAULT_BUDGET_PER_TURN`
+         * carries the measurements the shipped figure came from, and the argument for the headroom.
+         */
+        val SEARCH = BotKnob.Search(min = 0, max = 400_000, step = 10_000)
+
+        /**
+         * Legacy's `5` at `Node.java:423` — an exploration constant of `sqrt(1/5)`.
+         *
+         * A *divisor* inside UCB1, so the floor is above zero rather than at it: at zero the term is
+         * an infinity and the tree stops choosing.
+         */
+        val EXPLORATION = BotKnob.Decimal(
+            name = "exploration",
+            label = "Exploration",
+            help = "UCB1's constant. Higher tries more moves, lower digs deeper into the best one.",
+            default = 5.0,
+            min = 0.1,
+            max = 100.0,
+            step = 0.1,
+        )
+
+        /** A backstop on the pool rather than a working limit — see [UctTree.MAX_NODES]. */
+        val MAX_NODES = BotKnob.Integer(
+            name = "maxNodes",
+            label = "Tree nodes",
+            help = "A ceiling on the search tree. A backstop, not a working limit.",
+            default = UctTree.MAX_NODES,
+            min = 1 shl 10,
+            max = 1 shl 20,
+            step = 1 shl 10,
+        )
 
         /** [ROLLOUT_DEPTH] for a bot that plays every rollout out in full. */
         const val ROLLOUT_TO_THE_END: Int = 0
@@ -184,10 +218,22 @@ public class UctBot(setup: BotSetup) : Bot {
          * leaves no allowance at which it is the better use of a millisecond.
          *
          * It ships wired and off rather than deleted, because a measured "no" is worth more with the
-         * thing still there to re-measure: set `rolloutDepth` in [ao.snakewarz.botapi.BotParams] to
-         * turn it on, and `RolloutTruncationTest` re-runs the table above.
+         * thing still there to re-measure: move this knob off zero in the sidebar, or set
+         * `rolloutDepth` in [ao.snakewarz.botapi.BotParams], and `RolloutTruncationTest` re-runs the
+         * table above.
          */
-        const val ROLLOUT_DEPTH: Int = ROLLOUT_TO_THE_END
+        val ROLLOUT_DEPTH = BotKnob.Integer(
+            name = "rolloutDepth",
+            label = "Rollout depth",
+            help = "Moves a rollout is cut short at and judged by space instead. 0 plays it all out.",
+            default = ROLLOUT_TO_THE_END,
+            min = ROLLOUT_TO_THE_END,
+            max = 500,
+            step = 5,
+        )
+
+        /** Everything this bot lets you tune, in the order a form should show it. */
+        val KNOBS: List<BotKnob> = listOf(SEARCH, EXPLORATION, MAX_NODES, ROLLOUT_DEPTH)
 
         /**
          * Deeper than the tree can grow at any sane allowance: one node is added per iteration, so

@@ -2,6 +2,7 @@ package ao.snakewarz.bots
 
 import ao.snakewarz.botapi.BoardScratch
 import ao.snakewarz.botapi.Bot
+import ao.snakewarz.botapi.BotKnob
 import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Playout
@@ -137,7 +138,15 @@ public class FlatMonteCarloBot(setup: BotSetup) : Bot {
 
     override fun toString(): String = "FlatMonteCarloBot"
 
-    private companion object {
+    internal companion object {
+        /**
+         * How much of a turn this may spend. The same range [UctBot] offers, and for the same
+         * reason — this is the other bot in the box whose strength is bought by the iteration.
+         */
+        val SEARCH = BotKnob.Search(min = 0, max = 400_000, step = 10_000)
+
+        val KNOBS: List<BotKnob> = listOf(SEARCH)
+
         /** Large enough that the survival bonus cannot outweigh a loss becoming a draw. */
         const val SURVIVAL_SCALE = 100_000.0
     }

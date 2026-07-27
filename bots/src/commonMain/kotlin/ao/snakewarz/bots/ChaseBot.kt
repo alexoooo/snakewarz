@@ -1,6 +1,7 @@
 package ao.snakewarz.bots
 
 import ao.snakewarz.botapi.Bot
+import ao.snakewarz.botapi.BotKnob
 import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Turn
@@ -30,7 +31,7 @@ public class ChaseBot(setup: BotSetup) : Bot {
     private val self = setup.self
     private val paths = ShortestPaths(setup.grid)
     private val closeQuarters = PressureBot(setup)
-    private val closeRange = setup.params.int("closeRange", CLOSE_RANGE)
+    private val closeRange = CLOSE_RANGE.read(setup.params)
 
     override fun chooseMove(turn: Turn): Decision {
         val legal = turn.legalMoves
@@ -61,11 +62,20 @@ public class ChaseBot(setup: BotSetup) : Bot {
 
     override fun toString(): String = "ChaseBot"
 
-    private companion object {
+    internal companion object {
         /**
          * Legacy's `path.size() < 3`, which counted cells including the start — the same number
          * `ShortestPaths.distanceBeside` reports.
          */
-        const val CLOSE_RANGE = 3
+        val CLOSE_RANGE = BotKnob.Integer(
+            name = "closeRange",
+            label = "Close range",
+            help = "How near an opponent has to be before pressure takes over from the chase.",
+            default = 3,
+            min = 1,
+            max = 64,
+        )
+
+        val KNOBS: List<BotKnob> = listOf(CLOSE_RANGE)
     }
 }

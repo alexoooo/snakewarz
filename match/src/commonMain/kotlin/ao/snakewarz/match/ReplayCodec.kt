@@ -1,6 +1,8 @@
 package ao.snakewarz.match
 
 import ao.snakewarz.botapi.BotId
+import ao.snakewarz.botapi.BotKnob
+import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.core.EliminationReason
 import ao.snakewarz.core.MatchEnd
 import ao.snakewarz.core.MatchOutcome
@@ -21,29 +23,52 @@ import kotlin.io.encoding.Base64
  * test runs on the JVM in milliseconds. Padding is dropped because `=` in a URL is noise.
  *
  * ```
- * version : byte           flags   : byte (reserved, 0)
+ * version : byte           flags : byte -- bit 0: a per-slot configuration block follows
  * rows-1  : varint         cols-1  : varint          seed : 8 bytes, little endian
  * growEveryNthMove, maxTurns, budgetPerTurn, slotCount : varint
  * per slot : varint slug length, slug bytes
  * per slot : varint spawn (row * cols + col)
  * per slot : varint turn order entry
+ * if CONFIGURED:
+ *     per slot : varint allowance
+ *     per slot : varint knob count, then per knob:
+ *                    varint name length, name bytes, varint value length, value bytes
  * moveCount : varint, then ceil(moveCount / 4) packed bytes
  * terminalCount : varint, then per event: varint turn, varint slot, byte reason
  * outcome present : byte, then varint winner+1, byte end
  * ```
+ *
+ * ### Why two versions rather than one
+ *
+ * A match nobody configured is written as **version 1 with no flags**, byte for byte as it was
+ * before per-slot configuration existed — so no link anybody has already shared has changed, and a
+ * default match's URL is no longer than it used to be. A configured match is written as version 2
+ * with the flag set.
+ *
+ * Writing the *oldest version that can express the record* is what buys both. The version alone
+ * would cost every unconfigured replay two bytes and a needless incompatibility; the flag alone
+ * would leave an older page saying "the flags byte is reserved and must be zero", which is true and
+ * useless. Together, an older page says the version is unsupported, which somebody can act on.
  */
 public object ReplayCodec {
     /** Bumped only for a layout change. A decoder rejects anything it does not recognise. */
-    public const val FORMAT_VERSION: Int = 1
+    public const val FORMAT_VERSION: Int = 2
+
+    /** The oldest layout still written, for a record with nothing per-slot to say. */
+    private const val UNCONFIGURED_VERSION: Int = 1
+
+    /** Flags bit 0: the per-slot allowance and knob block is present. */
+    private const val CONFIGURED: Int = 1
 
     private val BASE64 = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
 
     public fun encode(record: MatchRecord): String {
         val setup = record.setup
         val out = Writer()
+        val configured = setup.configured
 
-        out.byte(FORMAT_VERSION)
-        out.byte(0)
+        out.byte(if (configured) FORMAT_VERSION else UNCONFIGURED_VERSION)
+        out.byte(if (configured) CONFIGURED else 0)
         out.varint(setup.rows - 1)
         out.varint(setup.cols - 1)
         out.long(setup.seed)
@@ -53,15 +78,27 @@ public object ReplayCodec {
 
         out.varint(setup.slotCount)
         for (id in setup.slots) {
-            val slug = id.slug.encodeToByteArray()
-            out.varint(slug.size)
-            out.bytes(slug)
+            out.text(id.slug)
         }
         for (spawn in setup.spawns()) {
             out.varint(spawn)
         }
         for (slot in setup.turnOrder()) {
             out.varint(slot)
+        }
+
+        if (configured) {
+            for (budget in setup.budgets()) {
+                out.varint(budget)
+            }
+            for (slot in 0 until setup.slotCount) {
+                val params = setup.paramsFor(slot)
+                out.varint(params.names.size)
+                for (name in params.names) {
+                    out.text(name)
+                    out.text(params.string(name, ""))
+                }
+            }
         }
 
         out.varint(record.moves.size)
@@ -96,8 +133,15 @@ public object ReplayCodec {
         val input = Reader(bytes)
 
         val version = input.byte()
-        require(version == FORMAT_VERSION) { "replay format version $version is not supported" }
-        require(input.byte() == 0) { "replay flags byte is reserved and must be zero" }
+        require(version == UNCONFIGURED_VERSION || version == FORMAT_VERSION) {
+            "replay format version $version is not supported"
+        }
+
+        val flags = input.byte()
+        require(flags == 0 || (version >= FORMAT_VERSION && flags == CONFIGURED)) {
+            "replay flags byte $flags is not recognised at format version $version"
+        }
+        val configured = flags == CONFIGURED
 
         val rows = input.varint() + 1
         val cols = input.varint() + 1
@@ -108,13 +152,28 @@ public object ReplayCodec {
         val slotCount = input.varint()
         require(slotCount in 1..Occupancy.MAX_SNAKES) { "a replay names $slotCount slots" }
 
-        val slots = List(slotCount) {
-            val length = input.varint()
-            require(length in 1..BotId.MAX_LENGTH) { "a bot slug of $length bytes is not plausible" }
-            BotId(input.bytes(length).decodeToString())
-        }
+        val slots = List(slotCount) { BotId(input.text(1..BotId.MAX_LENGTH, "a bot slug")) }
         val spawns = IntArray(slotCount) { input.varint() }
         val turnOrder = IntArray(slotCount) { input.varint() }
+
+        // Absent, every slot is handed budgetPerTurn and nothing tuned — which is what MatchSetup
+        // builds from empties, so an old payload decodes to a setup equal to the one that wrote it.
+        val budgets = if (!configured) IntArray(0) else IntArray(slotCount) { input.varint() }
+        val slotParams = if (!configured) {
+            emptyList()
+        } else {
+            List(slotCount) {
+                val knobCount = input.varint()
+                require(knobCount <= BotKnob.MAX_PER_BOT) { "a slot claims $knobCount tuned knobs" }
+
+                val values = LinkedHashMap<String, String>(knobCount)
+                repeat(knobCount) {
+                    val name = input.text(1..BotKnob.MAX_NAME_LENGTH, "a knob name")
+                    values[name] = input.text(0..BotKnob.MAX_VALUE_LENGTH, "a knob value")
+                }
+                BotParams(values)
+            }
+        }
 
         val moveCount = input.varint()
         require(moveCount <= rules.maxTurns) { "$moveCount moves exceeds the recorded turn limit" }
@@ -146,7 +205,7 @@ public object ReplayCodec {
         require(input.exhausted) { "replay payload has ${input.remaining} trailing bytes" }
 
         return MatchRecord(
-            MatchSetup(seed, rows, cols, rules, budgetPerTurn, slots, turnOrder, spawns),
+            MatchSetup(seed, rows, cols, rules, budgetPerTurn, slots, turnOrder, spawns, budgets, slotParams),
             moves,
             terminals,
             outcome,
@@ -186,6 +245,13 @@ public object ReplayCodec {
             for (b in source) {
                 byte(b.toInt())
             }
+        }
+
+        /** A length-prefixed string, which is how every name in this format travels. */
+        fun text(value: String) {
+            val encoded = value.encodeToByteArray()
+            varint(encoded.size)
+            bytes(encoded)
         }
 
         fun toByteArray(): ByteArray = bytes.copyOf(size)
@@ -232,6 +298,17 @@ public object ReplayCodec {
         fun bytes(count: Int): ByteArray {
             require(count >= 0 && count <= remaining) { "replay payload cannot supply $count bytes" }
             return ByteArray(count) { byte().toByte() }
+        }
+
+        /**
+         * A length-prefixed string, bounded before a byte of it is allocated.
+         *
+         * [what] names the field so a corrupt payload says which one it corrupted.
+         */
+        fun text(length: IntRange, what: String): String {
+            val size = varint()
+            require(size in length) { "$what of $size bytes is not plausible" }
+            return bytes(size).decodeToString()
         }
     }
 }

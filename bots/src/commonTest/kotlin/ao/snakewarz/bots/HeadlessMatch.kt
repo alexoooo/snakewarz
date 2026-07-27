@@ -45,6 +45,12 @@ internal class HeadlessMatch(
      * wants.
      */
     budgetPerSlot: IntArray = IntArray(entries.size) { budgetPerTurn },
+    /**
+     * Per-slot knob values, for the other question a shipped registry cannot ask: *does this bot
+     * play differently when you turn something?* Defaults to nothing set, which is what the shipped
+     * app plays at and what every other test wants.
+     */
+    private val paramsPerSlot: List<BotParams> = List(entries.size) { BotParams.EMPTY },
 ) {
     private val grid = Grid(rows, cols)
     private val board = Board(grid, cornerSpawns(grid, entries.size), rules)
@@ -60,7 +66,7 @@ internal class HeadlessMatch(
                 rules = rules,
                 opponents = IntArray(entries.size - 1) { if (it < slot) it else it + 1 },
                 rng = matchRng.fork(slot),
-                params = BotParams.EMPTY,
+                params = paramsPerSlot[slot],
             ),
         )
     }

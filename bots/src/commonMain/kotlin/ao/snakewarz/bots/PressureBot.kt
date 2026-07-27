@@ -1,6 +1,7 @@
 package ao.snakewarz.bots
 
 import ao.snakewarz.botapi.Bot
+import ao.snakewarz.botapi.BotKnob
 import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.Turn
@@ -44,8 +45,8 @@ public class PressureBot(setup: BotSetup) : Bot {
         (setup.grid.rows.toDouble() * setup.grid.rows + setup.grid.cols.toDouble() * setup.grid.cols),
     )
 
-    private val adjacencyFloor = setup.params.double("adjacencyFloor", ADJACENCY_FLOOR)
-    private val adjacencyPenalty = setup.params.double("adjacencyPenalty", ADJACENCY_PENALTY)
+    private val adjacencyFloor = ADJACENCY_FLOOR.read(setup.params)
+    private val adjacencyPenalty = ADJACENCY_PENALTY.read(setup.params)
 
     override fun chooseMove(turn: Turn): Decision {
         val legal = turn.legalMoves
@@ -140,10 +141,30 @@ public class PressureBot(setup: BotSetup) : Bot {
 
     override fun toString(): String = "PressureBot"
 
-    private companion object {
+    internal companion object {
         /** Below this fraction of the diagonal, closing further is head-trading rather than pressure. */
-        const val ADJACENCY_FLOOR = 0.05
-        const val ADJACENCY_PENALTY = 0.1
+        val ADJACENCY_FLOOR = BotKnob.Decimal(
+            name = "adjacencyFloor",
+            label = "Adjacency floor",
+            help = "Closer than this fraction of the board's diagonal counts as head-trading.",
+            default = 0.05,
+            min = 0.0,
+            max = 1.0,
+            step = 0.01,
+        )
+
+        /** What being that close scores instead: worse than really being there, better than far. */
+        val ADJACENCY_PENALTY = BotKnob.Decimal(
+            name = "adjacencyPenalty",
+            label = "Adjacency penalty",
+            help = "What a head-trading distance scores instead of its real value.",
+            default = 0.1,
+            min = 0.0,
+            max = 1.0,
+            step = 0.01,
+        )
+
+        val KNOBS: List<BotKnob> = listOf(ADJACENCY_FLOOR, ADJACENCY_PENALTY)
 
         const val BETTER = 1
         const val TIED = 0

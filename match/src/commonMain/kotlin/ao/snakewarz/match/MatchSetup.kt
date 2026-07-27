@@ -1,6 +1,7 @@
 package ao.snakewarz.match
 
 import ao.snakewarz.botapi.BotId
+import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.core.Grid
 import ao.snakewarz.core.Occupancy
 import ao.snakewarz.core.RulesConfig
@@ -20,20 +21,45 @@ import ao.snakewarz.core.SplitMix64
  *
  * [spawns] are **playable** indices, `row * cols + col`, so the format does not encode the engine's
  * padded-grid layout.
+ *
+ * Four things are per slot — who is playing, when they act, where they start, and how they are
+ * configured — and they are four parallel collections rather than a list of seat objects, because
+ * most of the program only ever wants the first of them.
  */
 public class MatchSetup(
     public val seed: Long,
     public val rows: Int,
     public val cols: Int,
     public val rules: RulesConfig,
-    /** Search allowance per turn. Recorded because `verify()` must re-run the bots under it. */
+    /**
+     * The match default: the search allowance a slot gets unless it was handed its own.
+     *
+     * Recorded because `verify()` must re-run the bots under it.
+     */
     public val budgetPerTurn: Int,
     public val slots: List<BotId>,
     turnOrder: IntArray,
     spawns: IntArray,
+    /** Per-slot allowance. Empty gives every slot [budgetPerTurn], which is the usual match. */
+    budgets: IntArray = IntArray(0),
+    /** Per-slot knob values. Empty gives every slot [BotParams.EMPTY], which is the usual match. */
+    slotParams: List<BotParams> = emptyList(),
 ) {
     private val order: IntArray = turnOrder.copyOf()
     private val starts: IntArray = spawns.copyOf()
+
+    /**
+     * Materialised rather than left null, so that a setup built from [budgetPerTurn] alone is
+     * *equal* to one handed the same figure for every slot.
+     *
+     * That is not tidiness: `ReplayCodec` decodes an unconfigured payload into the broadcast form,
+     * and every round-trip test asserts the result equals the record that produced it.
+     */
+    private val allowances: IntArray =
+        if (budgets.isEmpty()) IntArray(slots.size) { budgetPerTurn } else budgets.copyOf()
+
+    private val knobs: List<BotParams> =
+        if (slotParams.isEmpty()) List(slots.size) { BotParams.EMPTY } else slotParams.toList()
 
     public val slotCount: Int get() = slots.size
 
@@ -46,6 +72,11 @@ public class MatchSetup(
         require(budgetPerTurn >= 0) { "budgetPerTurn must not be negative, was $budgetPerTurn" }
         require(order.size == slotCount) { "turn order has ${order.size} entries for $slotCount slots" }
         require(starts.size == slotCount) { "there are ${starts.size} spawns for $slotCount slots" }
+        require(allowances.size == slotCount) { "there are ${allowances.size} allowances for $slotCount slots" }
+        require(knobs.size == slotCount) { "there are ${knobs.size} parameter sets for $slotCount slots" }
+        for (slot in 0 until slotCount) {
+            require(allowances[slot] >= 0) { "slot $slot has an allowance of ${allowances[slot]}" }
+        }
 
         val seenSlot = BooleanArray(slotCount)
         for (slot in order) {
@@ -71,6 +102,19 @@ public class MatchSetup(
     /** The playable spawn index per slot, as a fresh array. */
     public fun spawns(): IntArray = starts.copyOf()
 
+    /** The search allowance per slot, as a fresh array. */
+    public fun budgets(): IntArray = allowances.copyOf()
+
+    /** What [slot] may spend on one turn. */
+    public fun budgetFor(slot: Int): Int = allowances[slot]
+
+    /** How [slot]'s bot was tuned, which is `BotParams.EMPTY` for a bot nobody configured. */
+    public fun paramsFor(slot: Int): BotParams = knobs[slot]
+
+    /** Whether anything here departs from "every slot at the match default, nothing tuned". */
+    public val configured: Boolean
+        get() = allowances.any { it != budgetPerTurn } || knobs.any { !it.isEmpty }
+
     public fun grid(): Grid = Grid(rows, cols)
 
     /** The spawns translated into [grid]'s padded address space, which is what [ao.snakewarz.core.Board] wants. */
@@ -87,7 +131,9 @@ public class MatchSetup(
             budgetPerTurn == other.budgetPerTurn &&
             slots == other.slots &&
             order.contentEquals(other.order) &&
-            starts.contentEquals(other.starts)
+            starts.contentEquals(other.starts) &&
+            allowances.contentEquals(other.allowances) &&
+            knobs == other.knobs
     }
 
     override fun hashCode(): Int {
@@ -99,6 +145,8 @@ public class MatchSetup(
         result = 31 * result + slots.hashCode()
         result = 31 * result + order.contentHashCode()
         result = 31 * result + starts.contentHashCode()
+        result = 31 * result + allowances.contentHashCode()
+        result = 31 * result + knobs.hashCode()
         return result
     }
 
@@ -158,6 +206,8 @@ public class MatchSetup(
             seed: Long,
             rules: RulesConfig = RulesConfig(),
             budgetPerTurn: Int = DEFAULT_BUDGET_PER_TURN,
+            budgets: IntArray = IntArray(0),
+            slotParams: List<BotParams> = emptyList(),
         ): MatchSetup {
             val grid = Grid(rows, cols)
             val setupRng = SplitMix64(seed).fork(SETUP_STREAM)
@@ -179,6 +229,8 @@ public class MatchSetup(
                 slots = slots.toList(),
                 turnOrder = order,
                 spawns = mostDistantSpawns(grid, slots.size),
+                budgets = budgets,
+                slotParams = slotParams,
             )
         }
     }

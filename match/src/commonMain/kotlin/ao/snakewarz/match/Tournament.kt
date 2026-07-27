@@ -129,13 +129,18 @@ public class Tournament(
 
         val seats = IntArray(SEATS)
         seat(index, seats)
+        val home = config.contestants[seats[0]]
+        val away = config.contestants[seats[1]]
+
         return MatchSetup.create(
             rows = config.rows,
             cols = config.cols,
-            slots = listOf(config.contestants[seats[0]], config.contestants[seats[1]]),
+            slots = listOf(home.bot, away.bot),
             seed = config.seed + (index % config.rounds) / 2,
             rules = config.rules,
             budgetPerTurn = config.budgetPerTurn,
+            budgets = intArrayOf(home.budgetIn(config.budgetPerTurn), away.budgetIn(config.budgetPerTurn)),
+            slotParams = listOf(home.params, away.params),
         )
     }
 

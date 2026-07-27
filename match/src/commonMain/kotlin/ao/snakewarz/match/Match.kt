@@ -2,7 +2,6 @@ package ao.snakewarz.match
 
 import ao.snakewarz.botapi.Bot
 import ao.snakewarz.botapi.BoardScratch
-import ao.snakewarz.botapi.BotParams
 import ao.snakewarz.botapi.BotRegistry
 import ao.snakewarz.botapi.BotSetup
 import ao.snakewarz.botapi.Decision
@@ -47,7 +46,7 @@ public class Match private constructor(
 
     private val board: Board = Board(grid, setup.spawnCells(grid), setup.rules, setup.turnOrder())
     private val matchRng: Rng = SplitMix64(setup.seed)
-    private val budgets: Array<Budget> = Array(setup.slotCount) { Budget(setup.budgetPerTurn) }
+    private val budgets: Array<Budget> = Array(setup.slotCount) { Budget(setup.budgetFor(it)) }
     private val scratches: Array<Scratch> = Array(setup.slotCount) { BoardScratch(board, budgets[it]) }
 
     private val bots: Array<Bot> = Array(setup.slotCount) { slot ->
@@ -58,7 +57,7 @@ public class Match private constructor(
                 rules = setup.rules,
                 opponents = IntArray(setup.slotCount - 1) { if (it < slot) it else it + 1 },
                 rng = matchRng.fork(slot),
-                params = BotParams.EMPTY,
+                params = setup.paramsFor(slot),
             ),
         )
     }
