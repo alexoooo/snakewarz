@@ -14,11 +14,12 @@ import kotlin.time.TimeSource
 /**
  * The truncation experiment, kept because a measured "no" is only worth having if it can be re-run.
  *
- * `docs/Migration.md` came out of Phase 4 naming rollout truncation — stop the rollout after a few
- * moves and judge where it got to by reachable-space share — as the single highest-value lever left,
- * and deferring it to Phase 6 on the grounds that it is a measurement question. This is the
+ * Rollout truncation — stop the rollout after a few moves and judge where it got to by
+ * reachable-space share — was the single highest-value lever left once [UctBot] landed, and it was
+ * deferred rather than argued about on the grounds that it is a measurement question. This is the
  * measurement: [UctBot] with `rolloutDepth` set, against the same bot playing its rollouts out in
- * full, at the same allowance, on the ladder's board, over the ladder's twenty matches.
+ * full, at the same allowance, on the ladder's board, over the ladder's twenty matches. The answer
+ * and the table it produced are in [UctBot.ROLLOUT_DEPTH].
  *
  * The comparison prints times as well as wins, because the two are not interchangeable. Truncation
  * buys iterations *per unit of budget*, and budget is counted in simulated moves — so a truncated

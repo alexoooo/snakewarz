@@ -27,8 +27,8 @@ class ShippedBotsTest {
     @Test
     fun `lookup finds what is registered and admits what is not`() {
         assertEquals(BotId("random"), ShippedBots[BotId("random")]?.id)
-        assertEquals(BotId("uct"), ShippedBots[BotId("uct")]?.id, "Phase 4 landed")
-        assertEquals(BotId("tomsnake"), ShippedBots[BotId("tomsnake")]?.id, "Phase 5 landed")
+        assertEquals(BotId("uct"), ShippedBots[BotId("uct")]?.id, "the top of the ladder")
+        assertEquals(BotId("tomsnake"), ShippedBots[BotId("tomsnake")]?.id, "a contributed bot")
         assertNull(ShippedBots[BotId("no-such-bot")])
         assertFailsWith<IllegalArgumentException> { ShippedBots.entryOf(BotId("no-such-bot")) }
     }

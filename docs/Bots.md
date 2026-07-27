@@ -134,3 +134,36 @@ down to make your bot look better; report the wall-clock beside the win rate ins
 Adding a bot needs **no HTML change**: the pickers in the sidebar are filled from `BotRegistry.entries`
 at startup, and each seat's settings rows are built from that entry's `knobs`. Those are the only two
 places `:ui` builds DOM, and this is why.
+
+## Measurements, and what they are the reason for
+
+A search bot's strength is how much search fits in its allowance, so most of the design questions
+here were settled by a batch rather than by an argument. Each of those numbers is the reason
+something is or is not in the code, which is exactly the kind of fact that gets re-proposed every
+year or two. Three live in the KDoc of the constant they set: `UctBot.ROLLOUT_DEPTH` carries the
+rollout-truncation table, `MatchSetup.DEFAULT_BUDGET_PER_TURN` the allowance table and the 8ms frame
+budget that sets it, and `ExpertEval` the two that put `puct` in the experimental section rather than
+on the ladder. Re-running any of them is a `:lab` command rather than an archaeology.
+
+The fourth has no constant to live in, because what it settled was that there is no code.
+
+**Tree reuse across turns was built, measured and rejected.** It looks free: a bot instance lives for
+the whole match, so a tree kept in a field needs no new API, and `BoardView.hash` makes finding last
+turn's subtree a `Long` compare where legacy's `BiState.equals` compared whole `BitSet`s. It is not
+worth it. A turn builds about **137 nodes on a 20x20 at the shipped allowance**, spread over four
+openings and then over the opponent's replies, which leaves roughly **8 visits** in the subtree that
+would survive — six percent, in exchange for a `hash` column on the node pool and a copying
+compaction of it, because node ids are positional and "keep only this subtree" is not a free
+operation on a flat array. There is also a soundness wrinkle worth knowing before anybody tries
+again: `hash` deliberately omits `turnIndex`, and `turnIndex` is what `maxTurns` terminates on, so
+statistics gathered at a shallower turn describe a position with a longer horizon than the one they
+would be grafted onto.
+
+**The wasm target costs about 3x, and the arena is why that is affordable.** The engine runs **2.7M
+turns/s in Chrome against 8.8M on the JVM** with trivial bots. That gap is the platform and it was
+expected; it is also dwarfed by the decision above it, `Board` mutating and unwinding a single arena
+where legacy allocated a persistent board per node. The choices that keep the gap at 3x are each
+stated where they are made — flat parallel pools instead of an object graph (`UctTree`), the UCB1
+logarithm hoisted out of the child loop where legacy recomputed it per child, and `DirectionSet`
+instead of an allocated `List<Direction>`. Settle a suspected regression with `ThroughputTest`, which
+runs on either target, rather than by assuming the platform.

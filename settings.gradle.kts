@@ -14,8 +14,8 @@ dependencyResolutionManagement {
     }
 }
 
-// Modules are added as their phase lands. See CLAUDE.md for the module graph and, more importantly,
-// for the forbidden dependency edges; docs/Migration.md for why they are shaped that way.
+// See CLAUDE.md for the module graph, for why there are seven modules rather than seven packages,
+// and -- most importantly -- for the forbidden dependency edges between them.
 include(":core")
 include(":bot-api")
 include(":bots")

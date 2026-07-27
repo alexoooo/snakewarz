@@ -26,6 +26,23 @@ you have to know before you type a command you already think you know: never bac
 ./gradlew :lab:run --args="time puct:eval=expert --budget 40000"
 ```
 
+## Why `:lab` is a module
+
+`Tournament.runToCompletion` had no caller it was written for. `:match` may not see `:bots`, and
+`:app` — the only place both meet — is `wasmJs` only, so the answer to "run four hundred matches and
+tell me which evaluation is stronger" was to open a browser and watch, which is not an answer. `:lab`
+injects `ShippedBots` into a `Tournament` that knows nothing but the `BotRegistry` interface, which
+is the inversion `:app` already performs rather than a new edge. The rejected alternative was a
+property-gated JVM test in `:bots` hand-rolling the round robin the way `BotLadderTest` does: from
+there `Tournament`, `TournamentTable` and `Contestant` are all unreachable, so it would have
+re-implemented the win matrix, the seat rotation and the contestant legend to avoid adding a module.
+
+`:lab` is also the one place below `:ui` where a clock is allowed, which is why `time` is a separate
+subcommand rather than a column in the matrix: a two-bot match's elapsed time is the **sum** of both
+bots' thinking, so a per-contestant figure taken off a shared match is really a figure about the
+pairing. `time` seats the subject against an opponent handed no allowance at all and reports the
+fastest of several passes.
+
 ## Lab entrant syntax
 
 A lab entrant is `<slug>[:name=value,...]`, where `budget` is that entrant's own allowance and every

@@ -16,9 +16,9 @@ Every rule has an id, so a review or a commit can cite one ("violates SW-01").
   boundary that matters.
 
 The architecture these rules serve is in [`../CLAUDE.md`](../CLAUDE.md), which holds the module graph
-and the forbidden edges and routes to the per-module detail in this directory; the reasoning behind
-that architecture is in [`Migration.md`](Migration.md). Where a rule is enforced by a test or a
-Gradle task rather than by review, that is named in the rule.
+and the forbidden edges, gives the reasoning behind both, and routes to the per-module detail in this
+directory. Where a rule is enforced by a test or a Gradle task rather than by review, that is named
+in the rule.
 
 | Id | Rule |
 |---|---|
@@ -345,8 +345,8 @@ a present-tense constraint or delete it.
 **Cite a document by filename, never by quoted sentence.** `docs/Bots.md` is a referent that survives
 the document being edited; a sentence quoted out of it is one nobody can grep for once the wording
 changes, and the citation then rots with no build failure to announce it. This is not hypothetical:
-`PuctTree` and `Migration.md` both spent a while attributing a rule about golden hashes to a sentence
-CLAUDE.md did not contain.
+two places in this repo spent a while attributing a rule about golden hashes to a sentence CLAUDE.md
+did not contain, one of them a KDoc on `PuctTree`.
 
 **Why:** Well-named identifiers say *what* the code does. A comment adds value only when it captures a
 hidden constraint, a measured result, a non-trivial invariant, or behaviour that would surprise a

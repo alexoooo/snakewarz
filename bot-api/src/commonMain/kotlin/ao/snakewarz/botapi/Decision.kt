@@ -22,9 +22,9 @@ public sealed interface Decision {
      * Move the head one square in [direction].
      *
      * The four instances are cached and the constructor is private, so `Move(NORTH)` allocates
-     * nothing and identity equality is structural equality. That matters more than it looks: from
-     * Phase 4 a search bot's rollout policy *is* another bot's [Bot.chooseMove], called millions of
-     * times per turn, and an allocation there would be most of the cost of the rollout.
+     * nothing and identity equality is structural equality. That matters more than it looks: a
+     * search bot's rollout policy *is* another bot's [Bot.chooseMove], called millions of times per
+     * turn, and an allocation there would be most of the cost of the rollout.
      */
     public class Move private constructor(public val direction: Direction) : Decision {
         override fun toString(): String = "Move($direction)"

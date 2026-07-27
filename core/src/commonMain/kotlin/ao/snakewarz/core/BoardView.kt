@@ -49,9 +49,9 @@ public interface BoardView {
      * turns — a `Long` compare, where the legacy `BiState.equals` compared whole `BitSet`s on every
      * node visit. No shipped bot does either, and that is a measured decision rather than a gap:
      * tree reuse was built and benchmarked during the rewrite and about eight of a turn's 137 nodes
-     * survived into the next one. `UctBot` and `PuctBot` reset instead. `docs/Migration.md` carries
-     * the numbers and the soundness wrinkle that goes with them — this fingerprint deliberately
-     * omits `turnIndex`, which is what `maxTurns` terminates on.
+     * survived into the next one. `UctBot` and `PuctBot` reset instead. `docs/Bots.md` carries the
+     * numbers and the soundness wrinkle that goes with them — this fingerprint deliberately omits
+     * `turnIndex`, which is what `maxTurns` terminates on.
      */
     public val hash: Long
 

@@ -18,13 +18,28 @@ notes are that, one directory level shifted.
 
 ## It was a specification, not code to translate
 
-It has two competing board representations and the wrong performance shape; `:core` is a
+It was ~4,900 lines of Java across 57 files — realistically ~3,500 of live logic once commented-out
+experiments are stripped — that ran only as a Swing desktop app launched from an IDE, and had **zero
+tests**. It has two competing board representations and the wrong performance shape; `:core` is a
 from-scratch rewrite. Algorithms were ported semantically and the scaffolding deleted.
 
-**The AI is fully ported and nothing under `ai/` is outstanding.** The sample bots landed in
-Phase 4 — `WallHugAi`, `RandomAi`, `ForkAi`, `ForkPathAi`, `PathAi`, `AStar`, `MonteCarloAi`,
-`UctAi`/`Node`/`BiState`, `PvpAi`'s reduction and `BoardOccupancy.mostDistant` — and the contributed
-`ai/da/` bots in Phase 5, as `BurninHellBot` and `TomSnakeBot`. `OtherSnake` is the one deliberate
+Deleted outright rather than ported, because each was scaffolding for that shape rather than an
+algorithm: `SnakesRunner`, `SnakesContest`, `SimpleSnakesGame`, `SnakesGame2`, `SnakeHistory`,
+`GameGraphics*`, `SnakesGameDisplay`, `MoveTracker`, the whole three-implementation `MoveSpecifier`
+family — all of which collapse into `Decision` — `PlayerAvatar`/`PlayerWrapper`/`PlayerDisplay`/
+`BasicPlayerDisplay`, both Swing inputs, `BoardArrangement`/`Matrix`/`BitSetMatrix`/
+`MatrixBoardArrangement`, `BoardLocation`, `Action`, `RelLocation` and `WeightedMoveSpecifier`.
+
+`PlayerAvatar` is the one worth understanding, because the module graph is partly a response to it.
+It fused player identity, the AI delegate and a `java.awt.Image` into a single class, and was the key
+type of `GameState`'s map — so the game state transitively dragged in AWT, and nothing could hold a
+position without also holding a window toolkit. It is three separate things in three modules now:
+`SnakeId` in `:core`, `Bot` in `:bot-api`, `Palette` in `:ui`.
+
+**The AI is fully ported and nothing under `ai/` is outstanding.** The sample bots — `WallHugAi`,
+`RandomAi`, `ForkAi`, `ForkPathAi`, `PathAi`, `AStar`, `MonteCarloAi`, `UctAi`/`Node`/`BiState`,
+`PvpAi`'s reduction and `BoardOccupancy.mostDistant` — and the contributed `ai/da/` bots, as
+`BurninHellBot` and `TomSnakeBot`. `OtherSnake` is the one deliberate
 omission: its body is `RandomAi`'s body, so it is already shipped as `random`, and a second slug for
 one policy is a duplicate picker row and nothing else. Do not "finish the port" by adding it.
 

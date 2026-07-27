@@ -26,16 +26,15 @@ file per audience. **Read the row that matches before you edit, not after the fi
 | change the page shell, the boot path or Pages | [`docs/UI.md`](docs/UI.md#deployment) | `#app` revealed after the first measure sizes every board to the minimum cell |
 | run a build, a benchmark or `:lab` | [`docs/Workflow.md`](docs/Workflow.md) | A mistyped knob name silently measures the default and wastes however long the batch takes |
 | compare against the pre-rewrite Java | [`docs/Legacy.md`](docs/Legacy.md) | Several of its algorithms are dead-broken and look intentional |
-| change the shape of the architecture | [`docs/Migration.md`](docs/Migration.md) | It is the record of what was already tried and rejected, and why |
 
 The module graph, the forbidden edges and the four non-obvious facts are **below, not in `docs/`**:
 they are what you have to know before you know you need them.
 
 ## Current state
 
-**All six phases are complete.** The rewrite is done: the rules engine, the bot contract, the match
-driver, the replay codec, the canvas renderer, the DOM chrome, a seven-bot ladder topped by an MCTS
-bot, per-match stats and batch tournaments all exist and are verified, and the legacy Java is deleted
+**The rewrite is complete.** The rules engine, the bot contract, the match driver, the replay codec,
+the canvas renderer, the DOM chrome, a seven-bot ladder topped by an MCTS bot, per-match stats and
+batch tournaments all exist and are verified, and the legacy Java is deleted
 — it lives at the `legacy-java-final` tag and nowhere else. You can play against the shipped bots,
 watch bots fight, scrub a recording, share a match as a URL, and run a win-rate matrix over a few
 hundred matches without the page stopping.
@@ -51,9 +50,11 @@ hundred matches without the page stopping.
 | `lab/` | `:lab` module. A JVM command line for running batches headlessly — the one place outside `:ui` where a clock and a `println` live |
 | `build-logic/` | Convention plugins `snakewarz.pure`, `snakewarz.browser` and `snakewarz.tool`, sharing `registerModulePurityCheck` |
 
-Release 1 is feature-complete and everything since is new work rather than the remainder of a plan.
-The phase log, and a closing section for each thing landed since phase 6, are in
-[`docs/Migration.md`](docs/Migration.md).
+Release 1 is feature-complete, so there is no remaining plan and nothing here is a stub waiting to be
+filled in. Everything since is new work on top of a finished thing. Where a decision was measured
+rather than argued, the number lives beside the constant it set — `UctBot.ROLLOUT_DEPTH`,
+`MatchSetup.DEFAULT_BUDGET_PER_TURN`, `ExpertEval` — and [`docs/Bots.md`](docs/Bots.md) says which is
+where.
 
 Do not assume anything else exists; check the tree.
 
@@ -78,6 +79,14 @@ seeded matches, shareable replays encoded in the URL hash, per-match stats, and 
 | `:ui` | Canvas renderer, DOM chrome, rAF scheduler | `:core`, `:match`, `kotlinx-browser` | wasmJs |
 | `:app` | `main()`, wiring, URL hash routing | all | wasmJs |
 | `:lab` | A command line for running batches headlessly. Nothing depends on it | `:core`, `:bot-api`, `:bots`, `:match` | jvm |
+
+**Why seven Gradle modules rather than seven packages in one:** the compiler is the only enforcement
+that cannot be bypassed under pressure, and this is meant to keep growing — at the size this is aimed
+at, "the engine physically cannot reference the DOM" has to be a build fact rather than a convention
+somebody remembers. Kotlin's `internal` is module-scoped, so a sub-package buys path depth and no
+boundary at all; a module buys a real fence *and* a `checkModulePurity` edge. The per-module KMP
+configuration that would make this expensive is solved once, in a convention plugin. That is
+[CC-06](docs/Coding-Standards.md#cc-06--the-module-is-the-package).
 
 The `jvm()` target on the four pure modules exists **only to run tests fast** — it is never deployed and
 contributes nothing to the wasm bundle. It doubles as a second compiler proving those modules are

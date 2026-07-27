@@ -9,7 +9,7 @@ into Kotlin/Wasm as a web app.
 
 ## Status
 
-**The rewrite is done — all six phases, and there is now something worth losing to.** Play against
+**The rewrite is done, and there is now something worth losing to.** Play against
 the shipped bots with the arrow keys, or sit out and watch up to four of them fight; pause, step a
 turn at a time, change the speed, scrub back through a finished match, and share the whole thing as a
 link. A 160-turn duel is 129 characters of URL, and no server is involved at any point.
@@ -89,8 +89,10 @@ It runs on the animation frame in slices of a few milliseconds, so the page stay
 throughout and the board shows whichever match the batch is currently on. No server, no worker, and
 nothing to install.
 
-See [docs/Migration.md](docs/Migration.md) for the design, the phase log, and the measurements behind
-the tuning constants.
+[CLAUDE.md](CLAUDE.md) is the map of the design — the module graph, the forbidden dependency edges
+and the handful of rules that are easy to get subtly wrong — and it routes to a file per audience
+under [docs/](docs). The measurements behind the tuning constants live beside the constants
+themselves; [docs/Bots.md](docs/Bots.md) says which is where.
 
 The original Java implementation is at the `legacy-java-final` git tag —
 `git show legacy-java-final:src/main/java/ao/…`. It was deleted from the working tree once the port

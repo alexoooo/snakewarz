@@ -180,7 +180,7 @@ public class MatchSetup(
          *
          * The criterion is the scheduler's frame budget. `:ui` gives a frame 8 ms of stepping and
          * then stops, but it can only stop *between* turns, so a turn that overruns the slice
-         * overruns the frame. Phase 6 timed `UctBot` on a 20x20 in headless Chrome — the slower of
+         * overruns the frame. So `UctBot` was timed on a 20x20 in headless Chrome — the slower of
          * the two targets, and the one people play on:
          *
          * | allowance | Chrome | JVM |
@@ -195,7 +195,9 @@ public class MatchSetup(
          * lands inside a single 60 Hz frame. Going to 60,000 would spend the headroom to buy a bot
          * that `BotLadderTest` cannot tell apart from this one.
          *
-         * Four times the Phase 4 guess, and worth it: `uct` at this allowance beats `uct` at a tenth
+         * Four times the 10,000 originally guessed, and worth it — the guess was made against a
+         * search that allocated a board per node, and the arena made a simulated move cheap enough
+         * that nobody had re-derived it. `uct` at this allowance beats `uct` at a tenth
          * of it, which is the assertion in `BotLadderTest` that says the extra iterations are real
          * playing strength rather than a bigger number. Every shipped bot still degrades gracefully
          * below it, down to and including zero.

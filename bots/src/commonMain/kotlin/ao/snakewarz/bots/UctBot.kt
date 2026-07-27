@@ -21,7 +21,7 @@ import ao.snakewarz.core.MatchOutcome
  * engine mutates and unwinds a single arena instead of building a board per node, and that the tree
  * is six flat arrays instead of an object graph.
  *
- * **It searches the real N-player game.** `docs/Migration.md` planned an abstract `DuelBot` that
+ * **It searches the real N-player game.** The rewrite was planned around an abstract `DuelBot` that
  * would reduce the field to the nearest opponent and solve a duel, because legacy's `BiState` held
  * exactly two snakes and had no choice. `Playout` sequences however many are alive and rotates the
  * turn order for us, so the reduction buys nothing and costs a third snake's worth of accuracy. The
@@ -192,11 +192,11 @@ public class UctBot(setup: BotSetup) : Bot {
         /**
          * Rollouts run to the end, and that is a **measured** decision rather than an omission.
          *
-         * `docs/Migration.md` came out of Phase 4 naming truncation — cut the rollout at a depth,
-         * judge the position by reachable-space share — as the highest-value lever left, on the
-         * usual reasoning that a hundred-move rollout is an expensive way to buy one bit. Phase 6
-         * built it ([truncatedPlayout], [SpaceOwnership]) and played it against this over forty
-         * matches a depth, at the same allowance, on a 12x12:
+         * Truncation — cut the rollout at a depth, judge the position by reachable-space share —
+         * was named the highest-value lever left when this bot landed, on the usual reasoning that a
+         * hundred-move rollout is an expensive way to buy one bit. It was then built
+         * ([truncatedPlayout], [SpaceOwnership]) and played against this over forty matches a depth,
+         * at the same allowance, on a 12x12:
          *
          * | depth | wins of 40 | µs/turn | against full |
          * |---|---|---|---|

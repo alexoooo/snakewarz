@@ -12,7 +12,8 @@ import ao.snakewarz.core.Rng
  * The trade this exists to make: a full rollout runs a hundred-odd moves for one bit of information,
  * so cutting it short at twenty and reading the position instead buys roughly five times the
  * iterations for the same allowance. Whether that is a *good* trade is a question about this engine
- * rather than about MCTS in general, and `docs/Migration.md` records the answer measured here.
+ * rather than about MCTS in general, and it was measured: [UctBot.ROLLOUT_DEPTH] carries the table
+ * and the answer, which is no.
  *
  * Everything [randomPlayout] does, this does — same policy, same re-read of `outcome` after every
  * advance, same `NORTH` for a trapped snake — up to the point where the cut-off lands.

@@ -13,8 +13,9 @@ import kotlin.math.sqrt
  * A node is an index. Its statistics live in parallel `IntArray`/`DoubleArray` pools, and its
  * children sit in a fixed four-wide block at `node * 4`, indexed by [Direction.ordinal] — so
  * reaching a child is one multiply-add and one load, with no pointer to chase and no per-node array
- * to allocate. `docs/Migration.md` names this the highest-leverage single choice for the wasm
- * target and says to do it from the first commit; this is that.
+ * to allocate. Of everything that keeps the wasm target within about 3x of the JVM this is the
+ * highest-leverage single choice, which is why it was made in this class's first commit rather than
+ * profiled into later — see `docs/Bots.md`.
  *
  * The pools are allocated once per match and reused every turn. [reset] is O(1): it sets the count
  * back to one and re-initialises the root. Nothing is cleared, because [allocate] writes every field
@@ -258,7 +259,8 @@ internal class UctTree(private val maxNodes: Int = MAX_NODES) {
         /**
          * A backstop, not a working limit. One node is created per iteration at most, and
          * iterations are bounded by the budget divided by the length of a rollout — a few hundred
-         * at the shipped allowance. This exists so a Phase 6 budget of millions cannot eat the heap.
+         * at the shipped allowance. This exists so that an allowance set to millions — the sidebar
+         * and `:lab` both allow it — cannot eat the heap.
          */
         const val MAX_NODES: Int = 1 shl 16
 

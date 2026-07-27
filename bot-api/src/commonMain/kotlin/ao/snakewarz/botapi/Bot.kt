@@ -8,7 +8,7 @@ package ao.snakewarz.botapi
  * there to make finding last turn's subtree a `Long` compare rather than a full board equality test.
  * Neither shipped search bot takes that up, and it is not an oversight: reuse was measured during
  * the rewrite at roughly six percent of the tree surviving a turn, so `UctBot` and `PuctBot` reset
- * theirs instead. The opening is real, the arithmetic is in `docs/Migration.md`.
+ * theirs instead. The opening is real, the arithmetic is in `docs/Bots.md`.
  *
  * ### [chooseMove] is synchronous, and must never become `suspend`
  *

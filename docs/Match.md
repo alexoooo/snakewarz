@@ -55,6 +55,12 @@ and the ordering is the whole of it: a check that runs after the array is a chec
 lost, and it loses as an `OutOfMemoryError` rather than the `IllegalArgumentException` `:app` catches
 to fall back to a fresh match.
 
+A payload's **length** is bounded by `RulesConfig.maxTurns` — two bits a turn, so the longest match
+the rules allow is around 1,400 base64url characters and every real one is a fraction of that. If a
+future rule set ever pushes past what a URL comfortably holds, the answer is a downloadable record
+file rather than a longer link; the codec already produces bytes, and `#r=` is only one transport
+for them.
+
 **`MatchRecord.verify` treats a partial recording as a prefix.** `outcome == null` means the record
 stopped before the match did, which is the *usual* shape for a shared link — `GameSession.share()`
 calls `record()` at whatever turn the board is on. The replay always runs to completion and is longer
@@ -99,3 +105,18 @@ is `null` rather than pre-filled, so `TournamentConfig.budgetPerTurn` still has 
 `TournamentTable` heads its columns with `Contestant.label` — `uct` beside `uct@4k` — numbers a
 repeated label `·2`, and spells the settings out in a legend under the grid rather than in the
 headings, which have a narrow panel to fit in.
+
+## No worker, and where the seam would be
+
+**Web Workers are deferred deliberately, and `Bot` never becomes async.** One would cost a
+serialization boundary, a second wasm instantiation, and a message layer that would leak into `Bot` —
+destroying the synchronous property the entire search layer rests on, since a bot runs the engine
+inside its own turn using another bot as its rollout policy. Allowances are counted rather than
+timed, so a turn's worst case is bounded without one, and `:ui`'s frame guard degrades the turn rate
+instead of freezing the page.
+
+The seam is nevertheless already in the right place, and that is what `:match` being headless buys.
+A batch is naturally message-shaped — send a `MatchSetup`, get a `MatchRecord` — and it is the
+*match* that would become asynchronous at that boundary, never `Bot`. What a worker would buy today
+is a second core rather than a responsive page, because slicing this driver across frames already
+delivers that. A smaller and much later prize.
