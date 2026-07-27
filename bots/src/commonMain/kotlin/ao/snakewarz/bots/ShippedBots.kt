@@ -19,11 +19,11 @@ import ao.snakewarz.botapi.BotRegistry
  * The list is ordered by registration and looked up by hash, never iterated by hash — a registry
  * that reorders itself between runs reorders every tournament derived from it.
  *
- * It comes in two sections. The first is **the ladder**: seven bots, weakest first, each rung
+ * It comes in three sections. The first is **the ladder**: seven bots, weakest first, each rung
  * beating the one below it over twenty matches — `BotLadderTest` is what says so. The second is the
- * bots **contributed** to the original 2005 project, ported semantically and ordered by slug; they
- * are gated by exactly the same contract suite, but they are not rungs and the ordering claims
- * nothing about their strength.
+ * bots **contributed** to the original 2005 project, ported semantically and ordered by slug. The
+ * third is **experimental**: registered, gated by exactly the same contract suite, and making no
+ * claim about strength that nobody has measured. Only the first section claims anything at all.
  *
  * `random` must stay first. `:ui` seats the second slot from the first bot on the list, and the
  * opening screen of a game nobody has configured yet should be the weakest opponent there is.
@@ -45,6 +45,12 @@ public object ShippedBots : BotRegistry {
         // Contributed to the original project. Not ladder rungs.
         register("burninhell", "Burnin Hell", BotFactory { BurninHellBot() })
         register("tomsnake", "Tom Snake", ::TomSnakeBot, TomSnakeBot.KNOBS)
+
+        // Experimental. A rung asserts that it beats the one below it, and where this one belongs
+        // against `uct` is a measurement rather than a preference -- see docs/MIGRATION.md and the
+        // `:lab` runs it records. Promote it into the ladder when the number is in, or leave it here
+        // and say why, but do not let it assert something nobody checked.
+        register("puct", "PUCT", ::PuctBot, PuctBot.KNOBS)
     }
 
     private val byId: Map<BotId, BotEntry> = entries.associateByTo(LinkedHashMap()) { it.id }

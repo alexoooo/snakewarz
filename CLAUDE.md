@@ -24,25 +24,34 @@ hundred matches without the page stopping.
 |---|---|
 | `core/` | `:core` module. Padded-grid primitives plus the rules engine: `Occupancy`, `Board`, `MatchState`, `SplitMix64`, `Budget` |
 | `bot-api/` | `:bot-api` module. `Bot`, `Decision`, `Turn`, `BotSetup`, `BotRegistry`, `BotKnob` — what a bot lets you tune — plus `Scratch`/`Playout`, the search arena that makes the budget structural |
-| `bots/` | `:bots` module. Nine bots and `ShippedBots`, the `BotRegistry` implementation, over the `internal` search primitives `FloodFill`, `ShortestPaths`, `SpaceOwnership`, `nearestOpponent`, `randomPlayout`, `truncatedPlayout`, `portableLog` and `UctTree` |
+| `bots/` | `:bots` module. Ten bots and `ShippedBots`, the `BotRegistry` implementation, over the `internal` search primitives `FloodFill`, `ShortestPaths`, `SpaceOwnership`, `nearestOpponent`, `randomPlayout`, `truncatedPlayout`, `portableLog`, `UctTree`, `PuctTree` and `LeafEval` |
 | `match/` | `:match` module. `Match` driver, `MatchSetup`, `MatchRecord`, `ReplayCodec`, spawn placement, `MatchStats`, `Tournament`, and human input — `InputBuffer`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM |
 | `ui/` | `:ui` module. `GameSession` — the only public class — over `BoardRenderer`, `TurnScheduler`, `TournamentRunner`, `Chrome` and `Palette` |
 | `app/` | `:app` module. `main()`, registry injection and `#r=` replay routing. Sixty lines, and that is the point |
-| `build-logic/` | Convention plugins `snakewarz.pure` and `snakewarz.browser`, sharing `registerModulePurityCheck` |
+| `lab/` | `:lab` module. A JVM command line for running batches headlessly — the one place outside `:ui` where a clock and a `println` live |
+| `build-logic/` | Convention plugins `snakewarz.pure`, `snakewarz.browser` and `snakewarz.tool`, sharing `registerModulePurityCheck` |
 | `docs/MIGRATION.md` | The design doc and phase log. **Read this before changing architecture** |
 
-`ShippedBots` has **two sections, and only the first is a ladder**. The ladder is registered weakest
+`ShippedBots` has **three sections, and only the first is a ladder**. The ladder is registered weakest
 first: `random`, `wallhug`, `space`, `pressure`, `chase`, `flat-monte-carlo`, `uct`. Each rung beats
 the one below it over twenty matches — `BotLadderTest` is the gate, and it is the only test in the
 suite a *correct but useless* bot would fail. Then come the bots contributed to the original project,
-ordered by slug and claiming nothing about strength: `burninhell`, `tomsnake`. They are gated by the
-same contract suite as everything else.
+ordered by slug and claiming nothing about strength: `burninhell`, `tomsnake`. Then **experimental**:
+`puct`, which is level with `uct` per unit of *time* and behind it at an equal allowance, so it makes
+no claim a rung would make. All three sections are gated by the same contract suite.
 
 `:ui` opens slot 2 on the slug `uct` — the page should start on the game somebody came here to play
 — and falls back to `entries.first()` when a registry does not offer it, so registration order still
-shows through. Append new bots; do not prepend. Of the nine, only `flat-monte-carlo` and `uct` touch
-`Turn.scratch` — the other seven consume no budget at all, and `BotContractTest` enforces that rather
-than merely asserting it here: a bot spends budget **if and only if** it declares a `BotKnob.Search`.
+shows through. Append new bots; do not prepend. Of the ten, only `flat-monte-carlo`, `uct` and `puct`
+touch `Turn.scratch` — the other seven consume no budget at all, and `BotContractTest` enforces that
+rather than merely asserting it here: a bot spends budget **if and only if** it declares a
+`BotKnob.Search`.
+
+`puct` is the one bot that **charges its own budget**. A rollout spends the allowance a move at a
+time and the engine can see it; a static evaluation sweeping the board cannot be seen that way, so
+`PuctBot.judge` calls `Turn.budget.tryConsume(eval.cost)` — *before* running the evaluation, so the
+allowance is a bound rather than a note about work already done. Without it, `budgetPerTurn` would
+quietly mean something different for every bot that declared one.
 
 Do not assume anything else exists; check the tree.
 
@@ -60,8 +69,11 @@ notes are that, one directory level shifted.
 > threaded on every turn, and a page that opens on Human vs UCT at 8x8 — and then **free-for-all
 > tournaments and watching your own replay**: a `TournamentFormat` that seats every contestant in
 > every match, scored pairwise by outlasting into the same matrix, and a Watch replay button that
-> winds a finished match back without leaving the page. See the closing sections of
-> `docs/MIGRATION.md`.
+> winds a finished match back without leaving the page — and then **a hand-written evaluation, and
+> somewhere to measure it**: `PuctBot`, PUCT with an expert appraisal of the position where a network
+> would be, selectable against a rollout control by a new `BotKnob.Choice`, and `:lab`, a JVM command
+> line that runs a real `Tournament` over the real registry so the comparison can actually be run.
+> See the closing sections of `docs/MIGRATION.md`.
 
 ## What it is built on
 
@@ -83,10 +95,17 @@ seeded matches, shareable replays encoded in the URL hash, per-match stats, and 
 | `:match` | Turn sequencing, slot wiring, human input, replay codec, stats. No time, no DOM | `:core`, `:bot-api` | wasmJs + jvm |
 | `:ui` | Canvas renderer, DOM chrome, rAF scheduler | `:core`, `:match`, `kotlinx-browser` | wasmJs |
 | `:app` | `main()`, wiring, URL hash routing | all | wasmJs |
+| `:lab` | A command line for running batches headlessly. Nothing depends on it | `:core`, `:bot-api`, `:bots`, `:match` | jvm |
 
 The `jvm()` target on the four pure modules exists **only to run tests fast** — it is never deployed and
 contributes nothing to the wasm bundle. It doubles as a second compiler proving those modules are
 platform-free.
+
+`:lab` is the one JVM **binary**, and the only module besides `:app` that sees both a bot registry and
+the match driver. It may, for the same reason `:app` may: it *injects* `ShippedBots` into a
+`Tournament` that knows nothing but the `BotRegistry` interface. That is the sanctioned inversion
+rather than a new edge — `:match` still has never seen a bot class. It is never deployed and is not
+on `:app`'s classpath.
 
 ### Forbidden dependency edges
 
@@ -99,9 +118,13 @@ These are the load-bearing constraint of the architecture. Do not add any of the
 - `:bots` → `:match`, `:ui`, `:app`. A bot must not be able to reach the clock or another slot's RNG.
 - `:ui` → `:bots`. The renderer paints a `BoardView` and the chrome names slots through the
   `BotRegistry` interface, so nothing in `:ui` can tell a wall hugger from a human.
+- **Anything** → `:lab`. It is a measuring instrument, so it sits above everything and under nothing.
+  It may see `:bots` and `:match` together; it may not see `:ui` or `:app`.
 
-Every one of these is enforced by `checkModulePurity`, which is wired into `check` for both
-convention plugins and walks every `*CompileClasspath` — test source sets included.
+Every one of these is enforced by `checkModulePurity`, which is wired into `check` for all three
+convention plugins and walks every `*CompileClasspath` — case-insensitively, because a Kotlin/JVM
+module spells its main one `compileClasspath` while a multiplatform one prefixes the target — and
+test source sets included.
 
 ### Where the human lives
 
@@ -208,6 +231,10 @@ the UCT golden hash reproduces bit-for-bit in Chrome. **Nothing in `:bots` may c
 `exp` or `pow`** — the failure it buys is a golden hash that passes on the JVM and fails in the
 browser, which reads as a codegen bug and is not one.
 
+`PuctBot` needs no logarithm at all: PUCT is `Q + c·P·sqrt(N)/(1+n)` and `sqrt` is exactly specified
+by IEEE-754, so the rule binds it without costing it anything. Its prior is proportional rather than
+a softmax for the same reason, and that is a feature — there is no temperature left to tune.
+
 **4. Legality is evaluated *before* the tail retracts.** A snake may not move into the square its own tail
 is about to leave, even on a turn when that square is certain to clear. This is the legacy rule —
 `SimpleSnakesGame` tested the destination against a board built before the retraction — and letting the
@@ -226,7 +253,9 @@ A match must reproduce exactly. This is a hard invariant, not a nice-to-have.
   legacy code iterated a `HashMap` and was only *accidentally* stable because `PlayerAvatar.hashCode()`
   returned a monotonic index.
 - **No wall-clock anything in `:core`, `:bot-api`, `:bots`, or `:match`.** Bot budgets are counted in
-  iterations, never milliseconds. Time lives in `:ui` only.
+  iterations, never milliseconds. Time lives in `:ui` and `:lab` only — and `:lab` is deliberately
+  outside all four rather than inside one of them, because a tool that reports how long a batch took
+  has to read a clock and a module a match runs through must not be able to.
 
 ## Conventions
 
@@ -272,7 +301,20 @@ The engine is called millions of times per turn from inside MCTS. In `:core` and
 # The measuring instruments. Both print `[bench]` lines and run on either target.
 ./gradlew :bots:jvmTest --tests '*ThroughputTest*' -i | grep '\[bench\]'
 ./gradlew :bots:wasmJsBrowserTest -PbrowserTests=true --rerun -i | grep '\[bench\]'
+
+# And the lab, for the questions a batch answers rather than a test. `play` prints the same win
+# matrix the sidebar does; `time` costs one bot's turn against an opponent handed no allowance.
+./gradlew :lab:run --args="play puct:eval=expert puct:eval=rollout --rounds 40 --budget 40000"
+./gradlew :lab:run --args="time puct:eval=expert --budget 40000"
 ```
+
+A lab entrant is `<slug>[:name=value,...]`, where `budget` is that entrant's own allowance and every
+other name is one of that bot's declared knobs — so one bot enters twice at two configurations, which
+is the question a testbed of search bots exists to answer. Parsing is **strict**, unlike
+`BotKnob.Param.read`: a `main` has something to catch a throw, and a mistyped knob name would
+otherwise quietly measure the default and waste however many minutes the batch takes. A `play` of
+`uct` against `flat-monte-carlo` reproduces `BotLadderTest`'s conclusion, which is how you tell the
+tool is still honest.
 
 Browser tests are disabled unless `-PbrowserTests=true`, because Karma startup dominates the runtime
 of small suites. Anything provable on the JVM should be proven there instead.
@@ -345,9 +387,11 @@ Three rules that are not obvious until they bite:
   test, and the shipped answer is to fall back on `SpaceBot`, whose flood fill charges nothing.
 
 The `internal` primitives in `:bots` are there to be used: `FloodFill` for room, `ShortestPaths` for
-distances and first steps, `SpaceOwnership` for the board carved up between the snakes,
-`nearestOpponent` for `PvpAi`'s reduction, `randomPlayout` for a rollout, `truncatedPlayout` for a
-short one judged by ownership, `UctTree` for a flat-array search tree.
+distances and first steps, `SpaceOwnership` for the board carved up between the snakes — and
+`isolated`, for whether a snake's ground still runs into anybody else's — `nearestOpponent` for
+`PvpAi`'s reduction, `randomPlayout` for a rollout, `truncatedPlayout` for a short one judged by
+ownership, `UctTree` for a flat-array search tree, `PuctTree` for one guided by a prior, and
+`LeafEval` for a hand-written value at a leaf.
 
 `truncatedPlayout` and `SpaceOwnership` ship **wired and off**, and the reason is measured rather
 than aesthetic — see `UctBot.ROLLOUT_DEPTH`. Do not turn them on without re-running
@@ -378,6 +422,11 @@ internal companion object {
 register("my-bot", "My Bot", ::MyBot, MyBot.KNOBS)
 ```
 
+The four leaves are `Integer`, `Decimal`, `Flag` and `Choice`. **A `Choice` holds names, never
+ordinals** — its value travels in a replay URL beside its name, so `eval=expert` survives somebody
+reordering the list it offers and `eval=2` does not, with nothing in the codec able to tell. That is
+the same argument that freezes the knob's name, applied to its value.
+
 The default on the form and the default in the field initializer cannot drift apart, because there is
 only one of them. Four things about the shape:
 
@@ -402,6 +451,14 @@ while (p.outcome == null) p.advance(policy.pick(p.board.legalMoves(p.toAct)) ?: 
 
 `advance` charges the budget itself, and an exhausted budget makes `outcome` a draw — so the loop
 condition *is* the budget check and the search terminates structurally rather than on trust.
+
+**A search that does not simulate has to charge itself.** `Turn.budget.tryConsume(units)` is public
+for that, and `PuctBot` is the one bot that uses it: a board-wide sweep at a leaf costs real time the
+engine cannot see, and a bot that charged nothing for one would make `budgetPerTurn` mean something
+different for it than for everything else. Charge **before** doing the work — `tryConsume` refuses
+and charges nothing once there is not enough left, so charging afterwards makes the allowance a
+record rather than a bound. Do not tune the figure down to make your bot look better; report the
+wall-clock beside the win rate instead, which is what `:lab`'s `time` subcommand is for.
 
 Adding a bot needs **no HTML change**: the pickers in the sidebar are filled from `BotRegistry.entries`
 at startup, and each seat's settings rows are built from that entry's `knobs`. Those are the only two

@@ -16,6 +16,12 @@ change later and cheap to get right now.
 | 5 | **done** | Contributed bots |
 | 6 | **done** | Stats, batch tournaments, measured budget, `legacy/` deleted |
 
+Release 1 is feature-complete; everything since is new work rather than the remainder of a plan, and
+each piece has a closing section at the foot of this file. Landed after phase 6: visual bot
+configuration, reading the board, the thread coming off the pointer, free-for-all tournaments and
+watching your own replay, and **a hand-written evaluation, and somewhere to measure it** — `PuctBot`,
+`BotKnob.Choice`, and the `:lab` module.
+
 ---
 
 ## Context
@@ -1217,3 +1223,123 @@ reason the space bar is. Mid-match it stays grey because a partial recording par
 recording", which reads as broken rather than as a replay; and while a batch owns the arena it
 stays grey because the matches finishing on screen are the tournament's, not the player's — the
 model flag is computed from `match`, never from `shown`.
+
+## After release 1 — a hand-written evaluation, and somewhere to measure it
+
+Also not a phase. The strongest thing in the box judges a leaf by playing the rest of the game out at
+random, and nothing here had ever asked whether *appraising* the position instead would be worth what
+it costs. `PuctBot` is that question made answerable: AlphaZero's tree search with a small expert
+system where the network would be.
+
+**The evaluation is the experiment, so everything else had to be held still.** That is why
+`eval=rollout` ships — at that setting `PuctBot` judges a leaf exactly as `UctBot` does, so a batch of
+`eval=expert` against `eval=rollout` changes the value function and nothing else: same tree, same
+prior, same allowance, same seeds. Without it the only available comparison would have been against a
+different bot, and every difference between the two would have been a candidate explanation for the
+result. `eval=mobility` is the other end of the same question rather than a third opinion — it counts
+liberties and nothing else, so it costs one unit instead of a hundred and forty-four and buys about a
+hundred times the tree. That one is a claim about *cost*, and it is not expressible as a weight:
+zeroing the territory term does not make `ExpertEval` skip its sweep.
+
+**A static evaluation pays for itself out of the same purse a simulated move does.** `Playout.advance`
+charges the allowance a move at a time, so a rollout's cost is visible to the engine; a board-wide
+ownership sweep is not, and a bot that charged nothing for one would quietly make `budgetPerTurn` mean
+something different for it than for everything else on the picker — and a tournament at "equal
+allowance" would stop being one. So `PuctBot` is the first bot to call `Turn.budget.tryConsume`, and
+it calls it **before** running the evaluation: `tryConsume` charges nothing and refuses once there is
+not enough left, so charging afterwards would make the allowance a record of work already done rather
+than a limit on work about to be done. The figure is `grid.playableCount`, and it comes from
+`UctBot.ROLLOUT_DEPTH`'s measured table — a hundred rollout moves cost about what one sweep costs on a
+12x12, where that is 144 — so it overcharges by about forty per cent, which is the direction to be
+wrong in. `BotContractTest` keeps the whole arrangement honest without a new test: a bot spends budget
+if and only if it declares an allowance, and one handed nothing must spend nothing.
+
+**A knob can now be an enumeration, and the value travels as a name.** `BotKnob.Choice` is the fourth
+`Param` leaf, and the shape that was missing — `UctBot.ROLLOUT_DEPTH` is the evidence, a number
+standing in for a mode because a number was what there was. The rejected alternative was
+`Integer("eval", 0..2)`, which costs nothing and is wrong for a reason that would not surface for
+months: a knob's value goes into the replay URL of every match somebody configured, so it is frozen by
+exactly the argument that freezes the knob's *name*. `eval=expert` survives somebody reordering the
+list of evaluations and `eval=2` does not, with nothing in the codec able to tell. The other rejected
+alternative was three slugs, one per evaluation, which CLAUDE.md already turns down by name for
+`OtherSnake`: a second slug for one policy is a duplicate picker row and nothing else. Reading stays
+total, per the sealed class's own contract — a value from a mangled fragment reads as the default
+rather than throwing in a field initializer with nothing above it to catch it. `:ui` had no choice
+about keeping up: `SlotForm.rowFor` is a `when` statement over a sealed subject with no `else`, so the
+`<select>` branch was a compile error rather than an omission.
+
+**Two territories that touch are two snakes still in each other's way, and a distance tie is not that
+test.** `ExpertEval` needs to know when the snakes can no longer reach each other, and
+`SpaceOwnership` looked like it already knew: it marks a square `CONTESTED` when two sweeps arrive on
+the same step. It does not. A corridor with an *even* number of free squares between two heads divides
+cleanly with no tie anywhere — `Grid(1, 6)` with a head at each end owns two and two — so two snakes
+one move from a head-on collision would have read as separated, and the branch that saturates would
+have fired on a game nobody had decided. `SpaceOwnership.isolated` is inferred from **frontier
+adjacency** instead: expanding into a square already stamped this sweep with a different owner, tie or
+not. `SpaceOwnershipTest."an even corridor divides with nothing contested, and both snakes are still
+in the way"` is that counter-example kept as a test. The change is write-only — `counts`, `verdict`
+and every existing operation order are untouched — so `RolloutTruncationTest`'s table and the `uct`
+golden stand.
+
+**`PuctTree` is a sibling of `UctTree` and not a refactor of it**, and the sixty lines of allocator
+they share are not the argument. `GoldenMoveStreamTest."UCT against random on 12x12"` is a pinned
+hash, re-run in real Chrome, and refactoring the tree UCT selects through risks reordering a
+floating-point expression and moving that hash for no reason anybody could name afterwards — CLAUDE.md
+says a golden failure is always a question that has to be answered, and this would have been a
+question with no answer. A mode flag would have been worse: a branch in the hottest loop in the
+program plus a prior array allocated for every UCT match that never reads a word of it. Four things
+differ anyway. Selection is PUCT rather than UCB1 and takes a per-edge prior; backup takes a *value*
+per actor rather than a win, which is why `LeafEval` answers per slot at all; an unvisited child is
+ordered by its prior rather than by an enormous randomised number, so at a static evaluation the bot
+consumes no randomness whatever; and the root answers with its most-visited move rather than its best
+average, because at a few hundred iterations a child visited twice can hold a better mean than the
+move the search actually believes in. One thing it deliberately does *not* inherit: `averageOf` is a
+plain mean here, where `UctTree` carries legacy's `Node.java:286` prior on purpose. That is an
+argument for keeping a quirk where it was ported, not for importing it into an algorithm that never
+had it. And PUCT needs no logarithm at all — `Q + c·P·sqrt(N)/(1+n)`, and `sqrt` is exactly specified
+by IEEE-754 — so the standing rule against `kotlin.math.ln` binds this bot for free. Its prior is
+proportional rather than a softmax for the same reason, and that is a gain: there is no temperature
+left to tune.
+
+**`:lab` exists because `Tournament.runToCompletion` had no caller it was written for.** Its own KDoc
+says "for headless callers — a JVM test, a benchmark", and there was nowhere to put one: `:match` may
+not see `:bots`, and `:app`, the only place both meet, is `wasmJs` only. So the answer to "run a few
+hundred matches and tell me which evaluation is better" was to open a browser and watch, which is not
+an answer. `:lab` is a seventh module and a third convention plugin, JVM only, that injects
+`ShippedBots` into a `Tournament` knowing nothing but the `BotRegistry` interface — the same inversion
+`:app` performs, not a new edge. The rejected alternative was a property-gated JVM test in `:bots`
+hand-rolling the round robin the way `BotLadderTest` does, which cannot touch `Tournament`,
+`TournamentTable` or `Contestant` at all and would have re-implemented the win matrix, the seat
+rotation and the contestant legend to avoid adding one module. `:lab` is also where a clock is
+allowed, which is why per-bot timing is a separate `time` subcommand rather than a column in the
+matrix: a two-bot match's elapsed time is the *sum* of both bots' thinking, so a per-contestant figure
+taken off a shared match is a figure about the pairing. `time` seats the subject against an opponent
+handed no allowance at all and reports the fastest of several passes. Landing the instrument first
+made its acceptance test a known-good answer: a `play` of `uct` against `flat-monte-carlo` has to
+reproduce `BotLadderTest`'s conclusion, and it does, 15-5 against a bar of 12.
+
+**The first measurement said the evaluation was the worst thing in the box, and it was right.**
+Eighteen per cent of a four-way field, and 0 of 40 against the evaluation that does nothing but count
+liberties. A rout that complete is a design fault rather than a weak heuristic, and it was: the
+separated branch was a *step*. Ahead read 0.95, behind read 0.05, and the same number came back for
+every move — so once the snakes had parted the search had no gradient at all, in precisely the phase
+where this game stops being a fight and becomes a space-filling puzzle. Grading the same branch on the
+margin between the two rooms turned 0-40 into 31-9 and took the bot from 18% to 49%. The ablation then
+found that `territoryWeight` belongs at its maximum, 18 of 20 against the value it shipped with, and
+that `separationBonus` at 0.9 against 1.0 is 20-20 — so the lower one stands, and a judged win still
+reads below a proven one. `ExpertEvalTest."a separated snake reads a margin rather than a verdict"`
+is that whole story kept as a test.
+
+**Where it sits in the registry is a measurement, not a preference.** At an equal allowance `puct` at
+`eval=expert` scores 44% against `eval=rollout`'s 53% and `uct`'s 61%, which is a loss. It is not
+being given an equal *turn*, though — the deliberate overcharge means a turn costs 1,104 µs against
+rollout's 1,892 and UCT's 2,006 — and handed the 68,000 that buys the same millisecond, the three come
+out 49%, 51% and 50%: the same number three times. So a hand-written appraisal is worth about what a
+random rollout is worth per unit of time, which is a real answer to the question and not the one it
+would be nice to have. The charge is left overcharging rather than tuned down to close the gap,
+because the accounting must not be adjusted to favour the thing it is accounting for; the allowance
+knob is there for anybody who wants the other comparison. `ShippedBots` therefore grows a **third
+section** — experimental — because appending to the ladder would assert a rung nobody measured, and
+appending after `tomsnake` would file a new search bot under *contributed to the 2005 project*, which
+is false. Both tables live in `ExpertEval`'s KDoc the way the truncation table lives in
+`ROLLOUT_DEPTH`'s, so re-running them is a command rather than an archaeology.

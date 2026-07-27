@@ -42,6 +42,15 @@ internal class SpaceOwnership(private val grid: Grid, private val snakeCount: In
     private var generation = 0
 
     /**
+     * Whether each slot's ground ever ran into somebody else's — see [isolated].
+     *
+     * A `BooleanArray` rather than a pairwise matrix because the only question worth asking is
+     * "meets *anybody*". `Occupancy.MAX_SNAKES` is 126, so a matrix would be sixteen thousand
+     * booleans standing ready to answer a question nobody has.
+     */
+    private val touching = BooleanArray(snakeCount)
+
+    /**
      * Outcomes handed to the tree, one per slot, built once.
      *
      * A judged position is credited exactly as a played-out one is, so nothing downstream has to know
@@ -60,6 +69,7 @@ internal class SpaceOwnership(private val grid: Grid, private val snakeCount: In
     fun measure(board: BoardView): IntArray {
         nextGeneration()
         counts.fill(0)
+        touching.fill(false)
 
         var tail = 0
         for (slot in 0 until snakeCount) {
@@ -101,6 +111,18 @@ internal class SpaceOwnership(private val grid: Grid, private val snakeCount: In
                 // Already claimed. A tie on the same step takes it off both of them; anything reached
                 // later than the incumbent was simply beaten to it.
                 val holder = owner[next.index].toInt()
+                if (holder != by) {
+                    // Contact, and it is *frontier adjacency* rather than the tie below — two
+                    // territories that touch, however lopsidedly. A corridor of even free length
+                    // divides cleanly with no square ever contested (1x6 with a head at each end
+                    // owns two and two), so a tie-based test would report two snakes about to
+                    // collide as separated. See SpaceOwnershipTest.
+                    touching[by] = true
+                    if (holder != CONTESTED) {
+                        touching[holder] = true
+                    }
+                }
+
                 if (steps[next.index] == distance && holder != by && holder != CONTESTED) {
                     counts[holder]--
                     owner[next.index] = CONTESTED.toByte()
@@ -110,6 +132,18 @@ internal class SpaceOwnership(private val grid: Grid, private val snakeCount: In
 
         return counts
     }
+
+    /**
+     * Whether [slot] can no longer reach any ground anybody else can. Read after [measure].
+     *
+     * A separated snake's game is decided in a way a shared board's is not: it will fill its own
+     * room and die when it runs out, so whoever was left the most ground outlasts the rest and the
+     * only thing still in question is the arithmetic. That is a materially different judgement from
+     * a share of a contested board, and it is why an evaluation wants to know — see [ExpertEval].
+     *
+     * A dead snake seeds nothing and so is isolated, which reads correctly: nobody is in its way.
+     */
+    fun isolated(slot: Int): Boolean = !touching[slot]
 
     /**
      * The position as a result: whoever owns the most ground has won it.

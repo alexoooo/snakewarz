@@ -17,7 +17,10 @@ import org.gradle.api.artifacts.result.ResolvedDependencyResult
 fun Project.registerModulePurityCheck(forbiddenProjects: Set<String>, forbiddenModules: Set<String>) {
     val modulePath = path
     val roots = configurations
-        .matching { it.isCanBeResolved && it.name.endsWith("CompileClasspath") }
+        // Case-insensitively, because a Kotlin/JVM module names its main one `compileClasspath` while
+        // a multiplatform one names every last of them `<target>CompileClasspath`. Matching only the
+        // capitalised spelling would check :lab's tests and miss :lab itself.
+        .matching { it.isCanBeResolved && it.name.endsWith("CompileClasspath", ignoreCase = true) }
         .associate { it.name to it.incoming.resolutionResult.rootComponent }
 
     val checkModulePurity = tasks.register("checkModulePurity") {

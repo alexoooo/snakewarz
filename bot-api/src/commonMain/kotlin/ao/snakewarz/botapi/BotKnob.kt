@@ -121,6 +121,51 @@ public sealed class BotKnob(
         override fun toString(): String = "Decimal($name=$default)"
     }
 
+    /**
+     * A knob whose value is one of a fixed set of names.
+     *
+     * The shape that was missing, and `UctBot.ROLLOUT_DEPTH` is the evidence: a number standing in
+     * for a mode, because a number was what there was.
+     *
+     * **Names rather than ordinals**, and that is the whole design. A value travels in the replay URL
+     * beside its knob name, so it is frozen by exactly the argument that freezes the name — an
+     * [Integer] over `0..2` writes `eval=2`, and reordering the list it indexes silently changes what
+     * every existing replay means, with nothing in the codec able to tell. `eval=expert` survives the
+     * reordering, and a value that is dropped outright reads as the default rather than as its
+     * neighbour.
+     *
+     * Every value is bounded by [MAX_VALUE_LENGTH] here rather than checked at the codec, so a
+     * payload stays decodable by construction.
+     */
+    public class Choice(
+        name: String,
+        label: String,
+        help: String,
+        override val default: String,
+        /** Every value this may take, in the order a form should offer them. */
+        public val values: List<String>,
+    ) : Param<String>(name, label, help) {
+        init {
+            require(values.isNotEmpty()) { "knob '$name' offers no values" }
+            require(values.distinct().size == values.size) { "knob '$name' offers a value twice: $values" }
+            require(default in values) { "knob '$name' defaults to '$default', which it does not offer" }
+            for (value in values) {
+                require(value.isNotEmpty() && value.length <= MAX_VALUE_LENGTH) {
+                    "knob '$name' offers '$value', which is not 1 to $MAX_VALUE_LENGTH characters"
+                }
+            }
+        }
+
+        override val defaultText: String get() = default
+
+        override fun read(text: String): String = text.trim().takeIf { it in values } ?: default
+
+        override fun reject(text: String): String? =
+            if (text.trim() in values) null else "one of ${values.joinToString(", ")}"
+
+        override fun toString(): String = "Choice($name=$default of ${values.size})"
+    }
+
     public class Flag(
         name: String,
         label: String,

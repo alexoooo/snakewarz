@@ -11,6 +11,7 @@ import org.w3c.dom.HTMLButtonElement
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.HTMLLabelElement
+import org.w3c.dom.HTMLOptionElement
 import org.w3c.dom.HTMLSelectElement
 
 /**
@@ -176,6 +177,13 @@ internal class SlotForm(
         return if (knob.isDefault(typed)) null else typed
     }
 
+    /**
+     * One row: a caption, and whatever control the knob's own type calls for.
+     *
+     * A [BotKnob.Choice] is the one that is not an `<input>`, and the `when` is a statement over a
+     * sealed hierarchy with no `else` — so a knob type added to `:bot-api` and forgotten here is a
+     * compile error rather than a control that silently never appears.
+     */
     private fun rowFor(knob: BotKnob, value: String): Row {
         val label = document.createElement("label") as HTMLLabelElement
         label.className = if (knob is BotKnob.Search) "knob granted" else "knob"
@@ -184,27 +192,33 @@ internal class SlotForm(
         caption.textContent = knob.label
         label.appendChild(caption)
 
-        val input = document.createElement("input") as HTMLInputElement
-        input.title = knob.help
-        input.autocomplete = "off"
-        when (knob) {
-            is BotKnob.Flag -> {
-                input.type = "checkbox"
-                input.checked = value.trim().toBooleanStrictOrNull() ?: knob.default
-            }
-
-            is BotKnob.Integer -> input.asNumber(knob.min.toString(), knob.max.toString(), knob.step.toString(), value)
-            is BotKnob.Decimal -> input.asNumber(knob.min.toString(), knob.max.toString(), knob.step.toString(), value)
-            is BotKnob.Search -> input.asNumber(knob.min.toString(), knob.max.toString(), knob.step.toString(), value)
+        val field: HTMLElement = when (knob) {
+            is BotKnob.Choice -> chooser(knob, value)
+            is BotKnob.Flag -> checkbox(knob, value)
+            is BotKnob.Integer -> number(knob.min.toString(), knob.max.toString(), knob.step.toString(), value)
+            is BotKnob.Decimal -> number(knob.min.toString(), knob.max.toString(), knob.step.toString(), value)
+            is BotKnob.Search -> number(knob.min.toString(), knob.max.toString(), knob.step.toString(), value)
         }
-        label.appendChild(input)
+        field.title = knob.help
+        label.appendChild(field)
 
         grid.appendChild(label)
-        return Row(knob, input)
+        return Row(knob, field)
     }
 
-    private class Row(val knob: BotKnob, private val input: HTMLInputElement) {
-        fun text(): String = if (input.type == "checkbox") input.checked.toString() else input.value
+    /**
+     * A knob's control, whichever element it turned out to be.
+     *
+     * Widened from `HTMLInputElement` when [BotKnob.Choice] arrived. Reading and writing branch on
+     * the element rather than on the knob, because those are the two things that actually differ —
+     * a `<select>` has no `checked` and a checkbox has no meaningful `value`.
+     */
+    private class Row(val knob: BotKnob, private val field: HTMLElement) {
+        fun text(): String = when (val element = field) {
+            is HTMLSelectElement -> element.value
+            is HTMLInputElement -> if (element.type == "checkbox") element.checked.toString() else element.value
+            else -> ""
+        }
 
         /**
          * Writes [value] back and says whether it had to be corrected.
@@ -214,16 +228,24 @@ internal class SlotForm(
          * The same shape the seed field already uses for an unreadable seed.
          */
         fun settle(value: String, rejected: Boolean) {
-            if (input.type == "checkbox") {
-                input.checked = value.trim().toBooleanStrictOrNull() ?: input.checked
-            } else if (input.value != value) {
-                input.value = value
+            when (val element = field) {
+                is HTMLSelectElement -> if (element.value != value) {
+                    element.value = value
+                }
+
+                is HTMLInputElement -> if (element.type == "checkbox") {
+                    element.checked = value.trim().toBooleanStrictOrNull() ?: element.checked
+                } else if (element.value != value) {
+                    element.value = value
+                }
+
+                else -> Unit
             }
 
             if (rejected) {
-                input.classList.add(REJECTED)
+                field.classList.add(REJECTED)
             } else {
-                input.classList.remove(REJECTED)
+                field.classList.remove(REJECTED)
             }
         }
     }
@@ -231,13 +253,42 @@ internal class SlotForm(
     private companion object {
         const val REJECTED = "rejected"
 
-        fun HTMLInputElement.asNumber(min: String, max: String, step: String, value: String) {
-            type = "number"
-            this.min = min
-            this.max = max
-            this.step = step
-            this.value = value
+        /**
+         * The one place `:ui` writes an `<option>` that is not a bot picker, and the same exception
+         * covers it: what goes in the container comes off the registry, and the container is static.
+         */
+        fun chooser(knob: BotKnob.Choice, value: String): HTMLSelectElement {
+            val select = document.createElement("select") as HTMLSelectElement
+            select.autocomplete = "off"
+            for (offered in knob.values) {
+                val option = document.createElement("option") as HTMLOptionElement
+                option.value = offered
+                option.textContent = offered
+                select.appendChild(option)
+            }
+            select.value = value.trim().takeIf { it in knob.values } ?: knob.default
+            return select
         }
+
+        fun checkbox(knob: BotKnob.Flag, value: String): HTMLInputElement {
+            val input = field()
+            input.type = "checkbox"
+            input.checked = value.trim().toBooleanStrictOrNull() ?: knob.default
+            return input
+        }
+
+        fun number(min: String, max: String, step: String, value: String): HTMLInputElement {
+            val input = field()
+            input.type = "number"
+            input.min = min
+            input.max = max
+            input.step = step
+            input.value = value
+            return input
+        }
+
+        fun field(): HTMLInputElement =
+            (document.createElement("input") as HTMLInputElement).apply { autocomplete = "off" }
 
         /** Emptied a node at a time rather than through `innerHTML`, which is writing structure. */
         fun HTMLElement.clear() {

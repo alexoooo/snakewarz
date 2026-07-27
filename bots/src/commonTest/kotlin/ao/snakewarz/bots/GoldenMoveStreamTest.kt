@@ -71,6 +71,18 @@ class GoldenMoveStreamTest {
     }
 
     @Test
+    fun `PUCT against random on 12x12`() {
+        // Ten times the allowance the other two searchers get on the same board, because this one
+        // charges itself for its evaluation: at `expert` a leaf costs `grid.playableCount`, so five
+        // hundred would buy three iterations a turn and pin next to nothing. Five thousand is about
+        // thirty-five, which is a search — and still trivial for the browser job this suite runs in.
+        assertEquals(
+            -1952801837547873716L,
+            hashOf("puct", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = 5_000),
+        )
+    }
+
+    @Test
     fun `the serpentine sweeper against random on 20x20`() {
         assertEquals(5564294816982454802L, hashOf("burninhell", "random", seed = 2005))
     }

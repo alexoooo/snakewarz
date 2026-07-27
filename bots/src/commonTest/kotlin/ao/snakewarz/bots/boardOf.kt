@@ -54,14 +54,19 @@ internal fun moveOn(
     return (decision as Decision.Move).direction
 }
 
-internal fun setupFor(board: Board, self: SnakeId, seed: Long = 1): BotSetup =
+internal fun setupFor(
+    board: Board,
+    self: SnakeId,
+    seed: Long = 1,
+    params: BotParams = BotParams.EMPTY,
+): BotSetup =
     BotSetup(
         self = self,
         grid = board.grid,
         rules = board.rules,
         opponents = IntArray(board.snakeCount - 1) { if (it < self.index) it else it + 1 },
         rng = SplitMix64(seed).fork(self.index),
-        params = BotParams.EMPTY,
+        params = params,
     )
 
 /** The square at `(row, col)`, spelled the way the tests talk about the board. */

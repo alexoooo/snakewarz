@@ -17,6 +17,8 @@ class ShippedBotsTest {
                 "random", "wallhug", "space", "pressure", "chase", "flat-monte-carlo", "uct",
                 // Contributed.
                 "burninhell", "tomsnake",
+                // Experimental.
+                "puct",
             ),
             ShippedBots.entries.map { it.id.slug },
         )
@@ -44,6 +46,7 @@ class ShippedBotsTest {
             listOf(
                 "Random", "Wall Hugger", "Space Filler", "Pressure", "Chaser", "Flat Monte Carlo", "UCT",
                 "Burnin Hell", "Tom Snake",
+                "PUCT",
             ),
             ShippedBots.entries.map { it.displayName },
         )

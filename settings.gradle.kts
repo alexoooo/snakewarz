@@ -22,3 +22,7 @@ include(":bots")
 include(":match")
 include(":ui")
 include(":app")
+
+// Not part of the app and not on its classpath: a JVM command line for running batches headlessly,
+// which is the one thing a browser is a bad place to do. Nothing may depend on it.
+include(":lab")

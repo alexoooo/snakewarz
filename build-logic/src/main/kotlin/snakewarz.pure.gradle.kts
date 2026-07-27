@@ -52,10 +52,10 @@ tasks.matching { it.name == "wasmJsBrowserTest" }.configureEach {
 // The forbidden-edge table from docs/MIGRATION.md, encoded where it can actually be enforced.
 // A module may depend only on the ones above it, so each entry lists everything below.
 val forbiddenByModule = mapOf(
-    ":core" to setOf(":bot-api", ":bots", ":match", ":ui", ":app"),
-    ":bot-api" to setOf(":bots", ":match", ":ui", ":app"),
-    ":bots" to setOf(":match", ":ui", ":app"),
-    ":match" to setOf(":bots", ":ui", ":app"),
+    ":core" to setOf(":bot-api", ":bots", ":match", ":ui", ":app", ":lab"),
+    ":bot-api" to setOf(":bots", ":match", ":ui", ":app", ":lab"),
+    ":bots" to setOf(":match", ":ui", ":app", ":lab"),
+    ":match" to setOf(":bots", ":ui", ":app", ":lab"),
 )
 
 registerModulePurityCheck(

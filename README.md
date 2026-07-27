@@ -14,7 +14,7 @@ the shipped bots with the arrow keys, or sit out and watch up to four of them fi
 turn at a time, change the speed, scrub back through a finished match, and share the whole thing as a
 link. A 160-turn duel is 129 characters of URL, and no server is involved at any point.
 
-Seven of the nine bots are a ladder, weakest first, and each rung beats the one below it over twenty
+Seven of the ten bots are a ladder, weakest first, and each rung beats the one below it over twenty
 matches:
 
 | Bot | How it plays |
@@ -27,13 +27,25 @@ matches:
 | Flat Monte Carlo | Plays each move out to the end at random, many times, and takes the best |
 | UCT | Monte Carlo tree search with UCB1 |
 
-The other two were contributed to the original 2005 project and are not rungs — they are here for
-what they are, and they play the same contract suite as everything else:
+Two more were contributed to the original 2005 project and are not rungs — they are here for what
+they are, and they play the same contract suite as everything else:
 
 | Bot | How it plays |
 |---|---|
 | Burnin Hell | First open direction, always north, south, east, west — which comes out as a serpentine sweep of the board |
 | Tom Snake | Pressure one turn in five, Random the other four |
+
+And one is experimental:
+
+| Bot | How it plays |
+|---|---|
+| PUCT | AlphaZero's tree search with a hand-written appraisal of the position where the neural network would be |
+
+PUCT is not a rung because it has not earned one: measured over forty rounds a pairing it is level
+with UCT per unit of *time* and behind it at an equal allowance. Its `Evaluation` setting is the
+interesting part — `expert` is the hand-written appraisal, `rollout` makes it judge a leaf exactly as
+UCT does, and `mobility` is a near-free reading that buys a hundred times the tree. Setting two seats
+to the same bot at two evaluations and running a tournament is how those numbers were arrived at.
 
 ## Settings
 
@@ -124,7 +136,7 @@ Older browsers get an explicit message rather than a blank page.
 
 ## Architecture
 
-Six modules with strictly enforced layering. `:core` has no project dependencies at all — the engine
+Seven modules with strictly enforced layering. `:core` has no project dependencies at all — the engine
 does not know that bots exist — and the four pure modules cannot reference the DOM. That is checked
 by the build (`checkModulePurity`), not by convention, because it is what keeps tests runnable on the
 JVM and keeps a Kotlin/JS fallback target a config change rather than a rewrite.
@@ -137,9 +149,11 @@ JVM and keeps a Kotlin/JS fallback target a config change rather than a rewrite.
 | `:match` | Turn sequencing, human input, replay codec, stats, tournaments. No time, no DOM |
 | `:ui` | Canvas renderer, DOM chrome, frame schedulers |
 | `:app` | Entry point and wiring |
+| `:lab` | A JVM command line for running batches headlessly. Not shipped, and nothing depends on it |
 
-All six exist. Time lives only in `:ui`: a bot is handed a budget counted in iterations and has no
-way to reach a clock, so a match reproduces by construction rather than by discipline.
+Time lives only in `:ui` and `:lab`: a bot is handed a budget counted in iterations and has no way to
+reach a clock, so a match reproduces by construction rather than by discipline. `:lab` sits outside
+the shipped graph precisely so that reporting how long a batch took cannot put a clock inside it.
 
 ## Writing a bot
 
