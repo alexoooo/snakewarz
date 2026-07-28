@@ -15,8 +15,8 @@ class ShippedBotsTest {
             listOf(
                 // The ladder.
                 "random", "wallhug", "space", "pressure", "chase", "flat-monte-carlo", "uct",
-                // Contributed.
-                "burninhell", "tomsnake",
+                // Contributed. `tomsnake` was here and was retired; a slug is not reused.
+                "burninhell",
                 // Experimental.
                 "puct",
             ),
@@ -28,8 +28,9 @@ class ShippedBotsTest {
     fun `lookup finds what is registered and admits what is not`() {
         assertEquals(BotId("random"), ShippedBots[BotId("random")]?.id)
         assertEquals(BotId("uct"), ShippedBots[BotId("uct")]?.id, "the top of the ladder")
-        assertEquals(BotId("tomsnake"), ShippedBots[BotId("tomsnake")]?.id, "a contributed bot")
+        assertEquals(BotId("burninhell"), ShippedBots[BotId("burninhell")]?.id, "a contributed bot")
         assertNull(ShippedBots[BotId("no-such-bot")])
+        assertNull(ShippedBots[BotId("tomsnake")], "retired, and a replay naming it still plays back")
         assertFailsWith<IllegalArgumentException> { ShippedBots.entryOf(BotId("no-such-bot")) }
     }
 
@@ -79,7 +80,7 @@ class ShippedBotsTest {
         assertEquals(
             listOf(
                 "Random", "Wall Hugger", "Space Filler", "Pressure", "Chaser", "Flat Monte Carlo", "UCT",
-                "Burnin Hell", "Tom Snake",
+                "Burnin Hell",
                 "PUCT",
             ),
             ShippedBots.entries.map { it.displayName },

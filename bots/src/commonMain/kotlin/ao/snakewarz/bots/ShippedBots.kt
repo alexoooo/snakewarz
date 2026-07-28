@@ -7,7 +7,6 @@ import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.botapi.registry.BotRegistry
 import ao.snakewarz.bots.reactive.BurninHellBot
 import ao.snakewarz.bots.reactive.RandomBot
-import ao.snakewarz.bots.reactive.TomSnakeBot
 import ao.snakewarz.bots.reactive.WallHugBot
 import ao.snakewarz.bots.reactive.chase.ChaseBot
 import ao.snakewarz.bots.reactive.space.PressureBot
@@ -36,6 +35,12 @@ import ao.snakewarz.bots.search.uct.UctBot
  * third is **experimental**: registered, gated by exactly the same contract suite, and making no
  * claim about strength that nobody has measured. Only the first section claims anything at all.
  *
+ * **A bot earns its place by what it lets you measure, not by what it scores.** A roster is a set of
+ * instruments: an Elo floor (`random`), an ablation control (`flat-monte-carlo` is `uct` minus the
+ * tree), a deterministic move stream (`wallhug`, `burninhell`), an opponent strong enough to take
+ * games off a searcher (`chase`). A bot that is merely weak is not an instrument — `random` already
+ * is that one, more cleanly — which is what retired `tomsnake`.
+ *
  * `random` must stay first. `:ui` seats the second slot from the first bot on the list, and the
  * opening screen of a game nobody has configured yet should be the weakest opponent there is.
  *
@@ -53,9 +58,12 @@ public object ShippedBots : BotRegistry {
         register("flat-monte-carlo", "Flat Monte Carlo", ::FlatMonteCarloBot, FlatMonteCarloBot.KNOBS)
         register("uct", "UCT", ::UctBot, UctBot.KNOBS)
 
-        // Contributed to the original project. Not ladder rungs.
+        // Contributed to the original project. Not a ladder rung, and kept for a reason that is not
+        // strength: with `wallhug` it is one of only two bots here that draw no randomness at all, so
+        // the pair of them is the one pairing whose games repeat under a fixed opening. `ArenaTest`
+        // measures the openings machinery with it. `tomsnake` was the other contributed bot and was
+        // retired -- see docs/Legacy.md.
         register("burninhell", "Burnin Hell", BotFactory { BurninHellBot() })
-        register("tomsnake", "Tom Snake", ::TomSnakeBot, TomSnakeBot.KNOBS)
 
         // Experimental. A rung asserts that it beats the one below it, and where this one belongs
         // against `uct` is a measurement rather than a preference -- TerritoryEval's KDoc carries the

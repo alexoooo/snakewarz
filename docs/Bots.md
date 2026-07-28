@@ -12,15 +12,38 @@ SW-02 portable arithmetic, SW-03 the hot path and SW-05 frozen identifiers.
 first: `random`, `wallhug`, `space`, `pressure`, `chase`, `flat-monte-carlo`, `uct`. Each rung beats
 the one below it over twenty matches — `BotLadderTest` is the gate, and it is the only test in the
 suite a *correct but useless* bot would fail. Then come the bots contributed to the original project,
-ordered by slug and claiming nothing about strength: `burninhell`, `tomsnake`. Then **experimental**:
+ordered by slug and claiming nothing about strength: `burninhell`. Then **experimental**:
 `puct`, which is ahead of `uct` at an equal allowance and level with it per unit of *time*, and the
 gap between those two readings is the reason it makes no claim a rung would make — see `TerritoryEval`
 for both tables. All three sections are gated by the same contract suite.
 
 `:ui` opens slot 2 on the slug `uct` — the page should start on the game somebody came here to play
 — and falls back to `entries.first()` when a registry does not offer it, so registration order still
-shows through. Append new bots; do not prepend. Of the ten, only `flat-monte-carlo`, `uct` and `puct`
-touch `Turn.scratch`; the other seven consume no budget at all.
+shows through. Append new bots; do not prepend. Of the nine, only `flat-monte-carlo`, `uct` and `puct`
+touch `Turn.scratch`; the other six consume no budget at all.
+
+### A bot earns its place by what it lets you measure
+
+The roster is a set of instruments, and that is the test to apply before adding one and before
+keeping one:
+
+| bot | what it is for |
+|---|---|
+| `random` | the Elo floor, and the opponent an unconfigured page opens on |
+| `wallhug` | a move stream with no randomness in it, so `wallhug` against itself is pinned by the rules alone |
+| `space` | flood-fill room ranking, and the zero-allowance fallback `uct` and `puct` both delegate to |
+| `pressure` | the adjacency-penalty heuristic, and the rung between room and pursuit |
+| `chase` | the strongest reactive bot, and the only free one that takes games off a searcher — 13% against a `uct` field |
+| `flat-monte-carlo` | **the ablation control**: `uct`'s rollout policy and allowance with the tree removed |
+| `uct` | the flagship |
+| `burninhell` | the second bot that draws no randomness, which is what `ArenaTest` measures openings with |
+| `puct` | the frontier, and ahead of `uct` at an equal allowance |
+
+A bot that is merely *weak* is not an instrument: `random` is already the floor, more cleanly, and a
+second one only adds a picker row and a column to every matrix. That is what retired `tomsnake`, an
+80/20 mixture of `random` and `pressure` that scored 5% against a field and beat no candidate version
+of anything. **Retiring is a real cost** — the slug is frozen, so it is never reused — and it is worth
+paying only when the bot answers no question that another bot here does not answer better.
 
 ## Adding a bot
 
@@ -124,7 +147,7 @@ buy is a row in front of somebody who has no way to judge the number and no reas
 default is wrong.
 
 The two lists on `BotEntry` are that split. `params` is complete and is what `:lab` validates against;
-`offered` is the handful a form reads. Of the ten shipped bots, three offer anything at all: an
+`offered` is the handful a form reads. Of the nine shipped bots, three offer anything at all: an
 allowance, `uct`'s `exploration`, and `puct`'s `eval`. `ShippedBotsTest` pins that list, so a knob
 cannot arrive on the sidebar without somebody having said so.
 

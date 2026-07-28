@@ -43,6 +43,13 @@ position without also holding a window toolkit. It is three separate things in t
 omission: its body is `RandomAi`'s body, so it is already shipped as `random`, and a second slug for
 one policy is a duplicate picker row and nothing else. Do not "finish the port" by adding it.
 
+`TomSnakeBot` was ported, shipped, and then **retired** — it played `PressureBot` one turn in five and
+`RandomBot` the rest, which lands just above `random` and answers no question `random` does not answer
+more cleanly. The port was faithful and the bot was still not worth a picker row. Do not "finish the
+port" by adding it back either; the reasoning is in `docs/Bots.md` under what a bot is for. Its slug
+is retired rather than free, and a replay naming it still plays back, because playback replays the
+recorded move stream and never constructs a bot.
+
 All three `ai/da/` bots extended `PvpAi` and **none of them ever read the `opp` it computed**, so the
 nearest-opponent reduction is dropped from all three rather than ported.
 

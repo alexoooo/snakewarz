@@ -130,11 +130,6 @@ class GoldenMoveStreamTest {
     }
 
     @Test
-    fun `the contributed mixture against random on 20x20`() {
-        assertEquals(-613718763449508305L, hashOf("tomsnake", "random", seed = 2005))
-    }
-
-    @Test
     fun `the growth cadence reaches the bots, not just the engine`() {
         // Classic Tron is a materially different game; a bot suite that cannot tell the two apart
         // would not notice `growEveryNthMove` being wired up wrong.
