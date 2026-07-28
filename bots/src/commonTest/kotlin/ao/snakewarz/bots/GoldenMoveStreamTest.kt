@@ -98,8 +98,17 @@ class GoldenMoveStreamTest {
     fun `UCT against random on 12x12`() {
         // The one that would catch a cross-target divergence in UCB1, which is why its logarithm
         // comes from `portableLog` and not from `kotlin.math`. This suite runs in Chrome too.
+        //
+        // Re-pinned from 4446294306891950002 when `UctBot.EXPLORATION` moved from 5.0 to 3.0. The
+        // question a golden failure asks, answered: the divisor is read on every selection past a
+        // child's first visit, so every stream that searches at all is expected to move, and the
+        // three that do not search did not. The move was `play` against a field of `chase`,
+        // `flat-monte-carlo` and `puct` over 9,450 then 6,720 games on disjoint seed bases, then
+        // three sequential tests at `elo0=0, elo1=10` -- 3.5 at +21 ±14 over 1,100 boards, 2.5 at
+        // +20 ±14 over 1,240, and the adopted 3.0 at +24 ±15 over 960 boards from a seed base
+        // neither sweep had touched. `UctBot.EXPLORATION` carries both tables.
         assertEquals(
-            4446294306891950002L,
+            7247267489204944759L,
             hashOf("uct", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = SEARCH_BUDGET),
         )
     }

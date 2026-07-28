@@ -7,11 +7,13 @@ import ao.snakewarz.match.tournament.Contestant
 /**
  * A contestant written out in full: every declared knob at the value it actually played under.
  *
- * `uct` and `uct:exploration=5.0` are the same bot **today**, and the whole point of the tuning loop
- * is that one day they will not be. A log that recorded the short form would silently change meaning
- * the moment a default moved, pooling two different bots under one name and averaging away the very
- * improvement that moved it. So nothing is left implicit: the allowance is resolved against the
- * batch's own figure, and every knob the registry declares is spelled out even when nobody set it.
+ * `uct` and `uct:exploration=3.0` are the same bot **today**, and the whole point of the tuning loop
+ * is that one day they will not be — as `uct:exploration=5.0` has already stopped being, when the
+ * sweep recorded in `UctBot.EXPLORATION` moved that default. A log that recorded the short form would
+ * silently change meaning the moment a default moved, pooling two different bots under one name and
+ * averaging away the very improvement that moved it. So nothing is left implicit: the allowance is
+ * resolved against the batch's own figure, and every knob the registry declares is spelled out even
+ * when nobody set it.
  *
  * The result is a valid entrant spec, so a line of the log can be pasted straight back onto the
  * command line — which is what makes "play that again" a copy rather than a reconstruction.

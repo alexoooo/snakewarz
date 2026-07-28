@@ -62,12 +62,13 @@ class MatchLogTest {
 
     @Test
     fun `an entrant is recorded in full, so a moved default cannot rewrite history`() {
-        // `uct` and `uct:exploration=5.0` are the same bot today and will not be once a sweep moves
-        // that default. The log holds the long form so a line means the same thing forever.
+        // `uct` and `uct:exploration=3.0` are the same bot today. `uct:exploration=5.0` was that same
+        // bot until a sweep moved the default -- which is the event this guards, and it has now
+        // happened once. The log holds the long form so a line means the same thing forever.
         val spec = expandedSpec(Contestant(BotId("uct")), ShippedBots, budgetPerTurn = 1_000)
 
         assertContains(spec, "uct:budget=1000")
-        assertContains(spec, "exploration=5.0")
+        assertContains(spec, "exploration=3.0")
         assertContains(spec, "maxNodes=")
         assertContains(spec, "rolloutDepth=")
     }

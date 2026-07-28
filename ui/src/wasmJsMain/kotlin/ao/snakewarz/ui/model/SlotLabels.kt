@@ -70,11 +70,12 @@ internal class SlotLabels(setup: MatchSetup, registry: BotRegistry) {
          * beside `PUCT - 1k/survival` makes you remember which the bare one was.
          *
          * Everything else is named only when it has been moved, and *moved* is asked of the knob
-         * rather than of the map — `exploration=5.0` arriving from a `#r=` fragment is the default
+         * rather than of the map — `exploration=3.0` arriving from a `#r=` fragment is the default
          * spelled out, not a departure, and a label that could not tell would read differently for
          * two seats playing identically. A number is not an identity: every `uct` in existence runs
-         * at an exploration of 5.0, so putting it in every label would cost the width of the panel to
-         * say nothing.
+         * at the same exploration constant, so putting it in every label would cost the width of the
+         * panel to say nothing. (Asking the knob rather than the map is also what makes that robust
+         * to the constant moving, as it did when `UctBot.EXPLORATION` went from 5.0 to 3.0.)
          *
          * Declaration order rather than the order somebody happened to set them in, so two seats of
          * one bot always read left to right the same way.

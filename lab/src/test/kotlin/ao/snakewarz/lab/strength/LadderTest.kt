@@ -53,7 +53,7 @@ class LadderTest {
     fun `an entrant is labelled by what makes it different, not by every knob it has`() {
         // The log writes every knob out in full so a moved default cannot rewrite history. A ladder
         // has to undo that or its column headings are unreadable.
-        val stock = entrantOf("uct:budget=1000,exploration=5.0,maxNodes=65536,rolloutDepth=0", ShippedBots)
+        val stock = entrantOf("uct:budget=1000,exploration=3.0,maxNodes=65536,rolloutDepth=0", ShippedBots)
         val tuned = entrantOf("uct:budget=1000,exploration=2.5,maxNodes=65536,rolloutDepth=0", ShippedBots)
 
         assertEquals("uct@1k", stock.label)

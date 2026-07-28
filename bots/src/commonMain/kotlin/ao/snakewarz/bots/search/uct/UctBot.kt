@@ -163,20 +163,55 @@ public class UctBot(setup: BotSetup) : Bot {
         val SEARCH = BotKnob.Search(min = 0, max = 10_000, step = 100)
 
         /**
-         * Legacy's `5` at `Node.java:423` — an exploration constant of `sqrt(1/5)`.
+         * UCB1's constant, as a **divisor** — [UctTree.selectUcb1] is
+         * `average + sqrt(logParent / (exploration * childVisits))`, so the effective constant is
+         * `sqrt(1/exploration)` and a *smaller* number explores *more*. The floor is above zero
+         * rather than at it because at zero the term is an infinity and the tree stops choosing.
          *
-         * A *divisor* inside UCB1, so the floor is above zero rather than at it: at zero the term is
-         * an infinity and the tree stops choosing.
+         * Legacy shipped `5` at `Node.java:423` — an effective `sqrt(1/5) ≈ 0.447` against the
+         * textbook `sqrt(2)` — and that was this bot's default until it was swept. It is not the best
+         * setting: `5` sits on the low-exploration edge of a broad optimum rather than in it.
          *
-         * A tradeoff, and the only one this bot has besides its allowance: exploring wide and digging
-         * deep are both ways to win, the best setting moves with the board and the opponent, and the
-         * two ends play visibly differently at the same budget.
+         * Swept against a field at the shipped allowance on a 12x12, `chase`, `flat-monte-carlo` and
+         * `puct` for opposition, as ratings relative to `5.0` within each run:
+         *
+         * | exploration | effective | 9,450 games | 6,720 games, fresh seeds |
+         * |---|---|---|---|
+         * | 0.6 | 1.29 | −17 | — |
+         * | 1.2 | 0.91 | +4 | — |
+         * | 1.8 | 0.75 | +26 | −6 |
+         * | 2.5 | 0.63 | +15 | +8 |
+         * | 3.5 | 0.53 | +23 | +10 |
+         * | 5.0 | 0.45 | — | — |
+         * | 10 | 0.32 | −63 | — |
+         *
+         * A wider pilot put `0.3`, `20` and `40` below all of these, so the curve has an interior
+         * peak rather than a slope. `1.8` topping the first sweep and then losing to the default in
+         * the second is the whole reason the second was run: a field sweep is cheap enough to be
+         * greedy, and one lucky seed base will name a winner. What replicated is the `2.5..3.5`
+         * plateau, and three sequential tests at `elo0=0, elo1=10` settled it there:
+         *
+         * | candidate | seed base | boards | verdict |
+         * |---|---|---|---|
+         * | 3.5 | 5001 | 1,100 | BETTER, +21 ±14 |
+         * | 2.5 | 5001 | 1,240 | BETTER, +20 ±14 |
+         * | **3.0** | 7001 | 960 | BETTER, +24 ±15 |
+         *
+         * So the default is the middle of the region that replicated, confirmed on a seed base
+         * neither sweep had touched. It costs nothing to take: `time` reads 2,071 µs/turn at `5.0`
+         * against 2,137 at `3.0`, one sample's worth of noise apart. An allowance is a count of
+         * evaluations, and this decides which move each one is spent on rather than how many there
+         * are.
+         *
+         * Still a tradeoff, and the only one this bot has besides its allowance: exploring wide and
+         * digging deep are both ways to win, the best setting moves with the board and the opponent,
+         * and the two ends play visibly differently at the same budget.
          */
         val EXPLORATION = BotKnob.Decimal(
             name = "exploration",
             label = "Exploration",
-            help = "UCB1's constant. Higher tries more moves, lower digs deeper into the best one.",
-            default = 5.0,
+            help = "UCB1's constant, as a divisor. Lower tries more moves, higher digs deeper into the best one.",
+            default = 3.0,
             min = 0.1,
             max = 100.0,
             step = 0.1,

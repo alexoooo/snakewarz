@@ -117,8 +117,11 @@ internal class UctTree(private val maxNodes: Int = MAX_NODES) {
      * The move UCB1 wants explored next from [node], which is always one that exists.
      *
      * The formula is legacy's, quirks included and deliberately so.
-     * [`Node.java:423`] is `average + sqrt(ln(parentVisits) / (5 * childVisits))` — an exploration
-     * constant of `sqrt(1/5) ≈ 0.447` where the textbook uses `sqrt(2)`. The average divides by
+     * [`Node.java:423`] is `average + sqrt(ln(parentVisits) / (5 * childVisits))` — a *divisor*
+     * where the textbook has a multiplier, so its `5` is an exploration constant of
+     * `sqrt(1/5) ≈ 0.447` against the textbook's `sqrt(2)`. The divisor is [exploration] here and
+     * ships at `3.0`, which was measured rather than inherited — see `UctBot.EXPLORATION`. The
+     * average divides by
      * `visits + 1` rather than `visits` (`Node.java:286`), a prior that shrinks every estimate
      * toward zero. And an unvisited child scores an enormous randomised number
      * (`Node.java:398`), which is how every child gets one visit, in uniformly random order,

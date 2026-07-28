@@ -25,7 +25,14 @@ import kotlin.test.assertTrue
 class BotLadderTest {
     @Test
     fun `each rung beats the one below it`() {
-        // Measured at the shipped allowance, 12x12 over twenty matches: 16, 17, 18, 14, 16, 15.
+        // Measured at the shipped allowance, 12x12 over twenty matches: 16, 17, 18, 14, 18, 18.
+        //
+        // The last two moved after the figures above were first taken. `uct` over `flat-monte-carlo`
+        // is `UctBot.EXPLORATION` going from 5.0 to 3.0, which is what this sweep was for.
+        // `flat-monte-carlo` over `chase` reads 18 where it was recorded as 16, and neither of those
+        // bots can see that knob -- it drifted under an earlier change and went unrecorded. Its
+        // threshold is deliberately left where it was: tightening a gate on a pairing nobody has
+        // investigated buys brittleness rather than coverage.
         //
         // The first rung is the one that says `random` is the weakest thing here, which is what
         // makes it the right bot to seat by default -- the opening screen of a game nobody has
@@ -37,22 +44,33 @@ class BotLadderTest {
         assertBeats("pressure", "space", atLeast = 15)
         assertBeats("chase", "pressure", atLeast = 11)
         assertBeats("flat-monte-carlo", "chase", atLeast = 12)
-        assertBeats("uct", "flat-monte-carlo", atLeast = 12)
+        assertBeats("uct", "flat-monte-carlo", atLeast = 15)
     }
 
     @Test
-    fun `the tree is worth nothing until it has room to grow, and a lot afterwards`() {
+    fun `the tree pays at both allowances, and the exploration constant sets how much`() {
         // UCT and flat Monte Carlo share a rollout policy and an allowance. The only difference is
-        // that one of them remembers what it learned -- and at a hundred rollouts a turn there is
-        // nothing to remember, because four of them are spent giving each opening its first visit.
-        // The tree only starts paying once there are iterations left over to deepen it.
+        // that one of them remembers what it learned -- and how much of that memory survives a small
+        // allowance is set by `UctBot.EXPLORATION`, not by the allowance alone.
         //
-        // This is why the shipped default matters and why the contract suite's smaller allowance is
-        // not evidence about strength. Measured: 10 of 20 at a tenth, 15 of 20 at the full allowance.
+        // This test used to assert the opposite, that at a hundred evaluations the two are hard to
+        // tell apart: four of them go on giving each opening its first visit, leaving nothing to
+        // deepen. That was read off a divisor of 5.0, which is greedy enough to commit to whichever
+        // opening happened to win its one first rollout. Measured here over the same twenty seeds on
+        // the same build, with only the divisor moved:
+        //
+        // | evaluations a turn | exploration 5.0 | exploration 3.0 |
+        // |---|---|---|
+        // | 100 | 13 of 20 | 16 of 20 |
+        // | 1,000 | 16 of 20 | 18 of 20 |
+        //
+        // So the tree is worth having at both, and the constant decides how much of it survives being
+        // cramped. The recorded "10 of 20" it replaces was stale before this change, which is the
+        // argument for a threshold rather than an equality: a figure nothing asserts drifts unnoticed.
         val cramped = winsFor("uct", "flat-monte-carlo", budget = CRAMPED_BUDGET)
-        assertTrue(cramped in 6..14, "at a tenth of the allowance the two should be hard to tell apart, was $cramped")
+        assertTrue(cramped >= 13, "at a tenth of the allowance the tree paid in only $cramped of $ROUNDS")
 
-        assertBeats("uct", "flat-monte-carlo", atLeast = 12)
+        assertBeats("uct", "flat-monte-carlo", atLeast = 15)
     }
 
     @Test
@@ -61,9 +79,9 @@ class BotLadderTest {
         // -- how much search fits in a frame -- and a timing alone cannot say whether the search is
         // worth having. Same bot, same board, same seeds, ten times the allowance on one side.
         //
-        // Measured: 17 of 20. Which is also the honest ceiling on the argument for raising it
-        // further: ten times the budget is three wins in twenty, so the curve is flat enough that
-        // the frame budget, not strength, is the thing to set this by.
+        // Measured: 16 of 20. Which is also the honest ceiling on the argument for raising it
+        // further: ten times the budget still leaves a tenth of it four wins in twenty, so the curve
+        // is flat enough that the frame budget, not strength, is the thing to set this by.
         val wins = winsFor("uct", "uct", BUDGET, CRAMPED_BUDGET)
         assertTrue(wins >= 14, "the full allowance beat a tenth of it in only $wins of $ROUNDS")
     }

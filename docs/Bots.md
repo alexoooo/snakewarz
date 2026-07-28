@@ -81,7 +81,7 @@ private val exploration = EXPLORATION.read(setup.params)
 
 internal companion object {
     val SEARCH = BotKnob.Search(min = 0, max = 10_000, step = 100)
-    val EXPLORATION = BotKnob.Decimal("exploration", "Exploration", "...", default = 5.0, min = 0.1, max = 100.0, step = 0.1, tradeoff = true)
+    val EXPLORATION = BotKnob.Decimal("exploration", "Exploration", "...", default = 3.0, min = 0.1, max = 100.0, step = 0.1, tradeoff = true)
     val KNOBS: List<BotKnob> = listOf(SEARCH, EXPLORATION)
 }
 
