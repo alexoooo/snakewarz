@@ -64,6 +64,31 @@ class TuneJournalTest {
         }
     }
 
+    @Test
+    fun `the confirming run is recorded too, and is not a step of the search`() {
+        // It is the only row anybody acts on, so it is written down; and it was taken against other
+        // seeds at another bound, so a resume must not seat it in the middle of the descent.
+        val journal = TuneJournal(temporary())
+        journal.append(decision(knob = "cpuct", proposal = "cpuct=2.2", verdict = "BETTER"))
+        journal.append(
+            TuneJournal.Decision(
+                pass = -1,
+                stride = 0,
+                knob = "cpuct",
+                incumbent = "stock",
+                proposal = "cpuct=2.2",
+                seed = 1_000_001L,
+                verdict = "NO_BETTER",
+                elo = "-19",
+                boards = 800,
+            ),
+        )
+
+        val read = journal.read()
+        assertEquals(listOf(false, true), read.map { it.confirming })
+        assertEquals(1, read.filter { !it.confirming }.size)
+    }
+
     private fun decision(knob: String, proposal: String, verdict: String) = TuneJournal.Decision(
         pass = 2,
         stride = 4,

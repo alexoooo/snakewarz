@@ -81,6 +81,14 @@ public class TomSnakeBot(setup: BotSetup) : Bot {
             step = 0.05,
         )
 
-        val KNOBS: List<BotKnob> = listOf(FORK_SHARE)
+        /**
+         * Its own one, and the ones the [PressureBot] it delegates to reads from the same params.
+         *
+         * Constructed with **this** bot's `setup`, so `adjacencyFloor` and `adjacencyPenalty` have
+         * always been live in the one turn in five that is worth anything — undeclared only meant
+         * nothing could see them. Declaring them changes no default. Same reasoning as
+         * [ChaseBot.KNOBS], which composes the same delegate the same way.
+         */
+        val KNOBS: List<BotKnob> = listOf(FORK_SHARE) + PressureBot.KNOBS
     }
 }

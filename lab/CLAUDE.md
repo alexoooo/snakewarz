@@ -14,7 +14,7 @@ The packages are the loop, in order: `arena` plays a schedule in parallel from d
 `log` writes every match to a gitignored `.lab/`, `strength` fits ratings and runs the sequential
 test, `report` says why a bot is losing, `tune` searches knob space.
 
-Three things here are load-bearing and easy to undo by accident:
+Four things here are load-bearing and easy to undo by accident:
 
 - **Openings default to `mirrored`.** Spawns do not depend on the seed, so under `fixed` a pairing of
   bots that draw no randomness plays four distinct games however many rounds are asked for. Every
@@ -24,3 +24,8 @@ Three things here are load-bearing and easy to undo by accident:
 - **`tune` recommends and never edits a default.** Adopting one moves every golden move-stream hash,
   and a tool that could do both would defeat SW-01 quietly. The ritual is in
   [`../docs/Bots.md`](../docs/Bots.md).
+- **`ab` measures what two entrants do to each other, which is not always the change.** A guard that
+  only fires in positions an opponent playing the same way never creates is invisible head to head
+  and worth real points against a field — `ChaseBot.ROOM_SHARE` is `1 Elo ±3` under `ab` and `+14`
+  under `rate`. `AbCommand.blindness` prints the fingerprint (a `NO_BETTER` verdict on top of boards
+  that mostly split exactly); do not delete it because a run looks noisy.

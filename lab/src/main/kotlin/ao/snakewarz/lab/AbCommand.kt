@@ -5,6 +5,7 @@ import ao.snakewarz.lab.arena.Arena
 import ao.snakewarz.lab.arena.Openings
 import ao.snakewarz.lab.log.MatchLog
 import ao.snakewarz.lab.log.Replays
+import ao.snakewarz.lab.log.expandedSpec
 import ao.snakewarz.lab.log.recordBatch
 import ao.snakewarz.lab.strength.Sprt
 import ao.snakewarz.lab.strength.pairScores
@@ -81,6 +82,49 @@ internal class AbCommand(
         if (report.verdict == Sprt.Verdict.UNDECIDED && scores.size >= maxPairs) {
             log("[lab] stopped at the --max-pairs ceiling, not because the evidence settled.")
         }
+        blindness(report, scores, registry, log)
+    }
+
+    /**
+     * Warns when a null result may be this test being unable to see the change rather than its size.
+     *
+     * A head-to-head test can only measure what two entrants do **to each other**, and a change can
+     * be worth a great deal without altering that. `ChaseBot.ROOM_SHARE` is the worked example: it
+     * refuses a step into a pocket, the pocket is one the bot's own approach walks into, so an
+     * opponent running the same approach is in the same corridor at the same moment and the guard
+     * changes nothing between them. `ab` measured `1 Elo +-3` over 260 boards; a field of other
+     * opponents rated it `+14`. Both numbers are correct answers to different questions.
+     *
+     * The signature is the split rate. Two entrants that play the same game share every mirrored
+     * board exactly — that is what makes a mirrored opening fair, and identical entrants score 0.5
+     * on every board of it. So a `NO_BETTER` verdict sitting on top of a pile of exact splits is a
+     * change that mostly did not happen in this pairing, and the honest next move is a field.
+     */
+    private fun blindness(
+        report: Sprt.Report,
+        scores: List<Double>,
+        registry: BotRegistry,
+        log: (String) -> Unit,
+    ) {
+        if (report.verdict != Sprt.Verdict.NO_BETTER || scores.isEmpty()) {
+            return
+        }
+
+        val splits = scores.count { it == EVEN }
+        if (splits * 2 < scores.size) {
+            return
+        }
+
+        // Spelled out rather than labelled, because this line is meant to be pasted: `uct@4k` names a
+        // column and `uct:budget=4000` names an entrant, and only one of them parses.
+        val entrants = listOf(baseline, candidate).joinToString(" ") { expandedSpec(it, registry, budgetPerTurn) }
+
+        log(
+            "[lab] NOTE: $splits of ${scores.size} boards split exactly, so on most of them these two " +
+                "played the same game and this test never saw the change. That is expected of a " +
+                "change that only shows against *other* opponents -- measure one against a field:",
+        )
+        log("[lab]   play $entrants <others...> --rounds 600   then   rate")
     }
 
     override fun toString(): String = "Ab($candidate vs $baseline, $sprt)"
@@ -148,6 +192,9 @@ internal class AbCommand(
 
         /** A board is played from both seats, which is what makes it one observation. */
         const val MATCHES_PER_BOARD = 2
+
+        /** A board shared down the middle — what two entrants that play alike score on every one. */
+        const val EVEN = 0.5
 
         const val BAR = 20
     }

@@ -1,5 +1,6 @@
 package ao.snakewarz.bots
 
+import ao.snakewarz.botapi.knob.BotParams
 import ao.snakewarz.botapi.registry.BotId
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -47,6 +48,39 @@ class GoldenMoveStreamTest {
     @Test
     fun `the chaser against random on 20x20`() {
         assertEquals(-836205036734502335L, hashOf("chase", "random", seed = 2005))
+    }
+
+    @Test
+    fun `the chaser against a room ranker, where its room guard refuses something`() {
+        assertEquals(-4075282736796042152L, hashOf("chase", "space", seed = 1, rows = 16, cols = 16))
+    }
+
+    @Test
+    fun `and that guard is what makes the stream above what it is`() {
+        // The 20x20 case is blind to ChaseBot.ROOM_SHARE, and blind in the way that matters: it sat
+        // unchanged straight through the change that introduced the guard. A canary that cannot see
+        // a deliberate edit to a bot cannot see an accidental one either.
+        //
+        // Finding a case that is not blind took looking, and what the search turned up is the
+        // interesting part: against `random` the guard alters about one match in twenty and against
+        // `wallhug` or `pressure` none at all, because a pocket only forms where somebody is laying
+        // wall in front of you deliberately. Against `space` on 16x16 it is 14 seeds in 40. That
+        // rarity is not a weakness of the guard -- it is worth +14 Elo *because* the few turns it
+        // changes are the ones between dying and not.
+        //
+        // So the pinned case above is one where it fires, and this asserts that it fires rather than
+        // leaving it to be true. Re-pin the pair together: a hash, and a reason it is not a constant.
+        val guarded = hashOf("chase", "space", seed = 1, rows = 16, cols = 16)
+        val unguarded = hashOf(
+            "chase",
+            "space",
+            seed = 1,
+            rows = 16,
+            cols = 16,
+            params = listOf(BotParams(mapOf("roomShare" to "0")), BotParams.EMPTY),
+        )
+
+        assertEquals(false, guarded == unguarded)
     }
 
     @Test
@@ -114,6 +148,7 @@ class GoldenMoveStreamTest {
         cols: Int = 20,
         budgetPerTurn: Int = SEARCH_BUDGET,
         rules: ao.snakewarz.core.rules.RulesConfig = ao.snakewarz.core.rules.RulesConfig(),
+        params: List<BotParams> = listOf(BotParams.EMPTY, BotParams.EMPTY),
     ): Long {
         val match = HeadlessMatch(
             listOf(ShippedBots.entryOf(BotId(first)), ShippedBots.entryOf(BotId(second))),
@@ -122,6 +157,7 @@ class GoldenMoveStreamTest {
             seed = seed,
             budgetPerTurn = budgetPerTurn,
             rules = rules,
+            paramsPerSlot = params,
         )
         match.run()
         return moveStreamHash(match.moves())

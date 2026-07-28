@@ -43,9 +43,11 @@ mean another would have produced the same one.
 | `report` | why is it losing | the log | — |
 | `tune` | what should this knob be | — | a journal |
 
-`ab` is the one to reach for when deciding whether to keep a change. `play` gives a matrix, and a
-matrix has to be read against a threshold somebody invented; `ab` plays until the evidence settles
-and then says which hypothesis it settled on.
+`ab` is the first one to reach for when deciding whether to keep a change. `play` gives a matrix, and
+a matrix has to be read against a threshold somebody invented; `ab` plays until the evidence settles
+and then says which hypothesis it settled on. It has one blind spot, it is not a rare one, and
+[below](#ab-measures-what-two-entrants-do-to-each-other-which-is-not-always-the-change) is what it
+looks like and what to do instead.
 
 `rate` refuses to pool runs that are not comparable — a different board, allowance, openings mode or
 **build** is a different measurement — because a log accumulated over weeks would otherwise average
@@ -112,6 +114,36 @@ Two settings decide what a run costs, and they pull against each other:
 `Sprt.MINIMUM_PAIRS` is forty and is not configurable: the variance is estimated from the same sample
 that decides, so a lucky first handful overstates the evidence twice over.
 
+### `ab` measures what two entrants do *to each other*, which is not always the change
+
+A head-to-head test can only see a change that alters the game between the two bots in it, and plenty
+of real improvements do not. `ChaseBot.ROOM_SHARE` is the worked example, and the two numbers are
+worth remembering because they look like a contradiction and are not:
+
+| how it was measured | result |
+|---|---|
+| `ab chase chase:roomShare=0.5` — 260 boards | `NO BETTER`, **1 Elo ±3** |
+| `play` against the six reactive bots, then `rate` — 6,600 games | **+14 Elo**, intervals disjoint |
+
+Both are correct answers to different questions. The guard refuses a chase step into a pocket, the
+pocket is one *this bot's own approach* walks into, so an opponent running the same approach is in the
+same corridor at the same moment and the guard changes nothing between them. It is worth points
+against everybody who would not have died there.
+
+The signature is visible in the run, and `ab` prints it: two entrants that play the same game share
+every mirrored board exactly, so a `NO BETTER` verdict sitting on a pile of exact splits is a test
+that never saw the change. When that note appears, re-measure against a field:
+
+```bash
+./gradlew :lab:run --args="play chase chase:roomShare=0.5 space pressure random wallhug --rounds 600"
+./gradlew :lab:run --args="rate"
+```
+
+The general rule: **`ab` for a change that alters how a bot plays this opponent, a field and `rate`
+for one that alters how often it loses games it should not.** A rating over a field is the weaker
+instrument per game played — no pairing, wider intervals — and it is the only one that can see the
+second kind at all.
+
 ## Tuning a knob
 
 ```bash
@@ -131,7 +163,7 @@ each with its own false-positive rate, and both push the same way — something 
 The winner is re-run against the original from a disjoint seed base at a finer bound, and that is the
 only number a recommendation carries.
 
-**It never edits a default.** Changing one moves all twelve `GoldenMoveStreamTest` hashes, and a
+**It never edits a default.** Changing one moves every `GoldenMoveStreamTest` hash that reaches it, and a
 process that could change both would turn "a golden failure is a question" (SW-01) into a formality.
 It prints a recommendation; [`Bots.md`](Bots.md) carries what a person does with it.
 
@@ -139,6 +171,18 @@ It prints a recommendation; [`Bots.md`](Bots.md) carries what a person does with
 recommends `cpuct=0.5` at +73 Elo, confirmed over 280 fresh boards; the same setting re-tested at the
 shipped 1000 measures −19 ±23. Exploration constants trade against search depth, so the confirming
 run has to be at the allowance the bot actually ships at.
+
+**Both of those numbers are why the confirming run exists, and a sweep of the same knob at the
+shipped allowance is the demonstration.** It accepted `cpuct=2.3` at +112 Elo over 80 boards, then
+`2.2` at +127 over 40, walked the descent out to `2.2` — and the confirmation came back
+`NOT CONFIRMED, −19 Elo over 800 fresh boards`. Nothing beat the shipped `1.5`. A search step is
+deliberately cheap and greedy, so a lucky block can send the whole descent off in a direction; the
+disjoint-seed re-run at a finer bound is the only part of `tune` whose number you should act on.
+`PuctBot.CPUCT` carries both tables.
+
+**"Nothing beat the default" is a result and is worth writing down.** It costs ~20 minutes to
+establish and it stops the next person spending them again. Both runs land in
+`.lab/tune-<slug>.tsv`; the confirming one is the row with a negative `pass`.
 
 ## Why `:lab` is a module
 

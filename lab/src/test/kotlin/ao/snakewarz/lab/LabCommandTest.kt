@@ -6,6 +6,7 @@ import ao.snakewarz.lab.arena.Openings
 import ao.snakewarz.lab.log.Replays
 import ao.snakewarz.match.MatchSetup
 import ao.snakewarz.match.tournament.TournamentFormat
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -241,6 +242,70 @@ class LabCommandTest {
 
         assertContains(failure.message.orEmpty(), "race")
         assertContains(failure.message.orEmpty(), "Usage:")
+    }
+
+    @Test
+    fun `a null result says so when the two never played a different game`() {
+        // A bot against a re-spelling of itself: `adjacencyFloor=0.05` is the declared default, so
+        // these are the same bot under two specs and every board is bound to split. That is the
+        // extreme of the case the note exists for -- a real one is a change that fires only in
+        // positions an opponent playing the same way never puts it in, which reads identically here
+        // and is invisible for the same reason. See `AbCommand.blindness`.
+        val command = LabCommand.of(
+            "ab pressure pressure:adjacencyFloor=0.05 --rows 8 --cols 8 --budget 0 --threads 1".split(' ') +
+                listOf("--log", "none"),
+            ShippedBots,
+        )
+
+        val lines = mutableListOf<String>()
+        command.run(ShippedBots, lines::add)
+
+        assertTrue(lines.any { it.contains("NO BETTER") }, lines.toString())
+        assertTrue(lines.any { it.contains("boards split exactly") }, lines.toString())
+
+        // The follow-up is meant to be pasted, so it has to parse. A label would not.
+        val suggested = lines.single { it.contains("--rounds") }.substringAfter("play ").substringBefore(" <others")
+        for (entrant in suggested.split(' ')) {
+            LabCommand.contestantOf(entrant, ShippedBots)
+        }
+    }
+
+    @Test
+    fun `a sweep that finds nothing says whether it could have found anything`() {
+        // `tune` is the same head-to-head test run dozens of times, so it inherits the blind spot
+        // whole -- and this is the real case rather than a contrived one: sweeping `roomShare`
+        // reports 0 Elo on every step and "leave the defaults alone", for a knob a field rates at
+        // +14. Without the note that reads as a measurement of the knob.
+        val journal = Files.createTempDirectory("snakewarz-lab").resolve("tune.tsv")
+        val command = LabCommand.of(
+            "tune chase --knobs roomShare --budget 0 --rows 8 --cols 8 --max-pairs 40".split(' ') +
+                listOf("--passes", "1", "--threads", "1", "--journal", journal.toString()),
+            ShippedBots,
+        )
+
+        val lines = mutableListOf<String>()
+        command.run(ShippedBots, lines::add)
+
+        assertTrue(lines.any { it.contains("nothing beat the shipped settings") }, lines.toString())
+        assertTrue(lines.any { it.contains("boards split exactly") }, lines.toString())
+    }
+
+    @Test
+    fun `a batch that already diversified its openings blames the entrants instead`() {
+        // Advice for the wrong cause is worse than none: it sends somebody to re-run a flag they are
+        // already passing. Mirrored openings cannot fix two entrants that play the same game.
+        val command = LabCommand.of(
+            "play pressure pressure:adjacencyFloor=0.05 --rows 8 --cols 8 --rounds 4 --budget 0".split(' ') +
+                listOf("--log", "none"),
+            ShippedBots,
+        )
+
+        val lines = mutableListOf<String>()
+        command.run(ShippedBots, lines::add)
+
+        val advice = lines.single { it.contains("repeated itself") }
+        assertContains(advice, "the entrants rather than the schedule")
+        assertTrue(!advice.contains("Try --openings mirrored"), advice)
     }
 
     @Test

@@ -33,6 +33,17 @@ internal class TuneJournal(private val file: Path) {
     ) {
         val accepted: Boolean get() = verdict == ACCEPTED
 
+        /**
+         * A confirming run rather than a step of the search, marked by a [pass] below zero.
+         *
+         * It is written to the same journal because it is the one decision anybody acts on, and a
+         * log that recorded the eleven experiments leading to a recommendation but not the run that
+         * accepted or threw it out would be missing the only row that matters. It is filtered back
+         * out on a resume: replaying it as a search step would seat a decision taken against
+         * different seeds, at a different bound, into the middle of the descent.
+         */
+        val confirming: Boolean get() = pass < 0
+
         override fun toString(): String = "$verdict, $elo Elo over $boards boards"
 
         companion object {

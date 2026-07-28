@@ -174,7 +174,7 @@ places `:ui` builds DOM, and this is why.
 ## Adopting a measured setting
 
 `:lab`'s `tune` searches a bot's declared knobs and **recommends**; it never edits a default. That is
-not caution. Changing a default moves all twelve `GoldenMoveStreamTest` hashes, and a process that
+not caution. Changing a default moves every `GoldenMoveStreamTest` hash that reaches it, and a process that
 could change both would turn SW-01's "a golden failure is a question, never a hash to update" into a
 formality — which is exactly the way that rule gets defeated without anybody noticing.
 
@@ -183,10 +183,19 @@ So adopting one is a deliberate act, in this order:
 1. **Re-confirm at the allowance the bot ships at.** A knob tuned at one budget is tuned at that
    budget. `tune puct --knobs cpuct --budget 400` recommends `cpuct=0.5` at +73 Elo confirmed over
    280 fresh boards; the same value re-tested at the shipped 1000 measures **−19 ±23**. Exploration
-   constants trade against search depth, and that trade moves with the allowance.
-2. **`play` it against the ladder rungs.** A knob can be worth points against its own bot and cost
-   them against a different opponent — snakes are a rock-paper-scissors sort of game, and `rate`
-   prints the residual cells where a single ordering fails to describe a pairing.
+   constants trade against search depth, and that trade moves with the allowance. Re-swept properly
+   at 1000, that knob's answer was *nothing beats the shipped `1.5`* — see `PuctBot.CPUCT`.
+2. **`play` it against a field, then `rate`.** Two different things go wrong without this, and only
+   the first is about strength:
+   - A knob can be worth points against its own bot and cost them against a different opponent —
+     snakes are a rock-paper-scissors sort of game, and `rate` prints the residual cells where a
+     single ordering fails to describe a pairing.
+   - **A head-to-head test cannot see a change that does not alter the game between those two bots**,
+     and that is not an exotic case. `ChaseBot.ROOM_SHARE` measures `1 Elo ±3` under
+     `ab chase chase:roomShare=0.5` and **+14** against a field, because the pocket it refuses is one
+     the bot's own approach walks into and an opponent doing the same thing is in the same corridor.
+     `ab` now prints a note when its boards mostly split exactly, which is that situation's
+     fingerprint. [`Workflow.md`](Workflow.md#deciding-whether-a-change-helped) has the full account.
 3. Change the `default` in the knob's declaration. One literal, because the declaration is the
    reader — see above.
 4. `GoldenMoveStreamTest` fails. **Re-pin it recording the measurement that moved it**: which run,

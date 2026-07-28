@@ -57,9 +57,27 @@ internal class TuneCommand(
     val searchElo1: Double,
     val journalFile: Path,
 ) : LabCommand {
+    /**
+     * Boards this run actually played, and how many of them the two entrants shared exactly.
+     *
+     * Kept because a search that finds nothing has two very different explanations and the printed
+     * result cannot tell them apart: the defaults are good, or **this instrument cannot see the knob
+     * being turned**. Every step of the descent is the same head-to-head sequential test `ab` runs,
+     * so it inherits `AbCommand.blindness` whole — a knob that changes how a bot plays *other*
+     * opponents, and not how it plays a copy of itself, scores `0 Elo` on every step of a sweep and
+     * reports "leave the defaults alone" with total confidence.
+     *
+     * `chase --knobs roomShare` is exactly that, and it is worth `+14 Elo` against a field.
+     *
+     * Replayed decisions contribute nothing here — they were read back from the journal rather than
+     * played — so the note is only offered when this run has boards of its own to judge on.
+     */
+    private var boardsPlayed = 0
+    private var boardsShared = 0
+
     override fun run(registry: BotRegistry, log: (String) -> Unit) {
         val journal = TuneJournal(journalFile)
-        val history = journal.read()
+        val history = journal.read().filter { !it.confirming }
         val started = TimeSource.Monotonic.markNow()
 
         log("[lab] tuning ${subject.slug} over ${knobs.joinToString { it.name }}")
@@ -125,7 +143,7 @@ internal class TuneCommand(
         }
 
         log("")
-        report(registry, incumbent, accepted, taken, started, log)
+        report(registry, journal, incumbent, accepted, taken, started, log)
     }
 
     override fun toString(): String = "Tune(${subject.slug}, ${knobs.joinToString { it.name }})"
@@ -170,6 +188,9 @@ internal class TuneCommand(
             block++
         }
 
+        boardsPlayed += scores.size
+        boardsShared += scores.count { it == EVEN }
+
         return TuneJournal.Decision(
             pass = pass,
             stride = stride,
@@ -192,6 +213,7 @@ internal class TuneCommand(
      */
     private fun report(
         registry: BotRegistry,
+        journal: TuneJournal,
         incumbent: BotParams,
         accepted: Int,
         taken: Int,
@@ -201,6 +223,7 @@ internal class TuneCommand(
         if (incumbent.isEmpty) {
             log("[lab] nothing beat the shipped settings over $taken experiments.")
             log("[lab] ${started.elapsedNow().inWholeSeconds}s. That is a result: leave the defaults alone.")
+            blindness(log)
             return
         }
 
@@ -219,7 +242,7 @@ internal class TuneCommand(
             // One test rather than dozens, at a finer bound, so it is allowed a great deal more
             // evidence than a step of the search was.
             cap = maxPairs * CONFIRM_BOARDS,
-        )
+        ).also(journal::append)
 
         log("")
         when {
@@ -236,11 +259,32 @@ internal class TuneCommand(
             }
 
             else -> {
-                log("[lab] NOT CONFIRMED: ${confirmation.verdict} at ${confirmation.elo} Elo over fresh boards.")
+                log(
+                    "[lab] NOT CONFIRMED: ${confirmation.verdict} at ${confirmation.elo} Elo over " +
+                        "${confirmation.boards} fresh boards.",
+                )
                 log("[lab] The gain the search found was fitted to the boards it searched on. Do not adopt it.")
+                log("[lab] That is a result, and the shipped default is what it argues for. Both runs are")
+                log("[lab] in $journalFile -- the confirming one is the row with a negative pass.")
             }
         }
         log("[lab] ${started.elapsedNow().inWholeSeconds}s over $taken experiments")
+    }
+
+    /** Says when "nothing beat the defaults" may be this search's blind spot — see [boardsShared]. */
+    private fun blindness(log: (String) -> Unit) {
+        if (boardsPlayed == 0 || boardsShared * 2 < boardsPlayed) {
+            return
+        }
+
+        log("")
+        log(
+            "[lab] NOTE: $boardsShared of $boardsPlayed boards split exactly, so on most of them the " +
+                "two settings played the same game. A sweep is head to head, and a knob that only " +
+                "changes how ${subject.slug} plays *other* opponents scores zero on every step of " +
+                "one. Sweep it against a field instead -- play a few values alongside the rest of " +
+                "the ladder and read `rate`, the way ChaseBot.ROOM_SHARE was settled.",
+        )
     }
 
     /** Every setting that differs from stock, as an entrant spec would spell it. */
@@ -255,6 +299,9 @@ internal class TuneCommand(
         private const val CANDIDATE = 1
 
         private const val MATCHES_PER_BOARD = 2
+
+        /** A board shared down the middle — what two settings that play alike score on every one. */
+        private const val EVEN = 0.5
 
         /**
          * Eight declared steps to start with.

@@ -1,6 +1,7 @@
 package ao.snakewarz.lab
 
 import ao.snakewarz.botapi.registry.BotRegistry
+import ao.snakewarz.lab.arena.Openings
 import ao.snakewarz.lab.log.LoggedMatch
 import ao.snakewarz.lab.log.MatchLog
 import ao.snakewarz.lab.log.RunHeader
@@ -54,7 +55,7 @@ internal class RateCommand(
 
         log("[lab] ${played.size} matches, ${ladder.size} entrants, ${summarise(eligible)}")
         log("")
-        report(ladder, bootstrapIntervals(ladder, registry, format), played, log)
+        report(ladder, bootstrapIntervals(ladder, registry, format), played, eligible, log)
     }
 
     override fun toString(): String = "Rate($logDirectory, $filters)"
@@ -74,7 +75,13 @@ internal class RateCommand(
         }
     }
 
-    private fun report(ladder: Ladder, intervals: List<Interval>, played: List<LoggedMatch>, log: (String) -> Unit) {
+    private fun report(
+        ladder: Ladder,
+        intervals: List<Interval>,
+        played: List<LoggedMatch>,
+        runs: List<RunHeader>,
+        log: (String) -> Unit,
+    ) {
         val order = ladder.ratings.ranking()
         val width = (0 until ladder.size).maxOf { ladder.label(it).length }.coerceAtLeast(MIN_LABEL)
 
@@ -103,7 +110,7 @@ internal class RateCommand(
 
         unbounded(ladder, log)
         residuals(ladder, log, width)
-        diversity(played, log)
+        diversity(played, runs, log)
     }
 
     /**
@@ -163,13 +170,26 @@ internal class RateCommand(
     }
 
     /** The sample size behind all of it — see `Openings`. */
-    private fun diversity(played: List<LoggedMatch>, log: (String) -> Unit) {
+    private fun diversity(played: List<LoggedMatch>, runs: List<RunHeader>, log: (String) -> Unit) {
         val distinct = played.mapTo(LinkedHashSet()) { it.moveStreamHash }.size
         log("")
         log("[lab] $distinct of ${played.size} matches were distinct games")
-        if (distinct * 2 < played.size) {
-            log("[lab] over half the log is repeated games. Replay it with --openings mirrored.")
+        if (distinct * 2 >= played.size) {
+            return
         }
+
+        // Same two causes [PlayCommand] separates, asked of a log rather than a batch: if any run
+        // here still used a fixed opening, re-playing is the fix; if they all diversified already,
+        // the entrants are answering the same question and the fix is different opponents.
+        log(
+            if (runs.any { it.openings.equals(Openings.FIXED.name, ignoreCase = true) }) {
+                "[lab] over half the log is repeated games. Replay it with --openings mirrored."
+            } else {
+                "[lab] over half the log is repeated games, from openings that were already " +
+                    "diversified -- these entrants play most seeds identically to each other. The " +
+                    "ratings are honest about a field this narrow; widen it rather than lengthen it."
+            },
+        )
     }
 
     private fun summarise(runs: List<RunHeader>): String {

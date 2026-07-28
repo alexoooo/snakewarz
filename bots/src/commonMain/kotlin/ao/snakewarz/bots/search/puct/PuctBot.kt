@@ -271,6 +271,27 @@ public class PuctBot(setup: BotSetup) : Bot {
          *
          * Higher explores more here and less there. They are not named the same thing for exactly
          * that reason, and unifying them would invert one of the two without anything noticing.
+         *
+         * ### `1.5` has been swept twice and survived both, which is the useful part
+         *
+         * | sweep | search settled on | confirmed on fresh boards |
+         * |---|---|---|
+         * | `tune puct --knobs cpuct --budget 400` | `0.5` | `+73` over 280 — but see below |
+         * | `tune puct --knobs cpuct --budget 1000` | `2.2` | **`-19`, NOT CONFIRMED** over 800 |
+         *
+         * Two separate lessons, and the second is the one worth carrying.
+         *
+         * **A knob tuned at one allowance is tuned at that allowance.** The `0.5` from the 400-budget
+         * sweep confirmed cleanly there and measures `-19 ±23` at the shipped 1000. An exploration
+         * constant trades against how deep the tree gets, and that trade moves with the allowance, so
+         * a sweep is only ever an answer about the budget it ran at. Re-run at the shipped one.
+         *
+         * **The second sweep found nothing, and finding nothing took a confirming run to establish.**
+         * At the shipped allowance the search accepted `2.3` at `+112` Elo over 80 boards and then
+         * `2.2` at `+127` over 40; both were noise, and the disjoint-seed re-run at the finer bound is
+         * what said so. A coordinate descent that accepts on a lucky block sends the whole descent off
+         * in that direction, which is precisely why the recommendation carries the confirming number
+         * and nothing else. Leave `1.5` alone unless something beats it *there*.
          */
         val CPUCT = BotKnob.Decimal(
             name = "cpuct",
