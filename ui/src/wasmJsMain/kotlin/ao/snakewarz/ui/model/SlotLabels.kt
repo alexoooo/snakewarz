@@ -63,11 +63,11 @@ internal class SlotLabels(setup: MatchSetup, registry: BotRegistry) {
         /**
          * The knob values worth naming: what this seat *is*, plus what was changed about it.
          *
-         * A [BotKnob.Choice] a player is offered names a mode rather than a value — `expert` against
-         * `rollout` is two different bots wearing one slug — so it is named whether or not it is the
-         * default, for the same reason the allowance is. Two seats of `puct` at the two evaluations
-         * is the experiment this bot exists for, and a scoreboard reading `PUCT - 1k` beside
-         * `PUCT - 1k/rollout` makes you remember which the bare one was.
+         * A [BotKnob.Choice] a player is offered names a mode rather than a value — `territory`
+         * against `survival` is two different bots wearing one slug — so it is named whether or not
+         * it is the default, for the same reason the allowance is. Two seats of `puct` at two
+         * evaluations is the experiment this bot exists for, and a scoreboard reading `PUCT - 1k`
+         * beside `PUCT - 1k/survival` makes you remember which the bare one was.
          *
          * Everything else is named only when it has been moved, and *moved* is asked of the knob
          * rather than of the map — `exploration=5.0` arriving from a `#r=` fragment is the default

@@ -7,10 +7,10 @@ import ao.snakewarz.core.snake.SnakeId
 /**
  * The cheap end: how many ways out each snake has, as a share of all of them.
  *
- * A handful of array reads against [ExpertEval]'s whole-board sweep, so at one allowance this buys
+ * A handful of array reads against [TerritoryEval]'s whole-board sweep, so at one allowance this buys
  * something like a hundred times the tree. Whether that beats a better guess at a leaf is the
  * question a hand-written evaluation has to answer, and it cannot be answered by weights — setting
- * [ExpertEval]'s territory weight to zero does not make it skip the sweep. So this is a separate
+ * [TerritoryEval]'s territory weight to zero does not make it skip the sweep. So this is a separate
  * evaluation rather than a configuration of that one: it is a claim about *cost*.
  *
  * A share rather than a raw count, so the values land on [LeafEval]'s scale with no special case: a

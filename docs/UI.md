@@ -114,7 +114,7 @@ board already follows.
 two of them can be the same bot at two allowances or two evaluations, and the display name alone
 cannot say so. The qualifier is `Contestant.suffix` from `:match` — the very string the win-rate
 matrix uses — so the sidebar, the hover label, the winner line and the table cannot start disagreeing
-about what `4k` means. `PUCT - 1k/rollout` is a full seat: allowance first, because that is what
+about what `4k` means. `PUCT - 1k/survival` is a full seat: allowance first, because that is what
 strength scales on, then the settings.
 
 What is *in* that suffix is the one thing `:ui` decides for itself, because it is the one thing that

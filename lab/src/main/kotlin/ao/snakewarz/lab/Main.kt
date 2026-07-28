@@ -11,8 +11,8 @@ import ao.snakewarz.bots.ShippedBots
  * seen a bot class.
  *
  * ```
- * ./gradlew :lab:run --args="play puct:eval=expert puct:eval=rollout --rounds 40 --budget 40000"
- * ./gradlew :lab:run --args="time puct:eval=expert --budget 40000"
+ * ./gradlew :lab:run --args="play puct:eval=territory puct:eval=survival --rounds 40 --budget 40000"
+ * ./gradlew :lab:run --args="time puct:eval=survival --budget 40000"
  * ```
  *
  * A parse failure is reported and exits non-zero rather than printing a stack trace: unlike a bot

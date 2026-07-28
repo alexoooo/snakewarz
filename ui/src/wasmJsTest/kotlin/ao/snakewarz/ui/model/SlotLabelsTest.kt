@@ -76,10 +76,10 @@ class SlotLabelsTest {
 
     @Test
     fun `a mode is named at its default too, so the seat beside it is readable`() {
-        // `PUCT - 1k` next to `PUCT - 1k/rollout` tells you one of them is not `rollout` and leaves
+        // `PUCT - 1k` next to `PUCT - 1k/survival` tells you one of them is not `survival` and leaves
         // you to remember which the other is. Two seats at two evaluations is the experiment.
-        assertEquals("PUCT - 1k/expert", labelWith("puct", BotParams.EMPTY))
-        assertEquals("PUCT - 1k/rollout", labelWith("puct", BotParams(mapOf("eval" to "rollout"))))
+        assertEquals("PUCT - 1k/territory", labelWith("puct", BotParams.EMPTY))
+        assertEquals("PUCT - 1k/survival", labelWith("puct", BotParams(mapOf("eval" to "survival"))))
     }
 
     @Test
@@ -157,7 +157,9 @@ class SlotLabelsTest {
                 { Stationary },
                 listOf(
                     BotKnob.Search(min = 0, max = 10_000, step = 100),
-                    BotKnob.Choice("eval", "Evaluation", "", "expert", listOf("rollout", "expert"), tradeoff = true),
+                    BotKnob.Choice(
+                        "eval", "Evaluation", "", "territory", listOf("territory", "survival"), tradeoff = true,
+                    ),
                 ),
             ),
         )

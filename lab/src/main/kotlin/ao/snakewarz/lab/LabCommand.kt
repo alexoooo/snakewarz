@@ -136,9 +136,9 @@ internal sealed interface LabCommand {
             An entrant is <slug>[:name=value,...], where `budget` is that entrant's own allowance
             and every other name is one of that bot's declared knobs. For example:
 
-              play puct:eval=expert puct:eval=rollout --rounds 40
+              play puct:eval=territory puct:eval=survival --rounds 40
               play uct uct:budget=100
-              time puct:eval=expert --budget 2000
+              time puct:eval=survival --budget 2000
         """.trimIndent()
 
         fun of(args: List<String>, registry: BotRegistry): LabCommand {

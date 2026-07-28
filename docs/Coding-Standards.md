@@ -149,11 +149,18 @@ test seems to need an edge, the test is in the wrong module.
 part of the replay format. Once released, none of them may be renamed.**
 
 They travel in the URL hash of every match anyone has shared, and nothing in the codec can repair a
-name that changed meaning. This is also why a `Choice` holds **names, never ordinals**: `eval=expert`
-survives somebody reordering the list the sidebar offers, and `eval=2` does not.
+name that changed meaning. This is also why a `Choice` holds **names, never ordinals**:
+`eval=territory` survives somebody reordering the list the sidebar offers, and `eval=2` does not.
 
 Display names are not identifiers and may be changed freely. Renaming is a *new* id plus whatever
 migration you are willing to write — usually not worth it.
+
+`puct`'s `eval=expert` is the one value that has ever been renamed, and it is the exception that
+shows the shape of the rule rather than a precedent: `Choice.read` is total, so the old value falls
+through to the *default*, and the rename was only defensible because the default is the same
+evaluation under its new name. `PuctBot.EVAL` carries the argument and the condition it depends on.
+That escape hatch exists for exactly one value at a time and stops working the moment the default
+moves.
 
 **Why:** The failure is invisible at the point of the change and total at the point of use: an old
 link resolves to a bot that no longer exists, or worse, to a knob whose value now means something
@@ -203,9 +210,9 @@ and a bot handed an allowance of zero must spend exactly zero and still play wel
 
 **Why:** Without it, `budgetPerTurn` quietly means something different for every bot that declares
 one, and the win-rate matrix — the entire point of the testbed — compares two bots that were not
-given the same thing. That is not hypothetical: under the previous per-move accounting `puct` at
-`eval=expert` was charged the board area for a leaf a rollout got for its length, and read as the
-weaker bot on a matrix that was measuring the charge rather than the bot.
+given the same thing. That is not hypothetical: under the previous per-move accounting `puct` at its
+hand-written appraisal was charged the board area for a leaf a rollout got for its length, and read
+as the weaker bot on a matrix that was measuring the charge rather than the bot.
 
 
 ## SW-08 — The bundle is a budget
@@ -290,7 +297,7 @@ answerable without a rebuild.
 **Comments carry the *why*. Never the *what*, never the diff, never the conversation.**
 
 This codebase is deliberately comment-*rich* about reasons: `LeafEval`'s KDoc explains why an
-evaluation returns one value per slot rather than a scalar, and `ExpertEval` records that a graded
+evaluation returns one value per slot rather than a scalar, and `TerritoryEval` records that a graded
 margin beat a step because a step left the search with no gradient in exactly the phase where this
 game is a space-filling puzzle. Neither could be recovered by reading the code. That is the bar — not
 volume, but a reason a reader could not have derived.
@@ -455,8 +462,8 @@ So a module holding twenty-five files is not by itself wrong; twenty-five files 
 **Split along what uses what, never by what kind of thing a file is.** A package named for a *kind* —
 `eval`, `impls`, `helpers`, `types`, `utils` — reads as organised and is not: it collects files whose
 only shared property is a suffix, and it puts each one a package away from the single thing that
-calls it. The test is the call graph. `ExpertEval` is read by `PuctBot` and nothing else, so it lives
-beside `PuctBot` in `search.puct`, not in an `eval` package with `MobilityEval` — those two are
+calls it. The test is the call graph. `TerritoryEval` is read by `PuctBot` and nothing else, so it
+lives beside `PuctBot` in `search.puct`, not in an `eval` package with `MobilityEval` — those two are
 siblings in name only. A file with one consumer belongs in that consumer's package; a file with
 consumers in several packages belongs in the nearest package enclosing them.
 

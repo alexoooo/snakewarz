@@ -1,7 +1,7 @@
 package ao.snakewarz.bots.search
 
 import ao.snakewarz.bots.reactive.space.FloodFill
-import ao.snakewarz.bots.search.puct.ExpertEval
+import ao.snakewarz.bots.search.puct.TerritoryEval
 import ao.snakewarz.core.grid.Cell
 import ao.snakewarz.core.grid.Direction
 import ao.snakewarz.core.grid.Grid
@@ -141,7 +141,7 @@ internal class SpaceOwnership(private val grid: Grid, private val snakeCount: In
      * A separated snake's game is decided in a way a shared board's is not: it will fill its own
      * room and die when it runs out, so whoever was left the most ground outlasts the rest and the
      * only thing still in question is the arithmetic. That is a materially different judgement from
-     * a share of a contested board, and it is why an evaluation wants to know — see [ExpertEval].
+     * a share of a contested board, and it is why an evaluation wants to know — see [TerritoryEval].
      *
      * A dead snake seeds nothing and so is isolated, which reads correctly: nobody is in its way.
      */

@@ -15,8 +15,8 @@ class BotKnobTest {
     private val flag = BotKnob.Flag("reuseTree", "Reuse tree", "keep it", default = false)
     private val eval = BotKnob.Choice(
         "eval", "Evaluation", "how a leaf is judged",
-        default = "expert",
-        values = listOf("rollout", "mobility", "expert"),
+        default = "territory",
+        values = listOf("territory", "mobility", "survival"),
     )
 
     @Test
@@ -24,7 +24,7 @@ class BotKnobTest {
         assertEquals(1024, count.read(BotParams.EMPTY))
         assertEquals(5.0, rate.read(BotParams.EMPTY))
         assertEquals(false, flag.read(BotParams.EMPTY))
-        assertEquals("expert", eval.read(BotParams.EMPTY))
+        assertEquals("territory", eval.read(BotParams.EMPTY))
     }
 
     @Test
@@ -32,7 +32,7 @@ class BotKnobTest {
         assertEquals(2048, count.read(BotParams(mapOf("maxNodes" to "2048"))))
         assertEquals(1.5, rate.read(BotParams(mapOf("exploration" to "1.5"))))
         assertEquals(true, flag.read(BotParams(mapOf("reuseTree" to "true"))))
-        assertEquals("rollout", eval.read(BotParams(mapOf("eval" to "rollout"))))
+        assertEquals("survival", eval.read(BotParams(mapOf("eval" to "survival"))))
     }
 
     @Test
@@ -54,7 +54,7 @@ class BotKnobTest {
         assertEquals(false, flag.read("yes"))
         // And a value that was offered by a version this replay predates, or that has since been
         // dropped, reads as the default rather than as whatever now sits at its index.
-        assertEquals("expert", eval.read("neural"))
+        assertEquals("territory", eval.read("neural"))
     }
 
     @Test
@@ -70,15 +70,15 @@ class BotKnobTest {
         assertNull(count.reject(" 2048 "))
         assertNull(rate.reject("1.5"))
         assertNull(flag.reject("true"))
-        assertNull(eval.reject("rollout"))
-        assertNull(eval.reject(" rollout "))
+        assertNull(eval.reject("survival"))
+        assertNull(eval.reject(" survival "))
 
         assertNotNull(count.reject("lots"))
         assertNotNull(count.reject("99999"))
         assertNotNull(rate.reject("wide"))
         assertNotNull(flag.reject("yes"))
         // A complaint that names the options, because a form has nowhere else to show them.
-        assertEquals("one of rollout, mobility, expert", eval.reject("neural"))
+        assertEquals("one of territory, mobility, survival", eval.reject("neural"))
     }
 
     @Test
@@ -86,9 +86,9 @@ class BotKnobTest {
         assertTrue(rate.isDefault("5"))
         assertTrue(rate.isDefault("5.0"))
         assertTrue(count.isDefault(count.defaultText))
-        assertTrue(eval.isDefault("expert"))
+        assertTrue(eval.isDefault("territory"))
         assertEquals(false, rate.isDefault("1.5"))
-        assertEquals(false, eval.isDefault("rollout"))
+        assertEquals(false, eval.isDefault("survival"))
         // Unparseable reads as the default, but is not a default *value* somebody typed.
         assertEquals(false, rate.isDefault("wide"))
         assertEquals(false, eval.isDefault("neural"))

@@ -8,10 +8,10 @@ import ao.snakewarz.core.grid.Grid
 import ao.snakewarz.core.snake.SnakeId
 
 /**
- * The subject: a position appraised the way somebody who plays this game would appraise it.
+ * A share of the board, read the way somebody who plays this game would read it.
  *
- * Not a weighted sum of features but a small expert system, because the game has a **phase change**
- * in it and a linear reading cannot express one. While the snakes can still reach each other, the
+ * Not a weighted sum of features but a rule with a branch in it, because the game has a **phase
+ * change** and a linear reading cannot express one. While the snakes can still reach each other, the
  * position is a fight and a share of the board is worth roughly what its size says. The moment they
  * cannot, it stops being a fight at all: each snake will fill its own room and die when it runs out,
  * so the larger room outlasts the smaller one and the result is arithmetic rather than a matter of
@@ -24,18 +24,27 @@ import ao.snakewarz.core.snake.SnakeId
  * the evaluation out of any allowance a browser could grant. Everything else here is array reads.
  * The separation test comes off the same sweep, which is why [SpaceOwnership.isolated] exists.
  *
+ * [SurvivalEval] is what happens when that constraint is deliberately spent rather than kept: it
+ * asks how much of a region a snake can actually *use*, which no single sweep can answer. This one
+ * stays the cheap reading of the same phase change, and the two are the tradeoff `eval` offers.
+ *
  * ### What it is worth, measured
  *
  * All figures from `:lab`, 12x12, forty rounds a pairing, both seatings of every seed — one sigma is
  * about ±3.2 wins, so anything inside 17-23 is the same number. At an **equal allowance**, which is
  * now an equal number of iterations:
  *
- * | | expert | rollout | mobility | uct | score |
+ * | | territory | rollout | mobility | uct | score |
  * |---|---|---|---|---|---|
- * | expert | — | 33 | 20 | 25 | 65% |
+ * | territory | — | 33 | 20 | 25 | 65% |
  * | rollout | 7 | — | 31 | 22 | 50% |
  * | mobility | 20 | 9 | — | 8 | 31% |
  * | uct | 15 | 18 | 32 | — | 54% |
+ *
+ * `rollout` was an `eval` setting that played the position out at random, and it is **gone**. It
+ * existed as a control, and `uct` is a better one: a tree with exactly that rollout at its leaf, and
+ * a bot somebody might actually pick. The column stands as the record of what was measured, and
+ * re-running this table means reading the `uct` column in its place.
  *
  * **Per iteration, the hand-written appraisal is decisively the better leaf** — 33 of 40 against the
  * random rollout it replaces, with the tree, the prior and the allowance all held still. That is a
@@ -44,12 +53,12 @@ import ao.snakewarz.core.snake.SnakeId
  * charged a hundred and forty-four units for a leaf the rollout got for sixty.
  *
  * It is not free, and the second table is the one that keeps the first honest. A turn here is
- * 2,709 µs at 1,000 evaluations against `eval=rollout`'s 1,984 and `uct`'s 2,096, so a sweep costs
- * about 1.4 rollouts on this board. Handed the 730 that buys the same millisecond:
+ * 2,709 µs at 1,000 evaluations against the random rollout's 1,984 and `uct`'s 2,096, so a sweep
+ * costs about 1.4 rollouts on this board. Handed the 730 that buys the same millisecond:
  *
- * | | expert@730 | rollout | uct | score |
+ * | | territory@730 | rollout | uct | score |
  * |---|---|---|---|---|
- * | expert@730 | — | 21 | 24 | 56% |
+ * | territory@730 | — | 21 | 24 | 56% |
  * | rollout | 19 | — | 22 | 51% |
  * | uct | 16 | 18 | — | 43% |
  *
@@ -58,6 +67,14 @@ import ao.snakewarz.core.snake.SnakeId
  * which is why `puct` is still registered as experimental rather than as a ladder rung — and why
  * [ao.snakewarz.bots.search.EvaluationCost] leaving every evaluation at `1` is a thing to know about
  * before quoting the first table: it is a count of iterations and makes no claim about the clock.
+ *
+ * ### It is no longer the best leaf here, and is still the default
+ *
+ * [SurvivalEval] beats this **31 of 40** at an equal allowance, which is a wider margin than
+ * anything in either table above. At an equal *clock* the two are level — 48-52 over a hundred
+ * rounds — because it costs about 1.6 times as much per evaluation on this board and better than
+ * twice as much on a 20x20. Its KDoc carries both matrices and the non-transitivity warning that
+ * comes with them. Level and cheaper is why `eval` still defaults here.
  *
  * ### Two things the ablation found
  *
@@ -75,7 +92,7 @@ import ao.snakewarz.core.snake.SnakeId
  * With everything but [territoryWeight] at zero this is a plain proportional-territory evaluation,
  * which is why there is no separate slug for one — the ablation is a configuration, not a bot.
  */
-internal class ExpertEval(
+internal class TerritoryEval(
     grid: Grid,
     private val slotCount: Int,
     /** How far a share of the board moves the reading away from even, while it is still contested. */
@@ -94,10 +111,11 @@ internal class ExpertEval(
      *
      * A *constant* rather than the squares a sweep actually reached, because two evaluations
      * compared at one nominal allowance have to be paying for the same thing. That it is the same
-     * constant a random rollout pays is [EvaluationCost]'s open question, not a claim: they are
-     * equal iterations rather than equal milliseconds until somebody measures the ratio.
+     * constant [SurvivalEval] pays for several times the work is [EvaluationCost]'s open question
+     * rather than a claim: they are equal iterations rather than equal milliseconds until somebody
+     * measures the ratio.
      */
-    override val cost: Int get() = EvaluationCost.EXPERT
+    override val cost: Int get() = EvaluationCost.TERRITORY
 
     override fun valuesInto(playout: Playout, into: DoubleArray) {
         val board = playout.board
@@ -187,7 +205,7 @@ internal class ExpertEval(
         }
     }
 
-    override fun toString(): String = "ExpertEval"
+    override fun toString(): String = "TerritoryEval"
 
     private companion object {
         /** Ways out of a square, so `liberties / LIBERTIES` is a fraction of the most there can be. */

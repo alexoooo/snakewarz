@@ -20,25 +20,30 @@ import ao.snakewarz.core.snake.SnakeId
  * The same shape as [UctBot] — descend, expand, judge, credit — with the two things a network would
  * supply written out by hand instead. The **policy** becomes a proportional prior over how much room
  * each move leads into ([priorsInto]), and the **value** becomes a [LeafEval] that appraises the
- * position rather than playing it out ([ExpertEval]).
+ * position rather than playing it out ([TerritoryEval]).
  *
  * ### The evaluation is the experiment, so everything else is held still
  *
  * The interesting claim about a hand-written evaluation is not that it works but that it is worth
- * what it costs, and that is a comparison. So `eval` is a knob rather than a decision, and
- * [RolloutEval] is one of its values: at `eval=rollout` this bot judges a leaf exactly as [UctBot]
- * does, and a batch of `eval=expert` against `eval=rollout` changes the value function and nothing
- * else. [MobilityEval] is the other end of the same question — near-free, so it buys about a hundred
- * times the tree.
+ * what it costs, and that is a comparison. So `eval` is a knob rather than a decision, and its three
+ * values are the same search told to think three prices' worth: [MobilityEval] reads sixteen squares
+ * and buys about a hundred times the tree, [TerritoryEval] sweeps the board once, [SurvivalEval]
+ * sweeps it and then works out how much of each region its owner could actually use. Two entrants
+ * differing only in that line is what makes a batch over them mean anything.
+ *
+ * `uct` is the control this bot is read against, and it is a real one: a tree with a random rollout
+ * where this has an appraisal. There was once an `eval=rollout` that put the same rollout behind
+ * *this* tree, and it is gone — it said nothing `uct` was not already saying, and it made the knob
+ * offer a setting nobody would pick to play against.
  *
  * ### Every evaluation pays the same, whatever it does
  *
- * An allowance is counted in evaluations, and this is the bot where that matters: `eval=rollout`
- * plays a hundred-odd moves out and `eval=mobility` reads sixteen squares, and both are one
- * iteration of the same search. So the charge is [LeafEval.cost], paid by asking for the iteration's
- * playout before descending, and the three settings differ in what they buy per unit rather than in
- * how many units they can smuggle. What the units are *worth* against each other is [EvaluationCost],
- * where the calibration is openly still to do.
+ * An allowance is counted in evaluations, and this is the bot where that matters: `eval=survival`
+ * takes a whole board apart and `eval=mobility` reads sixteen squares, and both are one iteration of
+ * the same search. So the charge is [LeafEval.cost], paid by asking for the iteration's playout
+ * before descending, and the three settings differ in what they buy per unit rather than in how many
+ * units they can smuggle. What the units are *worth* against each other is [EvaluationCost], where
+ * the calibration is openly still to do.
  *
  * ### No logarithm
  *
@@ -50,7 +55,6 @@ import ao.snakewarz.core.snake.SnakeId
  * `budget.remaining` and the answer then comes from [SpaceBot]'s flood fill, which charges nothing.
  */
 public class PuctBot(setup: BotSetup) : Bot {
-    private val rng = setup.rng
     private val unbudgeted = SpaceBot(setup)
     private val slotCount = setup.opponentCount + 1
 
@@ -67,13 +71,21 @@ public class PuctBot(setup: BotSetup) : Bot {
     private val directions = Direction.entries
 
     private val eval: LeafEval = when (EVAL.read(setup.params)) {
-        ROLLOUT -> RolloutEval(slotCount, rng)
         MOBILITY -> MobilityEval(slotCount)
+
+        SURVIVAL -> SurvivalEval(
+            setup.grid,
+            slotCount,
+            TERRITORY_WEIGHT.read(setup.params),
+            MOBILITY_WEIGHT.read(setup.params),
+            TRAP_PENALTY.read(setup.params),
+            SEPARATION_BONUS.read(setup.params),
+        )
 
         // `else` rather than a third named branch: BotKnob.Choice.read is total, so a value from a
         // mangled `#r=` fragment arrives here, and this is a field initializer with nothing above it
         // to catch a throw.
-        else -> ExpertEval(
+        else -> TerritoryEval(
             setup.grid,
             slotCount,
             TERRITORY_WEIGHT.read(setup.params),
@@ -235,15 +247,22 @@ public class PuctBot(setup: BotSetup) : Bot {
         /**
          * The experiment, and therefore the tradeoff — three value functions rather than three
          * settings of one. Each buys a different tree at the same allowance: [MOBILITY] is near-free
-         * and buys about a hundred times the search, [ROLLOUT] plays the position out, [EXPERT]
-         * appraises it. There is no ordering between them that holds on every board.
+         * and buys about a hundred times the search, [TERRITORY] sweeps the board once, [SURVIVAL]
+         * takes the sweep apart again. There is no ordering between them that holds on every board.
+         *
+         * **This knob used to offer `expert`, and [TERRITORY] is that same evaluation renamed.** A
+         * `Choice` value is frozen by SW-05 because it travels in a replay URL, and the rename is
+         * defensible only because [BotKnob.Choice.read] is total: `eval=expert` is not in [values],
+         * so it falls through to [default], and [default] is the evaluation it named. That holds for
+         * exactly as long as [TERRITORY] stays the default — moving it is what would make an old
+         * link mean something new, so move it only deliberately and say so here.
          */
         val EVAL = BotKnob.Choice(
             name = "eval",
             label = "Evaluation",
-            help = "How a leaf is judged: a random rollout, liberties, or the hand-written appraisal.",
-            default = EXPERT,
-            values = listOf(ROLLOUT, MOBILITY, EXPERT),
+            help = "How a leaf is judged: liberties, a share of the board, or how long each snake can last.",
+            default = TERRITORY,
+            values = listOf(TERRITORY, MOBILITY, SURVIVAL),
             tradeoff = true,
         )
 
@@ -308,21 +327,24 @@ public class PuctBot(setup: BotSetup) : Bot {
          *
          * The sidebar shows the first two — see [ao.snakewarz.botapi.registry.BotEntry.offered]. The other
          * five are the ablation, and the ablation is a `:lab` batch rather than a form: [CPUCT] has
-         * an optimum a sweep finds, and the four [ExpertEval] weights do nothing at all unless
-         * [EVAL] is [EXPERT], so four of the seven rows used to be dead most of the time they were
-         * on screen.
+         * an optimum a sweep finds, and the four weights do nothing at all at [MOBILITY], so four of
+         * the seven rows used to be dead most of the time they were on screen.
+         *
+         * [TerritoryEval] and [SurvivalEval] read the same four, with the same meanings — a share of
+         * the board and a share of what can be filled are the same kind of quantity, so a weight
+         * swept against one transfers. That is also why adding [SurvivalEval] added no knob.
          */
         val KNOBS: List<BotKnob> =
             listOf(SEARCH, EVAL, CPUCT, TERRITORY_WEIGHT, MOBILITY_WEIGHT, TRAP_PENALTY, SEPARATION_BONUS)
 
-        /** [RolloutEval] — the control, which is what [UctBot] already does at a leaf. */
-        const val ROLLOUT: String = "rollout"
+        /** [TerritoryEval] — a share of the board off one sweep. Released as `expert`; see [EVAL]. */
+        const val TERRITORY: String = "territory"
 
         /** [MobilityEval] — nearly free, so the allowance buys a far bigger tree. */
         const val MOBILITY: String = "mobility"
 
-        /** [ExpertEval] — the hand-written appraisal this bot exists to try. */
-        const val EXPERT: String = "expert"
+        /** [SurvivalEval] — what each snake could still use, rather than what it can merely see. */
+        const val SURVIVAL: String = "survival"
 
         /**
          * `Q` for a child nobody has visited. Half is "unknown" on a `0..1` scale.

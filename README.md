@@ -44,10 +44,10 @@ And one is experimental:
 PUCT is not a rung because it has not earned one: measured over forty rounds a pairing it is ahead of
 UCT at an equal allowance and only level with it per unit of *time*, and until those two readings
 agree it makes no claim a rung would make. Its `Evaluation` setting is the interesting part —
-`expert` is the hand-written appraisal, `rollout` makes it judge a leaf exactly as UCT does, and
-`mobility` is a near-free reading that gets the same search for a fraction of the clock. Setting two
-seats to the same bot at two evaluations and running a tournament is how those numbers were arrived
-at.
+`territory` reads a share of the board off one sweep, `survival` works out how many moves each snake
+could actually still make, and `mobility` is a near-free reading that gets the same search for a
+fraction of the clock. Setting two seats to the same bot at two evaluations and running a tournament
+is how those numbers were arrived at.
 
 ## Settings
 

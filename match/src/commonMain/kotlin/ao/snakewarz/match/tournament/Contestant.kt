@@ -38,7 +38,7 @@ public class Contestant(
     public fun budgetIn(fallback: Int): Int = budgetPerTurn ?: fallback
 
     /**
-     * The settings that make this what it is, shortest form: `1k/rollout`, `4k`, `rollout`, or
+     * The settings that make this what it is, shortest form: `1k/survival`, `4k`, `survival`, or
      * empty for a stock entry.
      *
      * **The allowance leads, because it is the one setting every search bot scales on.** A bot at
@@ -106,7 +106,7 @@ public class Contestant(
         /**
          * One setting, as short as it can be said and still be read.
          *
-         * A `BotKnob.Choice` value names itself — `rollout` and `expert` are what a person would
+         * A `BotKnob.Choice` value names itself — `territory` and `survival` are what a person would
          * call them — so the knob's name adds nothing but width. A number or a flag names nothing at
          * all, and `uct@1k/7.5` is a worse label than no label, so those keep their key. Decided on
          * the *value* rather than on the knob because a `Contestant` has no registry to ask, which is

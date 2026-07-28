@@ -184,21 +184,26 @@ public class MatchSetup(
          * two targets, and the one people play on — with `ThroughputTest`, and the other search bots
          * on the JVM with `:lab`'s `time`:
          *
-         * | allowance | uct, Chrome | uct, JVM | flat-mc, JVM | puct rollout, JVM | puct expert, JVM |
-         * |---|---|---|---|---|---|
-         * | 250 | 1.1 ms | 0.41 ms | 0.42 ms | 0.42 ms | 1.8 ms |
-         * | 1,000 | 5.0 ms | 2.0 ms | 1.5 ms | 1.8 ms | 5.4 ms |
-         * | 2,000 | 9.8 ms | 4.3 ms | 3.4 ms | 4.4 ms | 12 ms |
-         * | 10,000 | 60 ms | 25 ms | 17 ms | 19 ms | 69 ms |
+         * | allowance | uct, Chrome | uct, JVM | flat-mc, JVM | puct territory, JVM |
+         * |---|---|---|---|---|
+         * | 250 | 1.1 ms | 0.41 ms | 0.42 ms | 1.8 ms |
+         * | 1,000 | 5.0 ms | 2.0 ms | 1.5 ms | 5.4 ms |
+         * | 2,000 | 9.8 ms | 4.3 ms | 3.4 ms | 12 ms |
+         * | 10,000 | 60 ms | 25 ms | 17 ms | 69 ms |
+         *
+         * `puct` at `eval=survival` is dearer again — 2.1x `uct` on a 12x12 and 5.1x on a 20x20, at
+         * this allowance, and the two figures being different is the whole of `EvaluationCost`'s
+         * open problem. It is not on this table because the table is what sets a *default*, and the
+         * default evaluation is `territory`.
          *
          * 1,000 puts `uct` at 5 ms of the 8 ms slice in Chrome. That is inside it with less room
          * than the previous default had, and the trade was made deliberately: the number is now a
          * count of *iterations*, which is a thing a person can reason about — a thousand rollouts a
          * turn — where 40,000 simulated moves was a number whose meaning changed with the bot
          * reading it. The knob's ceiling of 10,000 is far past the slice, and that is what a ceiling
-         * is for: somewhere to reach deliberately, not somewhere to sit. `puct` at `eval=expert` is
-         * the one shipped configuration that overruns the slice at this figure, which is the honest
-         * reading of it being registered as experimental and of `EvaluationCost` being uncalibrated.
+         * is for: somewhere to reach deliberately, not somewhere to sit. `puct` overruns the slice at
+         * this figure at either of its two appraisals, which is the honest reading of it being
+         * registered as experimental and of `EvaluationCost` being uncalibrated.
          *
          * The unit changed under this figure and the number changed with it. An allowance used to
          * count *simulated moves*, where 40,000 bought `uct` about 4 ms; counting evaluations makes

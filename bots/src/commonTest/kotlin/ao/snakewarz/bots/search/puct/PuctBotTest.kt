@@ -59,8 +59,8 @@ class PuctBotTest {
     @Test
     fun `an allowance buys the same search whichever evaluation is spending it`() {
         // The point of counting evaluations rather than simulated moves, stated as an assertion.
-        // `expert` sweeps the whole board and `mobility` reads sixteen squares, and the two take
-        // wildly different wall clock -- but one iteration is one unit, so at the same allowance
+        // `survival` takes the whole board apart and `mobility` reads sixteen squares, and the two
+        // take wildly different wall clock -- but one iteration is one unit, so at the same allowance
         // they build the same tree and a matrix comparing them is comparing the value functions.
         val opening = boardOf(12, 12, 0 to 0, 11 to 11)
 
@@ -100,23 +100,30 @@ class PuctBotTest {
     }
 
     @Test
-    fun `at a static evaluation it needs no randomness at all`() {
-        // The claim UctBot cannot make. PUCT orders its unvisited children by the prior rather than
-        // by a randomised score, and ExpertEval draws nothing, so the whole turn is arithmetic.
-        val first = puctOn(boardOf(9, 9, 4 to 4, 0 to 0), PuctBot.EXPERT, seed = 1)
-        val second = puctOn(boardOf(9, 9, 4 to 4, 0 to 0), PuctBot.EXPERT, seed = 987_654)
+    fun `it needs no randomness at all, whichever evaluation it is given`() {
+        // The claim UctBot cannot make, and it is now true of every setting rather than of one. PUCT
+        // orders its unvisited children by the prior rather than by a randomised score, and none of
+        // the three evaluations draws, so a whole turn is arithmetic. Two seeds, one answer.
+        for (eval in EVALS) {
+            val first = puctOn(boardOf(9, 9, 4 to 4, 0 to 0), eval, seed = 1)
+            val second = puctOn(boardOf(9, 9, 4 to 4, 0 to 0), eval, seed = 987_654)
 
-        assertEquals(
-            moveFrom(first, boardOf(9, 9, 4 to 4, 0 to 0)),
-            moveFrom(second, boardOf(9, 9, 4 to 4, 0 to 0)),
-            "two different streams disagreed, so something drew from one",
-        )
+            assertEquals(
+                moveFrom(first, boardOf(9, 9, 4 to 4, 0 to 0)),
+                moveFrom(second, boardOf(9, 9, 4 to 4, 0 to 0)),
+                "$eval disagreed with itself across two streams, so something drew from one",
+            )
+        }
     }
 
     @Test
-    fun `the same position and seed produce the same move, rollouts included`() {
-        val first = moveFrom(puctOn(boardOf(9, 9, 4 to 4, 0 to 0), PuctBot.ROLLOUT, 99), boardOf(9, 9, 4 to 4, 0 to 0))
-        val second = moveFrom(puctOn(boardOf(9, 9, 4 to 4, 0 to 0), PuctBot.ROLLOUT, 99), boardOf(9, 9, 4 to 4, 0 to 0))
+    fun `the fallback with no allowance is the one place a stream is still read, and it is stable`() {
+        // Handed nothing, the answer comes from SpaceBot, which breaks ties from the slot's own
+        // stream. Same seed, same move -- otherwise a replay of a starved match would not reproduce.
+        val board = boardOf(9, 9, 4 to 4, 0 to 0)
+
+        val first = moveFrom(puctOn(board, PuctBot.TERRITORY, seed = 99), board, Budget(0))
+        val second = moveFrom(puctOn(board, PuctBot.TERRITORY, seed = 99), board, Budget(0))
 
         assertEquals(first, second)
     }
@@ -202,7 +209,7 @@ class PuctBotTest {
         (bot.chooseMove(turnOn(board, board.toAct, budget)) as Decision.Move).direction
 
     private companion object {
-        val EVALS = listOf(PuctBot.ROLLOUT, PuctBot.MOBILITY, PuctBot.EXPERT)
+        val EVALS = listOf(PuctBot.TERRITORY, PuctBot.MOBILITY, PuctBot.SURVIVAL)
 
         /** Evaluations a turn: a fifth of the shipped allowance, which is a real search and is quick. */
         const val ALLOWANCE = 200

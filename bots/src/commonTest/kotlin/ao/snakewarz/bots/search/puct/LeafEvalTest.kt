@@ -1,13 +1,11 @@
 package ao.snakewarz.bots.search.puct
 
 import ao.snakewarz.botapi.scratch.Playout
-import ao.snakewarz.bots.at
 import ao.snakewarz.bots.boardOf
 import ao.snakewarz.bots.search.SpaceOwnership
 import ao.snakewarz.bots.turnOn
 import ao.snakewarz.core.Budget
 import ao.snakewarz.core.grid.Direction
-import ao.snakewarz.core.random.SplitMix64
 import ao.snakewarz.core.rules.Board
 import ao.snakewarz.core.rules.EliminationReason
 import ao.snakewarz.core.rules.MatchEnd
@@ -16,17 +14,20 @@ import ao.snakewarz.core.rules.RulesConfig
 import ao.snakewarz.core.snake.SnakeId
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
  * The three [LeafEval]s, on positions small enough to work out by hand.
  *
+ * What every implementation owes the tree whatever it measures — the scale, the reading of a corpse,
+ * one unit of allowance — plus the claims [TerritoryEval] makes on its own. [SurvivalEvalTest]
+ * carries what only the fillable-space reading can say.
+ *
  * The weights are passed in rather than taken from [PuctBot]'s declared defaults, because those are
  * a measurement that will move and these are claims about the *shape* of the appraisal, which should
  * not.
  */
-class ExpertEvalTest {
+class LeafEvalTest {
     @Test
     fun `every reading lands on the scale the tree credits`() {
         val boards = listOf(
@@ -72,7 +73,7 @@ class ExpertEvalTest {
         val board = boardOf(1, 6, 0 to 1, 0 to 5)
         val values = DoubleArray(2)
 
-        expert(board).valuesInto(playoutOn(board), values)
+        territory(board).valuesInto(playoutOn(board), values)
 
         assertTrue(values[0] > LeafEval.EVEN, "the snake with the larger share reads above even: ${values[0]}")
         assertTrue(values[1] < LeafEval.EVEN, "and its opponent below it: ${values[1]}")
@@ -88,14 +89,14 @@ class ExpertEvalTest {
         val values = DoubleArray(2)
         // Everything but the separation branch is off, so this is about that branch alone: slot 1
         // has nothing legal left as well as nothing to fill, and the readings would otherwise tangle.
-        expert(board, separationBonus = 0.9, trapPenalty = 0.0, mobilityWeight = 0.0)
+        territory(board, separationBonus = 0.9, trapPenalty = 0.0, mobilityWeight = 0.0)
             .valuesInto(playoutOn(board), values)
 
         assertTrue(values[0] >= 0.9, "fifteen squares against none is decided, not close: ${values[0]}")
         assertTrue(values[1] <= 0.1, "and the shut-in snake is losing it: ${values[1]}")
 
         val flat = DoubleArray(2)
-        expert(board, separationBonus = 0.0, trapPenalty = 0.0, mobilityWeight = 0.0)
+        territory(board, separationBonus = 0.0, trapPenalty = 0.0, mobilityWeight = 0.0)
             .valuesInto(playoutOn(board), flat)
 
         assertEquals(LeafEval.EVEN, flat[0], "with the bonus off, a decided game reads as an even one")
@@ -122,7 +123,7 @@ class ExpertEvalTest {
 
         val values = DoubleArray(2)
         // Separation off, so the only thing left to move slot 1 off even is the penalty.
-        expert(board, separationBonus = 0.0, trapPenalty = 0.35, mobilityWeight = 0.0)
+        territory(board, separationBonus = 0.0, trapPenalty = 0.35, mobilityWeight = 0.0)
             .valuesInto(playoutOn(board), values)
 
         assertEquals(LeafEval.EVEN, values[0], "the snake with room to move is not penalised")
@@ -160,22 +161,21 @@ class ExpertEvalTest {
         val board = boardOf(5, 5, 0 to 0, 4 to 4)
 
         assertEquals(1, MobilityEval(2).cost)
-        assertEquals(1, RolloutEval(2, SplitMix64(7)).cost)
-        assertEquals(1, expert(board).cost)
+        assertEquals(1, territory(board).cost)
+        assertEquals(1, survival(board).cost)
     }
 
     @Test
-    fun `a rollout is paid for by the playout it is handed, and always finishes`() {
-        val board = boardOf(1, 2, 0 to 0, 0 to 1)
+    fun `an evaluation is paid for by the playout it is handed, whatever it then does`() {
+        // The dearest of the three, on a board big enough for it to walk: one unit buys the whole
+        // appraisal however much of the board that turns out to be.
+        val board = boardOf(6, 6, 0 to 0, 5 to 5)
         val values = DoubleArray(2)
 
-        // One unit, which buys the whole rollout however many moves it turns out to run.
         val budget = Budget(1)
-        RolloutEval(2, SplitMix64(7)).valuesInto(playoutOn(board, budget), values)
+        survival(board).valuesInto(playoutOn(board, budget), values)
 
         assertEquals(1, budget.consumed)
-        // A two-square board resolves rather than ties, so one of these is a win and one a loss.
-        assertTrue(values[0] + values[1] == LeafEval.WIN, "${values.toList()}")
     }
 
     @Test
@@ -208,20 +208,30 @@ class ExpertEvalTest {
         turnOn(board, board.toAct, budget).scratch.playout()
 
     /**
-     * An [ExpertEval] sized for [board].
+     * A [TerritoryEval] sized for [board].
      *
      * The grid comes off the board rather than being defaulted, because the sweep inside steps
      * through *its* grid's padded address space — a 5x5 has a stride of seven and a 1x6 has eight,
      * so an evaluation built for one would read a different board than the one it was handed.
      */
-    private fun expert(
+    private fun territory(
         board: Board,
         separationBonus: Double = 0.9,
         trapPenalty: Double = 0.35,
         territoryWeight: Double = 0.7,
         mobilityWeight: Double = 0.2,
-    ): ExpertEval =
-        ExpertEval(board.grid, board.snakeCount, territoryWeight, mobilityWeight, trapPenalty, separationBonus)
+    ): TerritoryEval =
+        TerritoryEval(board.grid, board.snakeCount, territoryWeight, mobilityWeight, trapPenalty, separationBonus)
+
+    /** A [SurvivalEval] sized for [board], on the same weights and for the same reason. */
+    private fun survival(
+        board: Board,
+        separationBonus: Double = 0.9,
+        trapPenalty: Double = 0.35,
+        territoryWeight: Double = 0.7,
+        mobilityWeight: Double = 0.2,
+    ): SurvivalEval =
+        SurvivalEval(board.grid, board.snakeCount, territoryWeight, mobilityWeight, trapPenalty, separationBonus)
 
     /**
      * Slot 0's reading of a corridor divided into two rooms of the sizes asked for.
@@ -240,13 +250,13 @@ class ExpertEvalTest {
         assertTrue(space.isolated(0) && space.isolated(1), "the fixture is only interesting if they are apart")
 
         val values = DoubleArray(2)
-        expert(board, mobilityWeight = 0.0, trapPenalty = 0.0).valuesInto(playoutOn(board), values)
+        territory(board, mobilityWeight = 0.0, trapPenalty = 0.0).valuesInto(playoutOn(board), values)
         return values[0]
     }
 
     private fun evalsFor(board: Board): List<LeafEval> = listOf(
-        expert(board),
+        territory(board),
         MobilityEval(board.snakeCount),
-        RolloutEval(board.snakeCount, SplitMix64(3)),
+        survival(board),
     )
 }

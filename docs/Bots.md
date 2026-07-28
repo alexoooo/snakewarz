@@ -14,7 +14,7 @@ the one below it over twenty matches — `BotLadderTest` is the gate, and it is 
 suite a *correct but useless* bot would fail. Then come the bots contributed to the original project,
 ordered by slug and claiming nothing about strength: `burninhell`, `tomsnake`. Then **experimental**:
 `puct`, which is ahead of `uct` at an equal allowance and level with it per unit of *time*, and the
-gap between those two readings is the reason it makes no claim a rung would make — see `ExpertEval`
+gap between those two readings is the reason it makes no claim a rung would make — see `TerritoryEval`
 for both tables. All three sections are gated by the same contract suite.
 
 `:ui` opens slot 2 on the slug `uct` — the page should start on the game somebody came here to play
@@ -56,7 +56,9 @@ distances and first steps, `SpaceOwnership` for the board carved up between the 
 `isolated`, for whether a snake's ground still runs into anybody else's — `nearestOpponent` for
 `PvpAi`'s reduction, `randomPlayout` for a rollout, `truncatedPlayout` for a short one judged by
 ownership, `UctTree` for a flat-array search tree, `PuctTree` for one guided by a prior, and
-`LeafEval` for a hand-written value at a leaf.
+`LeafEval` for a hand-written value at a leaf. Inside `search.puct`, `TempoOwnership` is the sweep
+with turn order and retracting tails in it, and `FillableSpace` answers how much of a region a single
+walk can actually spend — which is not how big it is.
 
 `truncatedPlayout` and `SpaceOwnership` ship **wired and off**, and the reason is measured rather
 than aesthetic — see `UctBot.ROLLOUT_DEPTH`. Do not turn them on without re-running
@@ -88,7 +90,7 @@ register("my-bot", "My Bot", ::MyBot, MyBot.KNOBS)
 ```
 
 The four leaves are `Integer`, `Decimal`, `Flag` and `Choice`. **A `Choice` holds names, never
-ordinals** — its value travels in a replay URL beside its name, so `eval=expert` survives somebody
+ordinals** — its value travels in a replay URL beside its name, so `eval=territory` survives somebody
 reordering the list it offers and `eval=2` does not, with nothing in the codec able to tell. That is
 the same argument that freezes the knob's name, applied to its value.
 
@@ -126,8 +128,8 @@ The two lists on `BotEntry` are that split. `params` is complete and is what `:l
 allowance, `uct`'s `exploration`, and `puct`'s `eval`. `ShippedBotsTest` pins that list, so a knob
 cannot arrive on the sidebar without somebody having said so.
 
-The failure this prevents is quiet and was real: `puct` used to show four `ExpertEval` weights that do
-nothing at all unless `eval=expert`, so most of the time most of that panel was inert, and `uct`
+The failure this prevents is quiet and was real: `puct` used to show four appraisal weights that do
+nothing at all at `eval=mobility`, so most of the time most of that panel was inert, and `uct`
 showed a tree ceiling the allowance already bounds. Neither was wrong, and neither was answerable.
 
 For a rollout, take `turn.scratch.playout()` and spin on `outcome`:
@@ -157,8 +159,8 @@ that never simulates nothing at all.
   has begun always finishes and a search never has to tell an exhausted line from a real one part
   way through crediting it. `tryConsume` refuses and charges nothing when there is not enough left.
 - **A matrix at "equal allowance" compares the bots rather than their arithmetic.** `puct` at
-  `eval=expert` sweeps the whole board and at `eval=mobility` reads sixteen squares; both are one
-  iteration, so the same number means the same amount of search.
+  `eval=survival` takes the whole board apart and at `eval=mobility` reads sixteen squares; both are
+  one iteration, so the same number means the same amount of search.
 
 What it does *not* claim is equal wall clock. `bots/search`'s `EvaluationCost` is the exchange rate,
 it carries the measurements, and every entry in it is `1` today — so read a win-rate matrix with the
@@ -176,8 +178,8 @@ here were settled by a batch rather than by an argument. Each of those numbers i
 something is or is not in the code, which is exactly the kind of fact that gets re-proposed every
 year or two. Four live in the KDoc of the constant they set: `UctBot.ROLLOUT_DEPTH` carries the
 rollout-truncation table, `MatchSetup.DEFAULT_BUDGET_PER_TURN` the allowance table and the 8ms frame
-budget that sets it, `ExpertEval` the two that keep `puct` in the experimental section rather than on
-the ladder, and `EvaluationCost` what an evaluation of each kind actually costs — the one that is
+budget that sets it, `TerritoryEval` the two that keep `puct` in the experimental section rather than
+on the ladder, and `EvaluationCost` what an evaluation of each kind actually costs — the one that is
 recorded and deliberately *not* acted on. Re-running any of them is a `:lab` command rather than an
 archaeology.
 

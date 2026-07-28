@@ -2,7 +2,7 @@ package ao.snakewarz.bots.search
 
 import ao.snakewarz.bots.at
 import ao.snakewarz.bots.boardOf
-import ao.snakewarz.bots.search.puct.ExpertEval
+import ao.snakewarz.bots.search.puct.TerritoryEval
 import ao.snakewarz.core.grid.Direction
 import ao.snakewarz.core.grid.Grid
 import ao.snakewarz.core.rules.EliminationReason
@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
  * [SpaceOwnership.isolated] — whether a snake's ground still runs into anybody else's.
  *
  * The counts themselves are covered by `RolloutTruncationTest`, which is where they were needed
- * first. This is about the question [ExpertEval] asks, and about the wrong way to answer it: a
+ * first. This is about the question [TerritoryEval] asks, and about the wrong way to answer it: a
  * separated snake's game is arithmetic rather than a fight, and reading one as the other is the
  * difference between a value that saturates and a value that does not.
  */

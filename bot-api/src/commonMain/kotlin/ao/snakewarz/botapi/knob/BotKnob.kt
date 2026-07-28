@@ -157,7 +157,7 @@ public sealed class BotKnob(
      * **Names rather than ordinals**, and that is the whole design. A value travels in the replay URL
      * beside its knob name, so it is frozen by exactly the argument that freezes the name — an
      * [Integer] over `0..2` writes `eval=2`, and reordering the list it indexes silently changes what
-     * every existing replay means, with nothing in the codec able to tell. `eval=expert` survives the
+     * every existing replay means, with nothing in the codec able to tell. `eval=territory` survives the
      * reordering, and a value that is dropped outright reads as the default rather than as its
      * neighbour.
      *

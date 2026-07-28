@@ -2,6 +2,7 @@ package ao.snakewarz.bots.search.puct
 
 import ao.snakewarz.botapi.scratch.Playout
 import ao.snakewarz.bots.search.EvaluationCost
+import ao.snakewarz.bots.search.uct.UctBot
 import ao.snakewarz.bots.search.uct.UctTree
 import ao.snakewarz.bots.search.uct.truncatedPlayout
 
@@ -11,8 +12,15 @@ import ao.snakewarz.bots.search.uct.truncatedPlayout
  * This is the thing a neural network would be, in a PUCT that had one. [PuctBot] declares which
  * implementation it wants as a knob rather than picking one, because the interesting question about
  * a hand-written evaluation is not whether it works but whether it is *worth what it costs*, and
- * that is a comparison rather than an assertion. [RolloutEval] is in the list for exactly that
- * reason: it makes the value function the only thing that changes between two entrants.
+ * that is a comparison rather than an assertion. The three answer it at three prices: [MobilityEval]
+ * reads sixteen squares, [TerritoryEval] sweeps the board once, [SurvivalEval] sweeps it and then
+ * takes each region apart. Two entrants differing only in this line is what makes a matrix over them
+ * mean something.
+ *
+ * There used to be a fourth that played the position out at random, so that one entrant judged a
+ * leaf exactly as [UctBot] does. It is gone: `uct` was always in the matrix beside it, and `uct` is
+ * that control — a tree with a random rollout at the leaf — without also being a setting nobody
+ * would choose to play against.
  *
  * ### One value per slot, not one number
  *
