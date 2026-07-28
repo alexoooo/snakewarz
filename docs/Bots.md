@@ -171,6 +171,35 @@ Adding a bot needs **no HTML change**: the pickers in the sidebar are filled fro
 at startup, and each seat's settings rows are built from that entry's `knobs`. Those are the only two
 places `:ui` builds DOM, and this is why.
 
+## Adopting a measured setting
+
+`:lab`'s `tune` searches a bot's declared knobs and **recommends**; it never edits a default. That is
+not caution. Changing a default moves all twelve `GoldenMoveStreamTest` hashes, and a process that
+could change both would turn SW-01's "a golden failure is a question, never a hash to update" into a
+formality — which is exactly the way that rule gets defeated without anybody noticing.
+
+So adopting one is a deliberate act, in this order:
+
+1. **Re-confirm at the allowance the bot ships at.** A knob tuned at one budget is tuned at that
+   budget. `tune puct --knobs cpuct --budget 400` recommends `cpuct=0.5` at +73 Elo confirmed over
+   280 fresh boards; the same value re-tested at the shipped 1000 measures **−19 ±23**. Exploration
+   constants trade against search depth, and that trade moves with the allowance.
+2. **`play` it against the ladder rungs.** A knob can be worth points against its own bot and cost
+   them against a different opponent — snakes are a rock-paper-scissors sort of game, and `rate`
+   prints the residual cells where a single ordering fails to describe a pairing.
+3. Change the `default` in the knob's declaration. One literal, because the declaration is the
+   reader — see above.
+4. `GoldenMoveStreamTest` fails. **Re-pin it recording the measurement that moved it**: which run,
+   what delta, over how many boards, at what bound. That record is the answer to the question a
+   golden failure asks.
+5. Re-check `BotLadderTest`'s thresholds and update the measured figures in its comments.
+6. Put the table in the KDoc beside the constant, the way the four below already do.
+
+A **hardcoded** constant is not searchable, and `PuctBot.FIRST_PLAY`'s KDoc says as much
+("Promote it if there is"). The route is to declare it as a knob with `tradeoff = false` first —
+which by itself changes nothing, and `BotContractTest` proves it — then sweep it, then set the
+default.
+
 ## Measurements, and what they are the reason for
 
 A search bot's strength is how much search fits in its allowance, so most of the design questions

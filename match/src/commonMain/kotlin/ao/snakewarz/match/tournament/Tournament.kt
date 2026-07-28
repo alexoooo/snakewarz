@@ -1,11 +1,9 @@
 package ao.snakewarz.match.tournament
 
 import ao.snakewarz.botapi.registry.BotRegistry
-import ao.snakewarz.core.rules.MatchOutcome
 import ao.snakewarz.match.Match
 import ao.snakewarz.match.MatchSetup
 import ao.snakewarz.match.StepResult
-import ao.snakewarz.match.stats.MatchStats
 
 /**
  * A batch of matches, played one **turn** at a time, filling in a win-rate matrix as it goes.
@@ -22,7 +20,7 @@ import ao.snakewarz.match.stats.MatchStats
  * is worth. A tournament of search bots therefore runs at a visible pace on a page that stays alive,
  * with no worker, no threads and no asynchrony anywhere in the driver.
  *
- * The schedule is fixed at construction and is a pure function of [config], so a tournament is as
+ * The [schedule] is fixed at construction and is a pure function of [config], so a tournament is as
  * reproducible as a match: same config, same table, on either target.
  *
  * Bots are resolved through the [BotRegistry] *interface*, like everything else here. `:match` has
@@ -34,6 +32,9 @@ public class Tournament(
 ) {
     /** Filled in as the batch runs. The same instance every time — [TournamentTable.copy] to keep one. */
     public val table: TournamentTable = TournamentTable(config.contestants)
+
+    /** Which matches this batch is and who sits where, readable without playing any of them. */
+    public val schedule: TournamentSchedule = TournamentSchedule(config)
 
     public val matchCount: Int = config.matchCount
 
@@ -53,15 +54,6 @@ public class Tournament(
 
     /** Which contestant sits in which slot of [active]. */
     private val seating = IntArray(config.seatsPerMatch)
-
-    /** Every unordered pair, lowest index first — the head-to-head schedule, in order. */
-    private val pairings: List<Pair<Int, Int>> = buildList {
-        for (one in config.contestants.indices) {
-            for (other in one + 1 until config.contestants.size) {
-                add(one to other)
-            }
-        }
-    }
 
     /**
      * The match being played, or — once the batch is over — the last one that was.
@@ -100,9 +92,9 @@ public class Tournament(
             else -> turnsPlayed++
         }
 
-        val outcome = match.outcome ?: return Progress.PLAYED_TURN
+        match.outcome ?: return Progress.PLAYED_TURN
 
-        record(match, outcome)
+        record(match)
         active = null
         matchesPlayed++
         return if (finished) Progress.FINISHED else Progress.FINISHED_MATCH
@@ -121,31 +113,8 @@ public class Tournament(
         return table
     }
 
-    /**
-     * How match [index] of the schedule is set up, without playing anything.
-     *
-     * A pure function of [config] — which is the whole schedule laid open, so a caller can see what
-     * is coming, and a test can assert that a seed really is played from both seats without having to
-     * catch the tournament between two steps.
-     */
-    public fun setupFor(index: Int): MatchSetup {
-        require(index in 0 until matchCount) { "match $index is not in a schedule of $matchCount" }
-
-        val seats = IntArray(config.seatsPerMatch)
-        seat(index, seats)
-        val seated = seats.map { config.contestants[it] }
-
-        return MatchSetup.create(
-            rows = config.rows,
-            cols = config.cols,
-            slots = seated.map { it.bot },
-            seed = config.seed + (index % config.rounds) / config.seedGroup,
-            rules = config.rules,
-            budgetPerTurn = config.budgetPerTurn,
-            budgets = IntArray(seated.size) { seated[it].budgetIn(config.budgetPerTurn) },
-            slotParams = seated.map { it.params },
-        )
-    }
+    /** How match [index] of the schedule is set up, without playing anything — see [schedule]. */
+    public fun setupFor(index: Int): MatchSetup = schedule.setupFor(index)
 
     override fun toString(): String = "Tournament($matchesPlayed/$matchCount matches, $config)"
 
@@ -164,8 +133,8 @@ public class Tournament(
     // -- internals
 
     private fun startMatch(): Match {
-        val setup = setupFor(matchesPlayed)
-        seat(matchesPlayed, seating)
+        val setup = schedule.setupFor(matchesPlayed)
+        schedule.seatInto(matchesPlayed, seating)
 
         val match = Match(setup, registry)
         check(!match.interactive) {
@@ -177,74 +146,9 @@ public class Tournament(
         return match
     }
 
-    /**
-     * Works out who sits where in match [index].
-     *
-     * Head to head, pairing `p` plays rounds `0 until config.rounds`; each pair of rounds shares a
-     * seed and swaps seats, so an odd round is the even one before it played from the other side of
-     * the board. Free for all, each group of `contestants` matches shares a seed and rotates the
-     * seating a step, so everybody starts from every corner of the same board — the seat swap,
-     * generalized. (A group is cut short when the field does not divide [TournamentConfig.rounds];
-     * the matches that were played still counted fairly, there are just fewer of that seed.)
-     */
-    private fun seat(index: Int, into: IntArray) {
-        when (config.format) {
-            TournamentFormat.HEAD_TO_HEAD -> {
-                val pairing = pairings[index / config.rounds]
-                val swapped = (index % config.rounds) % 2 == 1
-                into[0] = if (swapped) pairing.second else pairing.first
-                into[1] = if (swapped) pairing.first else pairing.second
-            }
-
-            TournamentFormat.FREE_FOR_ALL -> {
-                val rotation = index % into.size
-                for (seat in into.indices) {
-                    into[seat] = (seat + rotation) % into.size
-                }
-            }
-        }
-    }
-
-    private fun record(match: Match, outcome: MatchOutcome) {
-        when (config.format) {
-            TournamentFormat.HEAD_TO_HEAD -> {
-                val winner = outcome.winner
-                if (winner.isNone) {
-                    table.recordDraw(seating[0], seating[1])
-                } else {
-                    val winnerSeat = winner.index
-                    table.recordWin(seating[winnerSeat], seating[1 - winnerSeat])
-                }
-            }
-
-            TournamentFormat.FREE_FOR_ALL -> recordOutlasting(match.stats())
-        }
-    }
-
-    /**
-     * Scores a free-for-all pairwise by who outlasted whom, so the one matrix serves both formats.
-     *
-     * A cell is still "how often did the row do better than the column" — the measure just changes
-     * from *beat* to *outlasted*, because a four-way game does not produce one loser per winner. The
-     * winner outlasted the whole field, snakes eliminated on the same move drew with each other, and
-     * survivors of a turn-limit game drew among themselves. For two contestants this is exactly the
-     * head-to-head scoring.
-     */
-    private fun recordOutlasting(stats: MatchStats) {
-        for (one in seating.indices) {
-            for (other in one + 1 until seating.size) {
-                val a = stats.slots[one]
-                val b = stats.slots[other]
-                when {
-                    a.alive == b.alive && (a.alive || a.movesMade == b.movesMade) ->
-                        table.recordDraw(seating[one], seating[other])
-
-                    a.alive || (!b.alive && a.movesMade > b.movesMade) ->
-                        table.recordWin(seating[one], seating[other])
-
-                    else -> table.recordWin(seating[other], seating[one])
-                }
-            }
+    private fun record(match: Match) {
+        for (comparison in pairwiseOutcomes(config.format, match.stats())) {
+            table.record(comparison, seating)
         }
     }
 }

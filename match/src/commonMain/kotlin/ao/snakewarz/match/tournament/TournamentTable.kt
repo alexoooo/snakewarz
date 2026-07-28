@@ -12,7 +12,7 @@ package ao.snakewarz.match.tournament
  * limit out. Calling one a half-win each is a reasonable *summary* — which is what [scoreRate] does,
  * and it is the only place the two are mixed.
  */
-public class TournamentTable internal constructor(
+public class TournamentTable(
     public val contestants: List<Contestant>,
 ) {
     public val size: Int = contestants.size
@@ -22,6 +22,23 @@ public class TournamentTable internal constructor(
 
     /** Symmetric: a draw is recorded in both directions, so every query below reads one cell. */
     private val drawCounts = IntArray(size * size)
+
+    /**
+     * Enters one comparison [pairwiseOutcomes] settled, [seating] naming who sat in which slot.
+     *
+     * The only way in, and it takes a slot-space result plus a seating rather than two contestant
+     * indices on purpose: filling this in means mapping *seats* to *entrants*, that mapping is the
+     * one step easy to get backwards, and a caller that has already done it can no longer be checked.
+     * Doing it here is what lets [Tournament] and a batch runner outside this module share both the
+     * scoring rule and the bookkeeping instead of only the first of them.
+     */
+    public fun record(comparison: PairwiseOutcome, seating: IntArray) {
+        if (comparison.isDraw) {
+            recordDraw(seating[comparison.one.index], seating[comparison.other.index])
+        } else {
+            recordWin(seating[comparison.winner.index], seating[comparison.loser.index])
+        }
+    }
 
     /** The index [contestant] plays under, or `-1` if it is not in this tournament. */
     public fun indexOf(contestant: Contestant): Int = contestants.indexOf(contestant)

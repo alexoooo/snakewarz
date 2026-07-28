@@ -80,6 +80,6 @@ public class TournamentConfig(
         public const val DEFAULT_ROUNDS: Int = 20
 
         /** Head to head is a statement about pairs, so a match of it seats a pair. */
-        private const val HEAD_TO_HEAD_SEATS = 2
+        internal const val HEAD_TO_HEAD_SEATS: Int = 2
     }
 }

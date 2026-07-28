@@ -20,11 +20,125 @@ you have to know before you type a command you already think you know: never bac
 ./gradlew :bots:jvmTest --tests '*ThroughputTest*' -i | grep '\[bench\]'
 ./gradlew :bots:wasmJsBrowserTest -PbrowserTests=true --rerun -i | grep '\[bench\]'
 
-# And the lab, for the questions a batch answers rather than a test. `play` prints the same win
-# matrix the sidebar does; `time` costs one bot's turn against an opponent handed no allowance.
+# And the lab, for the questions a batch answers rather than a test.
 ./gradlew :lab:run --args="play puct:eval=territory puct:eval=survival --rounds 40 --budget 2000"
 ./gradlew :lab:run --args="time puct:eval=survival --budget 2000"
+./gradlew :lab:run --args="rate --board 12x12 --budget 1000"
+./gradlew :lab:run --args="ab uct uct:exploration=2.5"
+./gradlew :lab:run --args="report puct --against uct --worst 5"
+./gradlew :lab:run --args="tune puct --knobs cpuct,territoryWeight"
 ```
+
+## The six subcommands, and which question each answers
+
+They are separate because they are separate measurements, and one of them producing a number does not
+mean another would have produced the same one.
+
+| | Question | Reads | Writes |
+|---|---|---|---|
+| `play` | what happened between these bots | — | the match log |
+| `time` | what one turn of this bot costs | — | — |
+| `rate` | how strong is each, with error bars | the log | — |
+| `ab` | **is this change better, and how sure are we** | — | the match log |
+| `report` | why is it losing | the log | — |
+| `tune` | what should this knob be | — | a journal |
+
+`ab` is the one to reach for when deciding whether to keep a change. `play` gives a matrix, and a
+matrix has to be read against a threshold somebody invented; `ab` plays until the evidence settles
+and then says which hypothesis it settled on.
+
+`rate` refuses to pool runs that are not comparable — a different board, allowance, openings mode or
+**build** is a different measurement — because a log accumulated over weeks would otherwise average
+yesterday's bots with today's under one name. `--pool true` overrides it and says so in the output.
+
+## Openings, and the four-distinct-games problem
+
+**A `--openings fixed` batch of a hundred matches can be four games played twenty-five times.**
+
+Spawns do not depend on the seed at all — `mostDistantSpawns` puts two snakes in opposite corners on
+every board — and the seed's only other effect on the position is the turn order, which for two slots
+has two values. So a pairing of bots that draw no randomness plays at most four distinct games however
+many rounds are asked for, and `puct` against `puct` is exactly such a pairing: the flagship
+invocation above was, until openings existed, measuring four games and reporting forty.
+
+So `--openings mirrored` is the default: a square drawn from the seed with the opponent at its image
+through the centre of the board. Point reflection maps the board onto itself and takes each direction
+to its opposite, so neither side of the draw is the better one — two identical bots score exactly half
+on every board, which is the test that keeps it honest. `fixed` is kept because the shipped ladder was
+measured under it.
+
+**Every batch prints how many of its matches were distinct games.** Read that number before any
+other. The two openings modes gave opposite answers to
+`play puct:eval=territory puct:eval=survival --rounds 40 --budget 300`: 22-18 to territory over four
+distinct games, 15-25 against it over thirty-six.
+
+## The match log
+
+Every `play` and `ab` appends to `.lab/` (gitignored), which is what `rate` and `report` read.
+
+- `runs.tsv` — one row per batch: board, rules, allowance, openings, and a **build fingerprint**
+  (`git rev-parse --short HEAD`, plus `+dirty`). An expanded spec pins a bot's settings; nothing else
+  pins its code, and pooling across a change averages away the improvement that change was made to
+  measure.
+- `matches.tsv` — one row per **(match, seat)**, the match's own columns repeated on each. That
+  denormalisation is deliberate: a run killed mid-write leaves a line that does not parse and gets
+  dropped, rather than a dangling join.
+- `replays.tsv` — the encoded move streams, apart because they are an order of magnitude larger and
+  only a person opening one match ever reads them. `--replays none` for a sweep.
+
+An entrant is recorded **expanded** — every declared knob at the value it played under — so a log line
+keeps its meaning after a default moves. `rate` and `report` shorten it back down for display by
+dropping whatever matches the registry's defaults today.
+
+## Deciding whether a change helped
+
+```bash
+./gradlew :lab:run --args="ab uct uct:exploration=2.5 --elo0 0 --elo1 10"
+```
+
+A sequential test, on **boards** rather than matches: the schedule plays each seed twice with the
+seats exchanged, so a board is one observation scored in quarters and its variance is far below twice
+a single game's. It stops as soon as the likelihood ratio clears either bound.
+
+Two settings decide what a run costs, and they pull against each other:
+
+- `--elo1` is **how small a gain is worth finding**, and it dominates the cost. The test compares two
+  *hypotheses*, so how fast it decides depends on how far apart they are and not on how large the real
+  effect is. Bounds of `0..3` need thousands of boards even for a large effect; `0..20` settles in
+  tens.
+- `--max-pairs` caps it. A run that stops there **says so** rather than reporting the last number it
+  happened to hold.
+
+`Sprt.MINIMUM_PAIRS` is forty and is not configurable: the variance is estimated from the same sample
+that decides, so a lucky first handful overstates the evidence twice over.
+
+## Tuning a knob
+
+```bash
+./gradlew :lab:run --args="tune puct --knobs cpuct --budget 400"
+```
+
+Coordinate descent over the ranges the bot itself declares — nothing in the tuner names a bot, a knob
+or a value — with each step decided by the same sequential test. A pass that finds nothing halves the
+stride, so the same code does the coarse sweep and the polish. Every decision is appended to
+`.lab/tune-<slug>.tsv` and replayed rather than re-played on a resume, so an overnight sweep survives
+a kill.
+
+Two things about it are load-bearing:
+
+**It confirms on boards it never searched.** A search runs dozens of tests against one set of seeds,
+each with its own false-positive rate, and both push the same way — something looks better eventually.
+The winner is re-run against the original from a disjoint seed base at a finer bound, and that is the
+only number a recommendation carries.
+
+**It never edits a default.** Changing one moves all twelve `GoldenMoveStreamTest` hashes, and a
+process that could change both would turn "a golden failure is a question" (SW-01) into a formality.
+It prints a recommendation; [`Bots.md`](Bots.md) carries what a person does with it.
+
+**A knob tuned at one allowance is tuned at that allowance.** `tune puct --knobs cpuct --budget 400`
+recommends `cpuct=0.5` at +73 Elo, confirmed over 280 fresh boards; the same setting re-tested at the
+shipped 1000 measures −19 ±23. Exploration constants trade against search depth, so the confirming
+run has to be at the allowance the bot actually ships at.
 
 ## Why `:lab` is a module
 
@@ -53,6 +167,9 @@ allowance and params. Parsing is **strict**, unlike
 otherwise quietly measure the default and waste however many minutes the batch takes. A `play` of
 `uct` against `flat-monte-carlo` reproduces `BotLadderTest`'s conclusion, which is how you tell the
 tool is still honest.
+
+Each subcommand declares the options **it** takes, so `--passes` on `rate` is an error rather than a
+setting nobody reads. Same argument, one level up.
 
 ## Why browser tests are off by default
 

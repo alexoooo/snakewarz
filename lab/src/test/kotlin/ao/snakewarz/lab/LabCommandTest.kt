@@ -2,6 +2,8 @@ package ao.snakewarz.lab
 
 import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.bots.ShippedBots
+import ao.snakewarz.lab.arena.Openings
+import ao.snakewarz.lab.log.Replays
 import ao.snakewarz.match.MatchSetup
 import ao.snakewarz.match.tournament.TournamentFormat
 import kotlin.test.Test
@@ -77,7 +79,7 @@ class LabCommandTest {
             ShippedBots,
         )
 
-        val config = (command as LabCommand.Play).config
+        val config = (command as PlayCommand).config
         assertEquals(listOf(BotId("uct"), BotId("space")), config.contestants.map { it.bot })
         assertEquals(9, config.rows)
         assertEquals(11, config.cols)
@@ -89,7 +91,7 @@ class LabCommandTest {
 
     @Test
     fun `play defaults to the ladder's board and the match's own allowance`() {
-        val config = (LabCommand.of(listOf("play", "uct", "space"), ShippedBots) as LabCommand.Play).config
+        val config = (LabCommand.of(listOf("play", "uct", "space"), ShippedBots) as PlayCommand).config
 
         assertEquals(LabCommand.LADDER_BOARD, config.rows)
         assertEquals(LabCommand.LADDER_BOARD, config.cols)
@@ -100,7 +102,7 @@ class LabCommandTest {
     @Test
     fun `one bot at two allowances is two entrants, which is the point of the whole thing`() {
         val config = (
-            LabCommand.of(listOf("play", "uct", "uct:budget=4000"), ShippedBots) as LabCommand.Play
+            LabCommand.of(listOf("play", "uct", "uct:budget=4000"), ShippedBots) as PlayCommand
             ).config
 
         assertEquals(2, config.contestants.size)
@@ -146,12 +148,91 @@ class LabCommandTest {
         val command = LabCommand.of(
             "time uct:budget=500 --rows 8 --cols 8 --passes 2".split(' '),
             ShippedBots,
-        ) as LabCommand.Time
+        ) as TimeCommand
 
         assertEquals(BotId("uct"), command.subject.bot)
         assertEquals(500, command.subject.budgetPerTurn)
         assertEquals(8, command.rows)
         assertEquals(2, command.passes)
+    }
+
+    @Test
+    fun `an option one subcommand takes is not thereby taken by another`() {
+        // A single flat namespace would accept `--passes` on a batch and silently do nothing with
+        // it, which is the same failure the strict knob parsing exists to prevent, one level up.
+        LabCommand.of(listOf("time", "uct", "--passes", "2"), ShippedBots)
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of(listOf("play", "uct", "space", "--passes", "2"), ShippedBots)
+        }
+        assertContains(failure.message.orEmpty(), "--passes")
+    }
+
+    @Test
+    fun `play carries the openings and the thread count`() {
+        val command = LabCommand.of(
+            "play uct space --openings fixed --threads 3 --replays none".split(' '),
+            ShippedBots,
+        ) as PlayCommand
+
+        assertEquals(Openings.FIXED, command.openings)
+        assertEquals(3, command.threads)
+        assertEquals(Replays.NONE, command.replays)
+    }
+
+    @Test
+    fun `play defaults to mirrored openings, because fixed ones repeat the same few games`() {
+        val command = LabCommand.of(listOf("play", "uct", "space"), ShippedBots) as PlayCommand
+
+        assertEquals(Openings.MIRRORED, command.openings)
+    }
+
+    @Test
+    fun `rate reads the log rather than playing, so it takes no entrants`() {
+        assertFailsWith<IllegalArgumentException> { LabCommand.of(listOf("rate", "uct"), ShippedBots) }
+        assertFailsWith<IllegalStateException> { LabCommand.of(listOf("rate", "--log", "none"), ShippedBots) }
+
+        val command = LabCommand.of(listOf("rate", "--board", "12x12"), ShippedBots) as RateCommand
+        assertEquals(mapOf("board" to "12x12"), command.filters)
+    }
+
+    @Test
+    fun `ab compares two different entrants and carries its bounds`() {
+        val command = LabCommand.of(
+            "ab uct uct:exploration=2.5 --elo0 -2 --elo1 12".split(' '),
+            ShippedBots,
+        ) as AbCommand
+
+        assertEquals(-2.0, command.sprt.elo0)
+        assertEquals(12.0, command.sprt.elo1)
+
+        // A sequential test against a copy of itself measures the seating and never settles.
+        val failure = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of(listOf("ab", "uct", "uct"), ShippedBots)
+        }
+        assertContains(failure.message.orEmpty(), "same entrant")
+    }
+
+    @Test
+    fun `tune searches the knobs it is given, and refuses ones nobody declared`() {
+        val command = LabCommand.of("tune puct --knobs cpuct,trapPenalty".split(' '), ShippedBots) as TuneCommand
+
+        assertEquals(BotId("puct"), command.subject)
+        assertEquals(listOf("cpuct", "trapPenalty"), command.knobs.map { it.name })
+
+        val failure = assertFailsWith<IllegalStateException> {
+            LabCommand.of(listOf("tune", "puct", "--knobs", "cpuct,wibble"), ShippedBots)
+        }
+        assertContains(failure.message.orEmpty(), "wibble")
+    }
+
+    @Test
+    fun `a bot with nothing to tune says so rather than searching an empty space`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of(listOf("tune", "space"), ShippedBots)
+        }
+
+        assertContains(failure.message.orEmpty(), "declares no knobs")
     }
 
     @Test

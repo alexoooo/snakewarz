@@ -18,6 +18,10 @@ Thumbs.db
 # Claude Code local session config
 .claude/
 
+# :lab's match log. Measurements, not sources: they are reproducible from the command that
+# produced them, they grow without bound, and a diff of one says nothing.
+.lab/
+
 # Deliberately NOT ignored:
 #   gradle/wrapper/gradle-wrapper.jar  - the wrapper must work on a fresh clone
 #   kotlin-js-store/                   - the npm lockfile pins the webpack/karma toolchain

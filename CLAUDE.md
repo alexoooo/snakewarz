@@ -25,6 +25,7 @@ file per audience. **Read the row that matches before you edit, not after the fi
 | touch `ui/`, `index.html` or `styles.css` | [`docs/UI.md`](docs/UI.md) | The overlay is a second canvas painted whole; get the ordering wrong and every decoration vanishes the frame a batch repaints |
 | change the page shell, the boot path or Pages | [`docs/UI.md`](docs/UI.md#deployment) | `#app` revealed after the first measure sizes every board to the minimum cell |
 | run a build, a benchmark or `:lab` | [`docs/Workflow.md`](docs/Workflow.md) | A mistyped knob name silently measures the default and wastes however long the batch takes |
+| measure whether a change helped, or tune a knob | [`docs/Workflow.md`](docs/Workflow.md#deciding-whether-a-change-helped) | A batch of a hundred matches can be four games played twenty-five times, and nothing in a win matrix says so |
 | compare against the pre-rewrite Java | [`docs/Legacy.md`](docs/Legacy.md) | Several of its algorithms are dead-broken and look intentional |
 
 The module graph, the forbidden edges and the four non-obvious facts are **below, not in `docs/`**:
@@ -44,10 +45,10 @@ hundred matches without the page stopping.
 | `core/` | `:core` module. Padded-grid primitives plus the rules engine, under `grid`, `snake`, `rules` and `random` — `Occupancy`, `SnakeBody`, `Board`, `MatchState`, `SplitMix64` — with `Budget` at the root |
 | `bot-api/` | `:bot-api` module. The contract at the root — `Bot`, `Decision`, `Turn`, `BotSetup` — over `registry` (`BotId`, `BotEntry`, `BotFactory`, `BotRegistry`), `knob`, what a bot lets you tune, and `scratch`, the search arena that makes the budget structural |
 | `bots/` | `:bots` module. `ShippedBots`, the `BotRegistry` implementation, at the root over ten bots. Each cluster keeps the primitive only it reads: `reactive.chase` holds `ChaseBot` with `ShortestPaths` and `nearestOpponent`, `reactive.space` the two room-ranking bots with `FloodFill`, `search.uct` the trees' `portableLog` and `truncatedPlayout`, `search.puct` the `LeafEval` family with the `TempoOwnership` sweep and `FillableSpace` decomposition only the strongest of them reads. `search` itself keeps what all three searchers read — `randomPlayout`, `SpaceOwnership`, `EvaluationCost` — and the flat baseline |
-| `match/` | `:match` module. `Match` driver, `MatchSetup` and spawn placement at the root, over `replay` (`MatchRecord`, `ReplayCodec`), `stats`, `tournament`, and `human` — `InputBuffer`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM |
+| `match/` | `:match` module. `Match` driver, `MatchSetup` and spawn placement at the root, over `replay` (`MatchRecord`, `ReplayCodec`), `stats`, `tournament`, and `human` — `InputBuffer`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM. `tournament` carries the schedule (`TournamentSchedule`), the scoring rule (`pairwiseOutcomes`) and the rating model (`fitRatings`) separately from the driver that uses them |
 | `ui/` | `:ui` module. `GameSession` — the only public class — over `render` (`BoardRenderer`, `Palette`), `chrome`, `model` and `schedule` (`TurnScheduler`, `TournamentRunner`) |
 | `app/` | `:app` module. `main()`, registry injection and `#r=` replay routing. Sixty lines, and that is the point |
-| `lab/` | `:lab` module. A JVM command line for running batches headlessly — the one place outside `:ui` where a clock and a `println` live |
+| `lab/` | `:lab` module. The JVM command line, and the whole measurement loop: `arena` plays a schedule in parallel from diversified openings, `log` keeps every match under a gitignored `.lab/`, `strength` fits ratings and runs the sequential test, `report` diagnoses losses, `tune` searches knob space. The one place outside `:ui` where a clock and a `println` live |
 | `build-logic/` | Convention plugins `snakewarz.pure`, `snakewarz.browser` and `snakewarz.tool`, sharing `registerModulePurityCheck` |
 
 Release 1 is feature-complete, so there is no remaining plan and nothing here is a stub waiting to be
@@ -201,7 +202,14 @@ Standing rules. They override any default the harness carries.
 ./gradlew :app:wasmJsBrowserDevelopmentRun   # local dev server — yours. See below before an agent runs this
 ./gradlew :app:wasmJsBrowserDistribution     # production bundle -> app/build/dist/wasmJs/productionExecutable
 ./gradlew :lab:run --args="play puct:eval=territory puct:eval=survival --rounds 40 --budget 2000"
+./gradlew :lab:run --args="ab uct uct:exploration=2.5"   # is a change better? the one that decides
+./gradlew :lab:run --args="rate"                         # the ladder as Elo, from the match log
 ```
+
+**Read the distinct-games line every batch prints before you read anything else.** Spawns do not
+depend on the seed, so under `--openings fixed` a pairing of bots that draw no randomness plays four
+distinct games however many rounds are asked for. `mirrored` is the default and
+[`docs/Workflow.md`](docs/Workflow.md) carries why.
 
 `:bots` tests take a couple of minutes because `BotLadderTest` plays several hundred complete matches;
 narrow with `--tests` while working on something else. The `[bench]` throughput runs, the `:lab`

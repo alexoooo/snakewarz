@@ -479,7 +479,11 @@ public class GameSession(
             return
         }
         batchMatchesRendered = tournament.matchesPlayed
-        batchTable = if (tournament.matchesPlayed == 0) "" else tournament.table.toString()
+        batchTable = if (tournament.matchesPlayed == 0) {
+            ""
+        } else {
+            tournament.table.toString() + batchRatings(tournament.table)
+        }
     }
 
     private fun batchStatus(): TournamentStatus? {

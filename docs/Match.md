@@ -83,9 +83,28 @@ paces a match. That is what lets a batch of search bots run on a page that stays
 worker and nothing `suspend` below `:ui`.
 
 `Tournament.current` keeps reporting the **last** match after the batch ends, because somebody is
-usually looking at it. `Tournament.setupFor(index)` exposes the whole schedule as a pure function of
-the config — that is how `:ui` paints the opening position before a turn is played, and how the tests
-assert the seat-swapping without catching the driver between two steps.
+usually looking at it.
+
+**The schedule is a class of its own**, and separate from the driver that plays it.
+`TournamentSchedule(config)` answers `setupFor`, `seatingFor`, `seedFor` and `pairKeyFor` without a
+registry, a table or a match — it is a pure function of the config, so asking what is coming should
+not require constructing a player. `:ui` paints an opening position with it, a test asserts the seat
+swap with it, and `:lab` plays the same schedule its own way — in parallel, from diversified openings
+— and is still running *this* schedule rather than a re-derived guess at it.
+
+`pairKeyFor` names the group of matches sharing a board, and it is answered here rather than
+recomputed by every caller that wants it: head to head that is the seed played from both seats, free
+for all a rotation through every seat, and it is the unit a paired comparison counts in. Four
+consumers re-implementing `(index / rounds, (index % rounds) / 2)` is three chances at a silently
+wrong confidence interval.
+
+**Scoring is one function for both formats.** `pairwiseOutcomes(format, stats)` turns a finished
+match into the comparisons it settles, and both `Tournament` and anything measuring a batch from
+outside this module fill their matrix through it and through `TournamentTable.record`. The two
+would otherwise be free to disagree about the same match. That the head-to-head rule and the
+outlasting rule *agree* for two snakes is true today for a non-obvious reason — `Board` resolves a
+field of two the instant one dies, so the `movesMade` tiebreak never fires — and is one rules change
+away from not holding, which is why the function asks the format rather than assuming the answer.
 
 The contestants are the **slot pickers**, not a second list of bots: a tournament is the question the
 sidebar already asks, over a few hundred matches. A human seat and a duplicate both drop out.
@@ -105,6 +124,37 @@ is `null` rather than pre-filled, so `TournamentConfig.budgetPerTurn` still has 
 `TournamentTable` heads its columns with `Contestant.label` — `uct` beside `uct@4k` — numbers a
 repeated label `·2`, and spells the settings out in a legend under the grid rather than in the
 headings, which have a narrow panel to fit in.
+
+## Ratings, and what a rating will not tell you
+
+`fitRatings(table)` reads the matrix as a single ordering, which is what a matrix cannot give once
+the field is larger than a pair: a bot can win more matches than another and still lose to it, having
+met different opposition. It is Bradley-Terry fitted by the Zermelo iteration — half a dozen lines, no
+derivatives, no matrix — with a draw worth half a win because `scoreRate` already says so and two
+summaries disagreeing about a draw would be worse than one being slightly conservative.
+
+Two things about it are there to stop it overclaiming.
+
+**A phantom opponent bounds the fit.** Left alone the likelihood has no maximum for a contestant that
+never lost — it climbs forever — so every contestant gets one virtual drawn game against a fixed
+strength of `1`. That is also why nothing is rescaled *inside* the loop: the phantom makes the overall
+scale mean something, so re-centring each pass would walk off the fixed point and make the answer
+depend on the iteration count. Centring happens once, at the end, to the Elo figures only.
+
+**It says which ratings are the prior speaking.** The fit is identifiable only where the results
+*strongly* connect, which is stronger than it sounds: A having beaten B twenty times with no draws
+leaves the pair unbounded. So the win digraph's strongly-connected components are computed, and
+anything alone in one or outside the largest is flagged `priorDetermined`. A ladder that presented
+those gaps as measurements would be presenting a regularizer.
+
+Ordering never goes through a logarithm. The fit is in strengths, where every step is `+ - * /`;
+`ranking` and `expectedScore` read those, and the Elo figure — which needs a `log10` that is not
+specified bit-identical across the JVM and wasm — exists only to be displayed. Two close contestants
+cannot swap places between targets.
+
+`expectedScore` is what makes a rating checkable rather than merely orderable: compare it with what
+happened and a cell that disagrees is a pairing the single number cannot describe. Those cells exist
+here, and `:lab`'s `rate` prints the worst of them.
 
 ## No worker, and where the seam would be
 
