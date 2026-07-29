@@ -193,7 +193,7 @@ internal class PhasesCommand(
             at++
             if (match.step() == StepResult.AwaitingInput) {
                 // A scripted stand-in that runs out of recorded moves parks rather than forfeiting,
-                // so a truncated recording would otherwise spin here forever.
+                // so a truncated recording ends the walk here. Asking it again throws.
                 break
             }
         }

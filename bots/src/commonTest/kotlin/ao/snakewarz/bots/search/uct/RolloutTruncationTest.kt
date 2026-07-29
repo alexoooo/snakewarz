@@ -243,12 +243,18 @@ class RolloutTruncationTest {
         /**
          * Wide enough to hold what has actually been measured, and no wider.
          *
-         * This fixture reads 26 of 40 and `:lab`'s reads 20 — one sigma over forty matches is ±3.2,
-         * so those are the same claim, and it is not "no difference" any more: counting evaluations
-         * rather than moves gives the truncated bot the same iteration count, and a space-ownership
-         * sweep is a less noisy leaf than one random playout. A range rather than a floor, because
-         * what has to hold is that the *edge is small* — small enough to be swamped by the two times
-         * wall clock the loop above prints. A run outside it in either direction would be news.
+         * **This fixture reads 24 of 40, and it is not sampling what [UctBot.ROLLOUT_DEPTH]'s table
+         * samples.** Forty boards off one seed base from a fixed spawn is a point rather than an
+         * estimate: `:lab` over a thousand rounds of this same pairing puts the rate at 54%, so 21.6
+         * is what forty of them are worth on average and one sigma is ±3.2. The reading therefore
+         * moves whenever anything re-rolls these forty games, even where the rate underneath is
+         * untouched — and [UctBot.EXPLORATION] going from 5.0 to 3.0 is exactly that. It took this
+         * fixture from 26 to 24 and left the rate where it was, which is the paired thousand boards
+         * that constant's own table records.
+         *
+         * So a range rather than a floor, and a wide one. What has to hold is that the *edge is
+         * small*, small enough to be swamped by the wall clock the loop above prints — not that any
+         * particular forty games land on a number. A run outside it in either direction is news.
          */
         val NO_CLEAR_EDGE = 14..30
 

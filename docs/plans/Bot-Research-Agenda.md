@@ -235,6 +235,7 @@ they are created**; **never commit and never push** — leave the work staged an
 | P5 | #6 prior, #5 chamber tree | **both landed, positive** | `eval=chamber` is **+85 ±32 Elo over `survival`** for +9% cost and tops the field; **the `seal` term is the whole of it**. `MovePrior` adds five knobs, all shipping as no-ops, with a rated **+103 Elo** recommendation on top of `chamber` for 1-2% cost. `portableExp` kept `puct` in the cross-target golden set, so SW-02 needed no relaxing. **Two defaults now await a shipping decision** |
 | P6 | #2 alpha-beta | **landed — viable, and intransitive with MCTS** | `alphabeta` reaches **11 plies** at budget 1000 for a **1.03-1.09×** replay tax. It *beats* `puct:eval=chamber` head-to-head 108-92 yet rates below it in a broad field — a real cycle, not noise. Tripling the allowance is worth +101 Elo to it and +92 to PUCT: depth pays at the rate iterations do |
 | P7 | #7 learned eval | **landed, positive** | `eval=learned` (25 features → 16 softsign → logistic, 433 weights) rates **+29 Elo over `eval=chamber` on disjoint intervals** over 10,500 matches, for +11-16% clock — so roughly **level to slightly ahead per millisecond**. Train loss == holdout loss to five places: **the ceiling is the features, not the model** |
+| — | **Defects found by P1-P8** | **all closed** | Contract suite now sweeps **1-4 seats** and every `Choice` value (2,160-match probe found no bot bug — nothing in `:bots` was ever written as a duel); `alphabeta` and `eval=learned` added to the cross-target golden set, both reproducing in Chrome; `Match.playback` exhaustion now throws instead of hanging; `alphabeta` offers five evals; three stale KDocs re-derived |
 | P8 | #3 RAVE, #10 portfolio | **landed — RAVE null, #10 shipped as a diagnostic** | `rave` is **monotone in how much AMAF is believed and the best of it is the control** — a null owing 3% of clock, with no interior optimum. The mechanism cannot fire: **0.0% of unvisited children ever carry AMAF**. #10 shipped as `:lab phases` instead of a bot, and bounds a portfolio at **~25 Elo** |
 
 ---
@@ -418,9 +419,14 @@ sweep is now **cheaper than a `uct` random rollout** (1.50 vs 1.68 ms/turn at 10
 1.16×, the repo's worked per-millisecond example — *"`SurvivalEval` wins per iteration, ties per
 millisecond"* — has moved in `territory`'s favour and needs re-deriving.
 
-**Unrelated, pre-existing, flagged not fixed:** `RolloutTruncationTest` prints `24/40` at
-`rolloutDepth=25` where `UctBot.ROLLOUT_DEPTH`'s table records `20`. It reads 24 both before and after
-P3, and in real Chrome too, so it predates the phase. Reconcile the table or the tolerance.
+**Unrelated, pre-existing — since fixed, and it was the table that was wrong.** `RolloutTruncationTest`
+printed `24/40` at `rolloutDepth=25` where `UctBot.ROLLOUT_DEPTH`'s table recorded `20`. Re-derived at
+1,000 rounds a depth: 61.9% / 54.1% / 48.0% at depths 10 / 25 / 60. **A 40-match column carries ±8
+points, which is more than the effect it was read for** — "cutting hard is ahead" survives, "cutting
+late is behind" does not (depth 60 is *level*, not 17 of 40). The suspect condition change was ruled
+out rather than assumed: a CRN-paired run at the pre-P0 `exploration=5.0` gave 602/550/500, every one
+inside a sigma, so **that knob change is a null on this trade**. Both numbers re-recorded with their
+conditions.
 
 ### What P3's conversion found — and a timing method the whole repo should adopt
 
@@ -448,11 +454,13 @@ is now a property of the two evaluations rather than of one lucky allowance.
 **What now fits the ~8 ms slice: budget ≈1,180, up from ≈590.** Reported, not applied — it is a
 shipping decision. Conservative, since Chrome gains more from the bitboards than the JVM does.
 
-**Two stale claims this leaves behind, both outside the phase's scope, both worth a follow-up.**
-`MatchSetup.DEFAULT_BUDGET_PER_TURN`'s KDoc says *"`puct` overruns the slice at this figure at either of
-its two appraisals"* — at `eval=territory` it no longer does (~6.8 ms of 8 ms). And
-`ThroughputTest.MEASURED_BOARD`'s KDoc calls 20 "the board `:ui` opens on" when `index.html` selects 8;
-the slice figure is still 20×20-based so only the justification is wrong.
+**Two stale claims this left behind — both since fixed.**
+`MatchSetup.DEFAULT_BUDGET_PER_TURN`'s KDoc said *"`puct` overruns the slice at this figure at either of
+its two appraisals"*; at `eval=territory` it no longer does, and there are now six eval values, not two.
+Its KDoc now states the 6-7 ms band **with its derivation shown** and says outright that nobody has
+timed an appraisal in Chrome. `ThroughputTest.MEASURED_BOARD`'s KDoc called 20 "the board `:ui` opens
+on" when `index.html` selects 8 — the constant was right and only the justification was wrong, so the
+reasoning was replaced and the number kept.
 
 **Two budgets, and they are different questions — do not conflate them when pricing P5 onward.**
 **1,590** is `1000 × 1.59`: the iterations that now cost what budget 1000 used to cost, which is the
@@ -642,11 +650,28 @@ field-composition-dependent**, which is the sharpest possible illustration of th
 reactive opponents while leaving the other ninety plies to the same leaf guess PUCT makes. What exact
 search does not buy here is a better long-run plan.
 
-**A real gap in the suite: `BotContractTest` seats at most 2 snakes.** CLAUDE.md and this document both
-read as though it covers 3- and 4-snake matches; it does not. `AlphaBetaBotTest` now carries that
-coverage for one bot. **Every other bot's multiplayer behaviour is unpinned.** P7 found the sibling
-gap: `BotContractTest` never seats `puct` at a non-default `eval` either, so every `eval` value is
-covered by `PuctBotTest` or nowhere.
+**A real gap in the suite: `BotContractTest` seated at most 2 snakes**, where CLAUDE.md and this
+document both read as though it covered 3- and 4-snake matches. `AlphaBetaBotTest` carries that
+coverage for one bot. P7 found the sibling gap: it never seated `puct` at a non-default `eval` either,
+so every `eval` value was covered by `PuctBotTest` or nowhere.
+
+**Both are closed, and closing them found nothing.** The suite sweeps every registry entry at every
+value of every `BotKnob.Choice` it declares — eighteen settings against ten entries — across one to
+four seats, which `docs/Bots.md` now states. A wider throwaway probe over the same eighteen at three
+and four seats, five geometries to 20×20, two seeds and six allowances from zero to sixty (2,160
+matches) turned up no illegal move, no forfeit, no overspend and no throw.
+
+**The bots were already right, and the reason is that nothing here was ever written as a duel.**
+`nearestOpponent` scans `0 until snakeCount` and reads liveness off the board, `PressureBot` means
+over the living heads, `UctTree` credits per actor rather than negamax, `PositionFeatures` summarises
+the field as a strongest challenger, and every search buffer is sized from `opponentCount + 1`. Note
+also that the gap was narrower than the P6 note above reads: `uct` and `puct` each already carried a
+three-way case of their own (`UctBotTest`, `PuctBotTest`), so what was genuinely unpinned was the
+reactive bots, `flat-monte-carlo`, `burninhell`, every non-default `eval` and **every four-seat case**.
+
+The suite costs 9.5s against 0.6s, about +8% on `:bots`. `alphabeta` also joined
+`GoldenMoveStreamTest`'s cross-target set, verified in real Chrome, which leaves no registry entry
+without a case there.
 
 ### What P7 actually found — the ceiling is the features, and it is measurable
 
@@ -676,9 +701,13 @@ one data segment. (c) **"The forward pass is lost in the noise" is false**: 400 
 divisions is 11–16% of an evaluation, because an evaluation here is under four microseconds. A learned
 leaf is not free.
 
-**A latent hang, guarded:** `Match.playback` can spin, because a scripted stand-in that runs out of
-moves *parks* (`AwaitingInput`) rather than forfeiting — so a corpus builder looping on
-`outcome == null` never returns on a truncated recording.
+**A latent hang — since fixed at the source.** `Match.playback` could spin, because a scripted stand-in
+that runs out of moves *parks* (`AwaitingInput`) rather than forfeiting, so a caller looping on
+`outcome == null` never returned on a truncated recording. The **first** park is unchanged — it is how
+a partial replay says "this is the end of what was recorded" — but a **second** `step()` now throws,
+naming the recording and the turn it ran out at. `Match.playbackExhausted` lets a transport ask without
+stepping, and `:ui`'s `StepOnce` (the one live path that would have stepped past the park) is guarded
+by it.
 
 ### What P8 actually found — a structural null, and the first map of where Elo goes
 

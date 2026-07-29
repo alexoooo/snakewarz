@@ -191,19 +191,40 @@ public class MatchSetup(
          * | 2,000 | 9.8 ms | 4.3 ms | 3.4 ms | 12 ms |
          * | 10,000 | 60 ms | 25 ms | 17 ms | 69 ms |
          *
-         * `puct` at `eval=survival` is dearer again — 2.1x `uct` on a 12x12 and 5.1x on a 20x20, at
-         * this allowance, and the two figures being different is the whole of `EvaluationCost`'s
-         * open problem. It is not on this table because the table is what sets a *default*, and the
-         * default evaluation is `territory`.
+         * The `puct` column is that bot at its default appraisal, and it is the row of this table
+         * that has aged: it was taken before the ownership sweep became a bitmap one, which took
+         * `puct`'s turn 2.13x cheaper on a 20x20. `EvaluationCost` carries the current figures and
+         * the control that makes them readable beside each other. The five other appraisals that
+         * bot offers are absent because this table is what sets a *default*, and the default
+         * evaluation is `territory`.
          *
          * 1,000 puts `uct` at 5 ms of the 8 ms slice in Chrome. That is inside it with less room
          * than the previous default had, and the trade was made deliberately: the number is now a
          * count of *iterations*, which is a thing a person can reason about — a thousand rollouts a
          * turn — where 40,000 simulated moves was a number whose meaning changed with the bot
          * reading it. The knob's ceiling of 10,000 is far past the slice, and that is what a ceiling
-         * is for: somewhere to reach deliberately, not somewhere to sit. `puct` overruns the slice at
-         * this figure at either of its two appraisals, which is the honest reading of it being
-         * registered as experimental and of `EvaluationCost` being uncalibrated.
+         * is for: somewhere to reach deliberately, not somewhere to sit.
+         *
+         * **`puct` at `eval=territory` is inside the slice too, at somewhere between 6 and 7 ms of
+         * it.** That is a ratio rather than a measurement, and the band is the honest width of one:
+         * the appraisal is 2.49 ms of JVM on a 20x20 at this allowance, and what carries a JVM
+         * figure into the browser is `uct`'s tax between the two — 2.5x off this table's own row and
+         * 2.75x against the control `EvaluationCost` took its own figures beside, so 6.2 ms and 6.8.
+         * Nobody has timed an appraisal in Chrome. The one thing known about the direction of the
+         * error runs the safe way: the bitmap sweep underneath this leaf gains *more* in the browser
+         * than on the JVM, so the true figure sits at the low end of that band or under it.
+         *
+         * The other five appraisals do not land together. `eval=mobility` reads sixteen squares and
+         * is nowhere near the slice; the four that take the board apart are four times `territory`
+         * or more and overrun it outright. That spread is the honest reading of the bot being
+         * registered experimental and of `EvaluationCost` being uncalibrated.
+         *
+         * **The same arithmetic says the slice now affords about 1,180 evaluations, up from about
+         * 590** — at the dearer end of the band, so it is the conservative figure of the two.
+         * Recorded here rather than taken. Raising this moves what every unconfigured match plays
+         * at, so `BotLadderTest`'s thresholds — measured at 1,000 — and the two test constants that
+         * spell this figure out would all have to move with it. That is a shipping decision somebody
+         * makes, not a consequence of a sweep getting cheaper.
          *
          * The unit changed under this figure and the number changed with it. An allowance used to
          * count *simulated moves*, where 40,000 bought `uct` about 4 ms; counting evaluations makes

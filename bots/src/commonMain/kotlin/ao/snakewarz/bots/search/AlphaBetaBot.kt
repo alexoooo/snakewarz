@@ -8,6 +8,7 @@ import ao.snakewarz.botapi.knob.BotKnob
 import ao.snakewarz.botapi.scratch.Playout
 import ao.snakewarz.botapi.scratch.Scratch
 import ao.snakewarz.bots.reactive.space.SpaceBot
+import ao.snakewarz.bots.search.learned.LearnedEval
 import ao.snakewarz.bots.search.puct.ChamberEval
 import ao.snakewarz.bots.search.puct.LeafEval
 import ao.snakewarz.bots.search.puct.MobilityEval
@@ -274,6 +275,10 @@ public class AlphaBetaBot(setup: BotSetup) : Bot {
             PuctBot.TRAP_PENALTY.default,
             PuctBot.SEPARATION_BONUS.default,
         )
+
+        // No weights from the params, exactly as `puct` builds it: this one's coefficients are the
+        // fit, and a fit is not four numbers somebody can reasonably be offered a slider for.
+        PuctBot.LEARNED -> LearnedEval(setup.grid, slotCount)
 
         else -> ChamberEval(
             setup.grid,
@@ -548,19 +553,31 @@ public class AlphaBetaBot(setup: BotSetup) : Bot {
         val SEARCH = BotKnob.Search(min = 0, max = 10_000, step = 100)
 
         /**
-         * Which [LeafEval] the search bottoms out in — the same four `puct` offers, at its weights.
+         * Which [LeafEval] the search bottoms out in — five of the six `puct` offers, at its
+         * weights, and spelled with that bot's own constants so the two can never drift apart.
          *
          * Defaulting to `chamber` rather than to `territory`: nothing is pinned to this bot's
-         * defaults yet, and the strongest leaf in the box is the one that makes the search the
-         * variable. `horizon` is deliberately absent — it is measured 185 Elo behind `survival` and a
-         * value offered here is frozen from the day it ships.
+         * defaults yet, and the strongest hand-written leaf in the box is the one that makes the
+         * search the variable.
+         *
+         * **`learned` is offered on easier terms than the rest**, which is worth saying because
+         * [paranoidMargin]'s subtraction is what makes an evaluation mean something different here.
+         * A fitted leaf answers a calibrated probability that *this slot* wins, and at two snakes
+         * that pair sums to about one — so the difference is very nearly an affine map of one
+         * slot's own value, where a hand-written leaf's antisymmetric terms double against its
+         * per-snake ones. It costs what it costs under `puct`: the chamber decomposition it shares,
+         * plus `EvaluationCost.LEARNED`'s tenth of a leaf.
+         *
+         * **`horizon` is the one value deliberately absent.** It is measured 185 Elo behind
+         * `survival`, and a value offered here is frozen from the day it ships — so the bar is that
+         * somebody would want to play it, not that it exists.
          */
         val EVAL = BotKnob.Choice(
             name = "eval",
             label = "Evaluation",
             help = "How a leaf is judged: liberties, a share of the board, or how long each snake can last.",
             default = PuctBot.CHAMBER,
-            values = listOf(PuctBot.CHAMBER, PuctBot.TERRITORY, PuctBot.SURVIVAL, PuctBot.MOBILITY),
+            values = listOf(PuctBot.CHAMBER, PuctBot.LEARNED, PuctBot.TERRITORY, PuctBot.SURVIVAL, PuctBot.MOBILITY),
             tradeoff = true,
         )
 

@@ -176,7 +176,12 @@ public class GameSession(
 
             UiIntent.StepOnce -> {
                 scheduler.stop()
-                advance()
+                // A replay that has run out of recorded moves has nothing left to step: the driver
+                // reports that once and throws on a second ask, because for anything but this
+                // transport a second ask is a loop that would never end.
+                if (!match.playbackExhausted) {
+                    advance()
+                }
                 renderChrome()
             }
 

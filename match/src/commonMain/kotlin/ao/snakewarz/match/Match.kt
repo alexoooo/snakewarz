@@ -41,11 +41,16 @@ import ao.snakewarz.match.stats.SlotStats
 public class Match private constructor(
     public val setup: MatchSetup,
     registry: BotRegistry,
-    /** Set by [playback] alone, and read by [interactive] alone. Stepping does not know about it. */
-    private val scripted: Boolean,
+    /**
+     * What [playback] is replaying, and `null` for a match being played for real.
+     *
+     * Two things read it and nothing else does: [interactive], which a scripted slot must not
+     * satisfy, and the diagnostic in [step] that fires when a caller steps past the end of it.
+     */
+    private val recording: MatchRecord?,
 ) {
     /** A match played for real: every slot is resolved through [registry] and decides for itself. */
-    public constructor(setup: MatchSetup, registry: BotRegistry) : this(setup, registry, scripted = false)
+    public constructor(setup: MatchSetup, registry: BotRegistry) : this(setup, registry, recording = null)
 
     public val grid: Grid = setup.grid()
 
@@ -71,6 +76,9 @@ public class Match private constructor(
     private val terminals = ArrayList<TerminalEvent>()
     private val turnEvents = TurnEvents()
 
+    /** Set the first time playback runs off the end of [recording] — see [playbackExhausted]. */
+    private var recordingExhausted = false
+
     /** The live position. Reading it is free; keeping it past the next [step] is not — use [snapshot]. */
     public val view: BoardView get() = board
 
@@ -92,7 +100,15 @@ public class Match private constructor(
      * nobody watching a replay is going to press a key to make it continue.
      */
     public val interactive: Boolean
-        get() = !scripted && bots.indices.any { bots[it].interactive && board.snake(SnakeId(it)).alive }
+        get() = recording == null && bots.indices.any { bots[it].interactive && board.snake(SnakeId(it)).alive }
+
+    /**
+     * Whether [playback] has already reported the end of a partial recording.
+     *
+     * A transport asks this rather than stepping to find out, because a step past the park throws —
+     * see [step]. Always false for a match being played for real.
+     */
+    public val playbackExhausted: Boolean get() = recordingExhausted
 
     /**
      * Plays one turn.
@@ -101,6 +117,15 @@ public class Match private constructor(
      * moves, an illegal one is a `SUICIDE` or a `TRAPPED` decided by the engine, a resignation is a
      * `RESIGNED`, a thrown exception is a `FORFEIT`, and a `Pending` is a pause for an interactive
      * slot and a `FORFEIT` for any other.
+     *
+     * **Under [playback] the pause has a second reading, and stepping past it throws.** A scripted
+     * slot claims to be interactive so that a recording which stops before its match did parks
+     * rather than inventing a loss, and that park is how a partial replay says *this is the end of
+     * what was recorded*. The park is honest and the second one is not: no key exists behind a
+     * scripted slot and no later step can answer differently, so a caller that keeps going is
+     * looping on `outcome == null` and would never return. That is the one place a waiting person
+     * and an exhausted script have to be told apart, and it fails loudly here instead of hanging in
+     * whichever caller wrote the loop.
      */
     public fun step(): StepResult {
         val finished = board.outcome
@@ -133,6 +158,15 @@ public class Match private constructor(
 
             Decision.Pending ->
                 if (bot.interactive) {
+                    if (recording != null) {
+                        check(!recordingExhausted) {
+                            "playback of $setup ran past the end of its recording: " +
+                                "${recording.moves.size} moves, exhausted at turn ${board.turnIndex}. " +
+                                "A partial record is a prefix -- stop on StepResult.AwaitingInput, or ask " +
+                                "playbackExhausted, rather than looping until outcome is non-null"
+                        }
+                        recordingExhausted = true
+                    }
                     turnEvents.clear()
                     StepResult.AwaitingInput
                 } else {
@@ -252,6 +286,6 @@ public class Match private constructor(
          * one full repaint.
          */
         public fun playback(record: MatchRecord): Match =
-            Match(record.setup, ScriptedRegistry(record), scripted = true)
+            Match(record.setup, ScriptedRegistry(record), recording = record)
     }
 }

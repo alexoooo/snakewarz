@@ -125,6 +125,54 @@ class GoldenMoveStreamTest {
     }
 
     @Test
+    fun `alpha-beta against random on 12x12`() {
+        // The fourth searcher, and the last entry in the registry with no case here. It belongs in
+        // the cross-target set on SW-02's own terms rather than by exception: the descent is
+        // `advance`/`undo` over the arena, the ordering is `MovePrior` at a temperature of zero so no
+        // exponential is reached, and the leaf is `ChamberEval`, whose only transcendental is `sqrt`.
+        // So a hash that moves here is arithmetic or search order, never a platform's `log`.
+        //
+        // What this pins that the other three do not is the replay: a paid leaf re-applies the whole
+        // path onto the arena its own payment reset, so an off-by-one there is a wrong position
+        // appraised rather than a crash, and it would show up here and nowhere else.
+        assertEquals(
+            -3589698981299349624L,
+            hashOf("alphabeta", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = SEARCH_BUDGET),
+        )
+    }
+
+    @Test
+    fun `PUCT at its fitted leaf against random on 12x12`() {
+        // The one `eval` value in the set, and the case for it is that this is the only evaluation
+        // here whose arithmetic nobody designed. Four hundred multiply-adds off a baked literal,
+        // softsign, and a logistic — so it is also the only place `portableExp` is reached inside a
+        // *composed* evaluation rather than on its own. `PortableExpTest` already pins that series
+        // to the raw bits in Chrome; what was unpinned is everything downstream of it, including
+        // the decode of `LearnedWeights` from a string into fixed point.
+        //
+        // The other five values are deliberately not here. `territory` is `puct`'s own default and
+        // `chamber` is `alphabeta`'s, so the two cases above already pin the bitmap sweep, the block
+        // decomposition and the parity cap. `survival` and `horizon` reach those through
+        // `FillableSpace` and `SurvivalHorizon`, which hold no floating point at all, and
+        // `mobility` is a liberty count over a divide — integer arithmetic is exact on every target
+        // and `/` is specified, so a case for any of the three would buy codegen coverage the four
+        // searchers already give and nothing else. A browser case is minutes of somebody's CI, so
+        // the bar is a divergence it could actually catch.
+        assertEquals(
+            -128377200664409204L,
+            hashOf(
+                "puct",
+                "random",
+                seed = 2005,
+                rows = 12,
+                cols = 12,
+                budgetPerTurn = SEARCH_BUDGET,
+                params = listOf(BotParams(mapOf("eval" to "learned")), BotParams.EMPTY),
+            ),
+        )
+    }
+
+    @Test
     fun `the serpentine sweeper against random on 20x20`() {
         assertEquals(5564294816982454802L, hashOf("burninhell", "random", seed = 2005))
     }

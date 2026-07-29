@@ -113,6 +113,15 @@ board shape, spends budget exactly when it declares an allowance, and plays the 
 declared defaults as it does with nothing set. That suite is what makes "fork → add a bot → PR" safe
 to accept.
 
+**It sweeps two things beside the entry, and both are bots the entry alone does not describe.** The
+claims above are made across **one to four snakes** rather than at two, because a duel is not the game
+a free-for-all is: `alphabeta`'s reduction to a single opponent, `puct`'s max^n solver and every
+reading of "the nearest opponent" have only one answer at two seats. And every value of every
+`BotKnob.Choice` an entry declares is swept as a bot of its own, so `puct` at each of its six `eval`
+settings and `alphabeta` at each of its five are gated rather than only the two defaults. Both come off
+the declaration rather than off a slug, so a contributed bot's own choices enrol the day it is
+registered.
+
 ## Declaring a knob
 
 Anything worth tuning is declared as a `BotKnob` and passed to `register`. **The declaration is the

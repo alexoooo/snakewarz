@@ -119,7 +119,16 @@ class ThroughputTest {
     private fun entry(slug: String): BotEntry = ShippedBots.entryOf(BotId(slug))
 
     private companion object {
-        /** The board `:ui` opens on, so the number is about the game people actually play. */
+        /**
+         * The board `MatchSetup.DEFAULT_BUDGET_PER_TURN` was timed on, so a `[bench]` line here can
+         * be read against that table rather than merely near it.
+         *
+         * Not the board the page opens on — `index.html` selects 8 — and deliberately not. A turn's
+         * cost grows with the squares, so the question this test exists to answer, *does a turn at
+         * the shipped allowance fit inside a frame*, is only worth asking near the dear end of what
+         * a player can pick. `:ui` offers up to 40; a turn that fits here fits the opening board
+         * several times over.
+         */
         const val MEASURED_BOARD = 20
 
         /** The board the ladder and the shipped tournament defaults use. */

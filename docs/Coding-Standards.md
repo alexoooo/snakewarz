@@ -102,6 +102,11 @@ argument against a two-part `ln 2` and sums a Taylor series, all `+ - * /`, and 
 at most three times per expansion. Both portable series are pinned by a raw-bits test that runs in
 Chrome as well as on the JVM, which is what turns "these operations are specified" into evidence.
 
+A series pinned to the bit is not the same as an evaluation built out of one, so `puct` at
+`eval=learned` is in the cross-target set too — four hundred multiply-adds off a baked literal and a
+logistic, which is the only place `portableExp` is reached inside a composed appraisal rather than on
+its own.
+
 **The bar for a new transcendental is that test, not an argument.** A branching factor of three is
 what makes a bounded series affordable here; a bot that genuinely cannot afford one belongs outside
 `GoldenMoveStreamTest`'s cross-target set, saying so in its KDoc.

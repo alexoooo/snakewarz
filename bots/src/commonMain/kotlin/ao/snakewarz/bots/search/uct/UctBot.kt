@@ -245,21 +245,31 @@ public class UctBot(setup: BotSetup) : Bot {
          * Truncation — cut the rollout at a depth, judge the position by reachable-space share —
          * was named the highest-value lever left when this bot landed, on the usual reasoning that a
          * hundred-move rollout is an expensive way to buy one bit. It was then built
-         * ([truncatedPlayout], [SpaceOwnership]) and played against this over forty matches a depth,
-         * at the same allowance, on a 12x12. Re-measured at 100 evaluations a turn, `:lab` for the
-         * wins and `RolloutTruncationTest` for the clocks:
+         * ([truncatedPlayout], [SpaceOwnership]) and played against this at 100 evaluations a turn
+         * on a 12x12 — `:lab` for the wins, a thousand rounds a depth against the undepthed bot,
+         * and `RolloutTruncationTest` for the clocks:
          *
-         * | depth | wins of 40 | µs/turn, JVM | µs/turn, Chrome | against full |
-         * |---|---|---|---|---|
-         * | 10 | 27 | 225 | 355 | 1.5× / 1.3× |
-         * | 25 | 20 | 167 | 267 | 1.1× / 1.0× |
-         * | 60 | 17 | 176 | 322 | 1.1× / 1.2× |
-         * | played out | — | 154 | 264 | — |
+         * | depth | wins per 1,000, fixed | mirrored | µs/turn, JVM | µs/turn, Chrome | against full |
+         * |---|---|---|---|---|---|
+         * | 10 | 619 | 563 | 225 | 355 | 1.5× / 1.3× |
+         * | 25 | 541 | 517 | 167 | 267 | 1.1× / 1.0× |
+         * | 60 | 480 | 497 | 176 | 322 | 1.1× / 1.2× |
+         * | played out | — | — | 154 | 264 | — |
          *
-         * One sigma over forty matches is ±3.2, so cutting *hard* is a little ahead per iteration
-         * (27 of 40 is two sigma) and cutting late is a little behind — which is the shape to
-         * expect, since an ownership sweep is a less noisy reading of a position than one random
-         * playout, and a rollout cut at sixty has usually finished anyway.
+         * **The wins column is a thousand rounds because forty could not carry what it was read
+         * for.** One sigma over forty matches is ±3.2 wins, which is eight points, and the column
+         * this replaces — 27, 20 and 17 of 40 — was read as *cutting hard is ahead and cutting late
+         * is behind*. Half of that survived. Cutting hard is genuinely ahead per iteration, and by
+         * more under a fixed opening than a mirrored one; cutting at 25 is a couple of points ahead;
+         * cutting at 60 is **level**, not behind. Which is the shape to expect once it is measured
+         * finely enough to see: an ownership sweep is a less noisy reading of a position than one
+         * random playout, and a rollout cut at sixty has usually finished anyway.
+         *
+         * **[EXPLORATION] is a null on this**, and it is worth recording because that constant moved
+         * after the first measurement and is the obvious suspect for the difference. The same
+         * thousand boards played at the old `5.0` on both sides read 602 / 550 / 500 against the
+         * 619 / 541 / 480 above — every one of them inside a sigma. It re-rolls all forty games of
+         * `RolloutTruncationTest`'s fixture without moving the rate they sample.
          *
          * **The cost columns are the ones to watch, and they have already moved once.** A rollout
          * here is mutate-and-undo over a flat arena at tens of nanoseconds a move, and the sweep it
@@ -275,8 +285,13 @@ public class UctBot(setup: BotSetup) : Bot {
          * truncated iteration and a full one buy exactly one each — the extra iterations that were
          * the entire argument for truncating are not on offer, and what is left is a slightly better
          * leaf for a little more than the price of the same number of them. **That is a narrower gap
-         * than the one this default was settled on, and nobody has re-run the strength half of the
-         * table against it.** The wins column is what would have to move, and it is `:lab` work.
+         * than the one this default was settled on, and the wins column above is the strength half
+         * re-run against it.** What it says is that the depth which pays is the depth which costs —
+         * 619 of a thousand at 10, for one and a half times a turn — and that the two nearly free
+         * ones buy nothing. Whether that trade is worth taking at a fixed frame budget is a question
+         * about what an iteration is worth in Elo *at this allowance*, and nobody has measured that
+         * one: `MatchSetup.DEFAULT_BUDGET_PER_TURN` carries the only exchange rate of that kind and
+         * it was taken at the shipped 1,000 rather than at the hundred this table is played at.
          *
          * It ships wired and off rather than deleted, because a measured "no" is worth more with the
          * thing still there to re-measure: `./gradlew :lab:run --args="play uct uct:rolloutDepth=25"`,

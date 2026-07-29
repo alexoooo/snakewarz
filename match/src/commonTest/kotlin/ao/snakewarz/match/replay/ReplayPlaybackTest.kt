@@ -8,6 +8,7 @@ import ao.snakewarz.match.TestRegistry
 import ao.snakewarz.match.matchOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ReplayPlaybackTest {
@@ -79,6 +80,28 @@ class ReplayPlaybackTest {
 
         assertEquals(StepResult.AwaitingInput, played.step())
         assertEquals(11, played.turnIndex, "and it consumed no turn doing so")
+    }
+
+    @Test
+    fun `and stepping past that park fails rather than spinning`() {
+        // The park says "this is the end of what was recorded" and a transport stops on it. Anything
+        // that keeps stepping is looping until `outcome` is non-null, which under a partial record
+        // never happens -- so the second ask is the last thing that can still name the cause.
+        val original = matchOf(16, 16, "cycle", "cycle")
+        repeat(11) { original.step() }
+        val partial = original.record()
+
+        val played = Match.playback(partial)
+        repeat(11) { played.step() }
+
+        assertEquals(false, played.playbackExhausted, "it has not run out until it says so")
+        played.step()
+        assertEquals(true, played.playbackExhausted)
+
+        val failure = assertFailsWith<IllegalStateException> { played.step() }
+        val message = failure.message ?: ""
+        assertTrue(message.contains("${partial.moves.size} moves"), "it names the recording: $message")
+        assertTrue(message.contains("turn 11"), "and the turn it ran out at: $message")
     }
 
     @Test

@@ -178,7 +178,8 @@ internal fun corpusFrom(
                 // A scripted stand-in that has run out of recorded moves *parks* rather than
                 // forfeiting, so that a mid-match share link plays back instead of ending in a
                 // fabricated loss. Here that is a recording shorter than the outcome it claims, and
-                // spinning on it would never return.
+                // stopping is the whole of what there is to do about it: the driver refuses a
+                // second ask rather than letting this loop run on.
                 break
             }
         }

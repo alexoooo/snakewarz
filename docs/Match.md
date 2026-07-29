@@ -29,7 +29,16 @@ plays exactly the round it belongs to, and the transport is disabled because the
 drive. When the player is eliminated `interactive` goes false, the scheduler takes over and the
 survivors finish the match on the clock. `Match.interactive` is deliberately not
 `bots.any { it.interactive }`: `ScriptedBot` claims to be interactive so that a partial recording
-parks rather than forfeits, so playback is excluded by a flag `Match.playback` sets.
+parks rather than forfeits, so playback is excluded by the recording `Match.playback` hands the
+driver.
+
+**A parked replay is parked for good, and stepping it again throws.** That park is the only place a
+waiting person and an exhausted script look alike, and they are not alike at all: no key exists
+behind a scripted slot, so no later step can answer differently and a caller looping until
+`outcome` is non-null never returns. So the first `AwaitingInput` under playback is the signal —
+`Match.playbackExhausted` is the same fact without stepping to find it — and the second ask is an
+`IllegalStateException` naming the recording and the turn it ran out at. Stop on the signal; do not
+catch the throw.
 
 **A held key repeats on our clock, not the operating system's.** `Chrome` drops
 `KeyboardEvent.repeat` — a text-editing rate, half a second of nothing then thirty a second, and
