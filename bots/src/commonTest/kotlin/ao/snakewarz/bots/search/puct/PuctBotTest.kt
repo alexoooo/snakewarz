@@ -40,18 +40,23 @@ class PuctBotTest {
     fun `it never outruns whatever it is given, at any evaluation`() {
         // The awkward boundaries. One evaluation is one unit, so the low end of this range is a
         // search of a handful of iterations rather than of none -- and zero still has to fall back
-        // rather than run one evaluation on credit.
+        // rather than run one evaluation on credit. The solver is swept alongside because it changes
+        // where the search stops: it adds an exit of its own, and a settled root at an allowance of
+        // one is the case where the two could disagree about whether an iteration is owed.
         for (eval in EVALS) {
-            for (allowance in intArrayOf(0, 1, 2, 3, 4, 5, 8, 13, 21, 55, 100, 1_000)) {
-                val board = boardOf(7, 7, 3 to 3, 0 to 0)
-                val budget = Budget(allowance)
+            for (solver in listOf(false, true)) {
+                for (allowance in intArrayOf(0, 1, 2, 3, 4, 5, 8, 13, 21, 55, 100, 1_000)) {
+                    val board = boardOf(7, 7, 3 to 3, 0 to 0)
+                    val budget = Budget(allowance)
 
-                val bot = puctOn(board, eval, seed = 17)
-                val decision = bot.chooseMove(turnOn(board, board.toAct, budget))
-                val move = (decision as Decision.Move).direction
+                    val bot = puctOn(board, eval, seed = 17, solver = solver)
+                    val decision = bot.chooseMove(turnOn(board, board.toAct, budget))
+                    val move = (decision as Decision.Move).direction
 
-                assertTrue(move in board.legalMoves(SnakeId(0)), "$eval at $allowance produced the illegal $move")
-                assertTrue(budget.consumed <= allowance, "$eval at $allowance overspent to ${budget.consumed}")
+                    val what = "$eval at $allowance, solver=$solver"
+                    assertTrue(move in board.legalMoves(SnakeId(0)), "$what produced the illegal $move")
+                    assertTrue(budget.consumed <= allowance, "$what overspent to ${budget.consumed}")
+                }
             }
         }
     }
@@ -77,9 +82,15 @@ class PuctBotTest {
 
     @Test
     fun `the evaluation it is told to use is the one it uses`() {
-        // Same tree size now, so the tell has to be the moves rather than the node count: three
+        // Same tree size now, so the tell has to be the moves rather than the node count: five
         // readings of the same position that disagree about what to play. If the knob were being
-        // ignored, all three streams would be identical.
+        // ignored, all five streams would be identical.
+        //
+        // The seed is load-bearing and the reason is worth knowing before changing it. `survival` and
+        // `horizon` count the same regions in squares and in moves, and where every region is one
+        // open block the second is twice the first -- a factor that cancels exactly in a share, so
+        // the two play the same match. Over 8x8 to 14x14 on six seeds they agree on nine boards of
+        // twenty-four and differ on the rest; this is one of the rest.
         val puct = ShippedBots.entryOf(BotId("puct"))
         val random = ShippedBots.entryOf(BotId("random"))
 
@@ -88,7 +99,7 @@ class PuctBotTest {
                 listOf(puct, random),
                 rows = 12,
                 cols = 12,
-                seed = 5,
+                seed = 1,
                 budgetPerTurn = ALLOWANCE,
                 paramsPerSlot = listOf(BotParams(mapOf(PuctBot.EVAL.name to eval)), BotParams.EMPTY),
             )
@@ -96,7 +107,7 @@ class PuctBotTest {
             match.moves()
         }
 
-        assertEquals(streams.distinct().size, streams.size, "the three evaluations played the same match")
+        assertEquals(streams.distinct().size, streams.size, "two of the evaluations played the same match")
     }
 
     @Test
@@ -180,36 +191,117 @@ class PuctBotTest {
     @Test
     fun `it plays a three-way match without falling over`() {
         // Value backup is per actor for the reason UctTree's KDoc gives, and this is the shape that
-        // reason is about: with three snakes, "bad for them" stops meaning "good for me".
+        // reason is about: with three snakes, "bad for them" stops meaning "good for me". The solver
+        // is the second thing here that has to answer for a third snake, and it answers max^n --
+        // PuctTree.proveFromChildren names the assumption -- so it runs both ways round.
         val puct = ShippedBots.entryOf(BotId("puct"))
         val space = ShippedBots.entryOf(BotId("space"))
         val random = ShippedBots.entryOf(BotId("random"))
 
-        for (seed in 1L..5L) {
+        for (solver in listOf("false", "true")) {
+            for (seed in 1L..5L) {
+                val match = HeadlessMatch(
+                    listOf(puct, space, random),
+                    rows = 12,
+                    cols = 12,
+                    seed = seed,
+                    budgetPerTurn = ALLOWANCE,
+                    paramsPerSlot = listOf(BotParams(mapOf(PuctBot.SOLVER.name to solver))) +
+                        List(2) { BotParams.EMPTY },
+                )
+                val outcome = match.run()
+
+                assertTrue(match.moves().isNotEmpty(), "seed $seed played no moves at solver=$solver")
+                assertTrue(outcome.winner.index in -1..2, "seed $seed ended with $outcome at solver=$solver")
+            }
+        }
+    }
+
+    @Test
+    fun `the solver it is told to run is one it actually runs`() {
+        // Same tell as the evaluation above: if the knob were being ignored the two streams would be
+        // identical. The seed is not load-bearing -- all of seeds 1 to 24 diverge here -- but a whole
+        // match diverging is a low bar, and the rate underneath it is the thing worth knowing before
+        // anybody measures this knob. Counted per decision on the same position it is one choice in
+        // seventy against another `puct`, and PuctBot.SOLVER carries the table. So a head-to-head is
+        // a thin instrument for it and a field is the one to reach for -- see docs/Workflow.md.
+        val puct = ShippedBots.entryOf(BotId("puct"))
+
+        val streams = listOf("false", "true").map { solver ->
             val match = HeadlessMatch(
-                listOf(puct, space, random),
+                listOf(puct, puct),
                 rows = 12,
                 cols = 12,
-                seed = seed,
+                seed = 3,
                 budgetPerTurn = ALLOWANCE,
+                paramsPerSlot = listOf(BotParams(mapOf(PuctBot.SOLVER.name to solver)), BotParams.EMPTY),
             )
-            val outcome = match.run()
-
-            assertTrue(match.moves().isNotEmpty(), "seed $seed played no moves")
-            assertTrue(outcome.winner.index in -1..2, "seed $seed ended with $outcome")
+            match.run()
+            match.moves()
         }
+
+        assertTrue(streams[0] != streams[1], "the solver played the match its own control played")
+    }
+
+    @Test
+    fun `the RAVE it is told to run is one it actually runs, and it still stays inside its allowance`() {
+        // The solver's test above, for the other gated mechanism -- plus the budget claim, because
+        // the contract suite only ever seats this bot at its declared defaults and RAVE is off
+        // there. The awkward allowances are the ones where a descent is one or two plies long and
+        // the AMAF set of the root is therefore empty or a single move.
+        val puct = ShippedBots.entryOf(BotId("puct"))
+        val raving = BotParams(mapOf(PuctBot.RAVE.name to "50"))
+
+        for (allowance in intArrayOf(0, 1, 2, 3, 5, 13, 100, ALLOWANCE)) {
+            val board = boardOf(7, 7, 3 to 3, 0 to 0)
+            val budget = Budget(allowance)
+            val bot = PuctBot(setupFor(board, board.toAct, seed = 11, params = raving))
+            val move = (bot.chooseMove(turnOn(board, board.toAct, budget)) as Decision.Move).direction
+
+            assertTrue(move in board.legalMoves(SnakeId(0)), "RAVE at $allowance produced the illegal $move")
+            assertTrue(budget.consumed <= allowance, "RAVE at $allowance overspent to ${budget.consumed}")
+        }
+
+        val streams = listOf(raving, BotParams.EMPTY).map { params ->
+            val match = HeadlessMatch(
+                listOf(puct, puct),
+                rows = 12,
+                cols = 12,
+                seed = 3,
+                budgetPerTurn = ALLOWANCE,
+                paramsPerSlot = listOf(params, BotParams.EMPTY),
+            )
+            match.run()
+            match.moves()
+        }
+
+        assertTrue(streams[0] != streams[1], "RAVE played the match its own control played")
     }
 
     // -- internals
 
-    private fun puctOn(board: Board, eval: String, seed: Long = 1): PuctBot =
-        PuctBot(setupFor(board, board.toAct, seed, BotParams(mapOf(PuctBot.EVAL.name to eval))))
+    private fun puctOn(board: Board, eval: String, seed: Long = 1, solver: Boolean = false): PuctBot =
+        PuctBot(
+            setupFor(
+                board,
+                board.toAct,
+                seed,
+                BotParams(mapOf(PuctBot.EVAL.name to eval, PuctBot.SOLVER.name to solver.toString())),
+            ),
+        )
 
     private fun moveFrom(bot: PuctBot, board: Board, budget: Budget = Budget(ALLOWANCE)): Direction =
         (bot.chooseMove(turnOn(board, board.toAct, budget)) as Decision.Move).direction
 
     private companion object {
-        val EVALS = listOf(PuctBot.TERRITORY, PuctBot.MOBILITY, PuctBot.SURVIVAL)
+        val EVALS =
+            listOf(
+                PuctBot.TERRITORY, PuctBot.MOBILITY, PuctBot.SURVIVAL, PuctBot.HORIZON, PuctBot.CHAMBER,
+                // The contract suite only ever seats this bot at its declared defaults, so a value of
+                // `eval` other than TERRITORY is covered here or nowhere: budget zero, a 1x1 board and
+                // "spends exactly what it declares" are all claims about each of these separately.
+                PuctBot.LEARNED,
+            )
 
         /** Evaluations a turn: a fifth of the shipped allowance, which is a real search and is quick. */
         const val ALLOWANCE = 200

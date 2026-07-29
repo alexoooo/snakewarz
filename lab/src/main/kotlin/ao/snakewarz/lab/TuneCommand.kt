@@ -4,14 +4,12 @@ import ao.snakewarz.botapi.knob.BotKnob
 import ao.snakewarz.botapi.knob.BotParams
 import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.botapi.registry.BotRegistry
-import ao.snakewarz.lab.arena.Arena
 import ao.snakewarz.lab.arena.Openings
+import ao.snakewarz.lab.strength.SequentialTest
 import ao.snakewarz.lab.strength.Sprt
-import ao.snakewarz.lab.strength.pairScores
 import ao.snakewarz.lab.tune.KnobSpace
 import ao.snakewarz.lab.tune.TuneJournal
 import ao.snakewarz.match.tournament.Contestant
-import ao.snakewarz.match.tournament.TournamentConfig
 import java.nio.file.Path
 import kotlin.math.roundToInt
 import kotlin.time.TimeSource
@@ -44,6 +42,15 @@ import kotlin.time.TimeSource
  */
 internal class TuneCommand(
     val subject: BotId,
+    /**
+     * The knobs the entrant spec pinned: the configuration this searches *inside*.
+     *
+     * The incumbent starts here rather than at [BotParams.EMPTY], so every proposal carries it and
+     * so does the baseline the confirmation runs against. A weight living under a `Choice` —
+     * `ChamberEval`'s three under `eval=chamber` — is otherwise swept at a setting where it does
+     * nothing, and the sweep says nothing about it while looking exactly like one that did.
+     */
+    val fixed: BotParams,
     val knobs: List<BotKnob.Param<*>>,
     val rows: Int,
     val cols: Int,
@@ -75,18 +82,21 @@ internal class TuneCommand(
     private var boardsPlayed = 0
     private var boardsShared = 0
 
+    /** A bot that threw, over the whole sweep. Always a defect, and never a result. */
+    private var forfeits = 0
+
     override fun run(registry: BotRegistry, log: (String) -> Unit) {
         val journal = TuneJournal(journalFile)
         val history = journal.read().filter { !it.confirming }
         val started = TimeSource.Monotonic.markNow()
 
-        log("[lab] tuning ${subject.slug} over ${knobs.joinToString { it.name }}")
+        log("[lab] tuning ${entrant(fixed)} over ${knobs.joinToString { it.name }}")
         log("[lab] ${rows}x$cols at $budgetPerTurn evaluations, $openings openings, journal $journalFile")
         if (history.isNotEmpty()) {
             log("[lab] resuming: ${history.size} decisions already taken, ${history.count { it.accepted }} accepted")
         }
 
-        var incumbent = BotParams.EMPTY
+        var incumbent = fixed
         var taken = 0
         var stride = COARSE_STRIDE
         var accepted = 0
@@ -143,6 +153,9 @@ internal class TuneCommand(
         }
 
         log("")
+        if (forfeits > 0) {
+            log("[lab] $forfeits FORFEITS -- a bot threw. That is a defect, and this sweep measured it.")
+        }
         report(registry, journal, incumbent, accepted, taken, started, log)
     }
 
@@ -160,36 +173,23 @@ internal class TuneCommand(
         bound: Double,
         cap: Int,
     ): TuneJournal.Decision {
-        val sprt = Sprt(elo0 = SEARCH_ELO0, elo1 = bound, alpha = ALPHA, beta = BETA)
-        val scores = mutableListOf<Double>()
-        var report = sprt.test(scores)
-        var block = 0
+        val outcome = SequentialTest(
+            baseline = Contestant(subject, params = incumbent),
+            candidate = Contestant(subject, params = proposal),
+            rows = rows,
+            cols = cols,
+            seed = seed,
+            budgetPerTurn = budgetPerTurn,
+            openings = openings,
+            threads = threads,
+            sprt = Sprt(elo0 = SEARCH_ELO0, elo1 = bound, alpha = ALPHA, beta = BETA),
+            blockPairs = blockPairs,
+            maxPairs = cap,
+        ).run(registry)
 
-        while (report.verdict == Sprt.Verdict.UNDECIDED && scores.size < cap) {
-            val batch = Arena(
-                config = TournamentConfig(
-                    contestants = listOf(
-                        Contestant(subject, params = incumbent),
-                        Contestant(subject, params = proposal),
-                    ),
-                    rows = rows,
-                    cols = cols,
-                    rounds = blockPairs * MATCHES_PER_BOARD,
-                    seed = seed + block.toLong() * blockPairs,
-                    budgetPerTurn = budgetPerTurn,
-                ),
-                registry = registry,
-                openings = openings,
-                threads = threads,
-            ).run()
-
-            scores += pairScores(batch, CANDIDATE)
-            report = sprt.test(scores)
-            block++
-        }
-
-        boardsPlayed += scores.size
-        boardsShared += scores.count { it == EVEN }
+        boardsPlayed += outcome.boards
+        boardsShared += outcome.splits
+        forfeits += outcome.forfeits
 
         return TuneJournal.Decision(
             pass = pass,
@@ -198,9 +198,9 @@ internal class TuneCommand(
             incumbent = describe(incumbent),
             proposal = describe(proposal),
             seed = seed,
-            verdict = report.verdict.name,
-            elo = report.elo?.roundToInt()?.toString() ?: "unbounded",
-            boards = scores.size,
+            verdict = outcome.report.verdict.name,
+            elo = outcome.report.elo?.roundToInt()?.toString() ?: "unbounded",
+            boards = outcome.boards,
         )
     }
 
@@ -220,8 +220,9 @@ internal class TuneCommand(
         started: kotlin.time.TimeSource.Monotonic.ValueTimeMark,
         log: (String) -> Unit,
     ) {
-        if (incumbent.isEmpty) {
-            log("[lab] nothing beat the shipped settings over $taken experiments.")
+        if (incumbent == fixed) {
+            val start = if (fixed.isEmpty) "the shipped settings" else entrant(fixed)
+            log("[lab] nothing beat $start over $taken experiments.")
             log("[lab] ${started.elapsedNow().inWholeSeconds}s. That is a result: leave the defaults alone.")
             blindness(log)
             return
@@ -235,7 +236,7 @@ internal class TuneCommand(
             pass = CONFIRMATION,
             stride = 0,
             knob = allKnobs(),
-            incumbent = BotParams.EMPTY,
+            incumbent = fixed,
             proposal = incumbent,
             seed = seed + CONFIRM_SEED_OFFSET,
             bound = CONFIRM_ELO1,
@@ -248,7 +249,7 @@ internal class TuneCommand(
         when {
             confirmation.accepted -> {
                 log("[lab] CONFIRMED at ${confirmation.elo} Elo over ${confirmation.boards} fresh boards.")
-                log("[lab] recommended: ${subject.slug}:${describe(incumbent)}")
+                log("[lab] recommended: ${entrant(incumbent)}")
                 log("")
                 log("[lab] To adopt it, change the declared default and then answer the golden hashes:")
                 log("[lab]   1. `play` it against the ladder rungs -- confirm nothing regressed")
@@ -291,18 +292,14 @@ internal class TuneCommand(
     private fun describe(params: BotParams): String =
         if (params.isEmpty) "stock" else params.names.joinToString(",") { "$it=${params.string(it, "")}" }
 
+    /** A settings map as something that parses back — which is what makes a printed command pasteable. */
+    private fun entrant(params: BotParams): String =
+        if (params.isEmpty) subject.slug else "${subject.slug}:${describe(params)}"
+
     /** A stand-in name for the confirmation, which moves every knob at once rather than one. */
     private fun allKnobs(): BotKnob.Param<*> = knobs.first()
 
     companion object {
-        /** Baseline enters first, so the proposal is contestant one. */
-        private const val CANDIDATE = 1
-
-        private const val MATCHES_PER_BOARD = 2
-
-        /** A board shared down the middle — what two settings that play alike score on every one. */
-        private const val EVEN = 0.5
-
         /**
          * Eight declared steps to start with.
          *
@@ -332,17 +329,25 @@ internal class TuneCommand(
         /**
          * The bar the whole change has to clear on boards the search never saw.
          *
-         * Lower than the search's, deliberately: the search is allowed to be greedy because a
-         * mistake there only costs games, and this is the one number somebody will act on. Fresh
-         * boards and a finer bound is what separates a real gain from the best of dozens of tries.
+         * Lower than the search's, deliberately: a search is allowed to be greedy because a mistake
+         * there only costs games, and this is the one number somebody will act on. Fresh boards and
+         * a finer bound is what separates a real gain from the best of dozens of tries. Both
+         * searches confirm against it — see [SpsaCommand], which is a different way of walking the
+         * same space and inherits the same obligation.
          */
-        private const val CONFIRM_ELO1 = 8.0
+        const val CONFIRM_ELO1: Double = 8.0
 
         private const val ALPHA = 0.05
         private const val BETA = 0.05
 
-        /** Far past anything the search consumed, so the confirmation shares no board with it. */
-        private const val CONFIRM_SEED_OFFSET = 1_000_000L
+        /**
+         * Far past anything a search consumed, so the confirmation shares no board with it.
+         *
+         * Shared with [SpsaCommand], which walks the same space a different way and owes the same
+         * disjoint seed base. A confirmation drawn from seeds the search already used is not a
+         * confirmation, it is the search reported twice.
+         */
+        const val CONFIRM_SEED_OFFSET: Long = 1_000_000L
 
         /** The confirmation gets this many times a search step's boards, and needs them. */
         private const val CONFIRM_BOARDS = 4

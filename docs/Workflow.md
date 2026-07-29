@@ -25,11 +25,14 @@ you have to know before you type a command you already think you know: never bac
 ./gradlew :lab:run --args="time puct:eval=survival --budget 2000"
 ./gradlew :lab:run --args="rate --board 12x12 --budget 1000"
 ./gradlew :lab:run --args="ab uct uct:exploration=2.5"
-./gradlew :lab:run --args="report puct --against uct --worst 5"
+./gradlew :lab:run --args="report puct:eval=horizon --against uct --worst 5"
+./gradlew :lab:run --args="phases puct:eval=learned --log .lab/rave-field"
 ./gradlew :lab:run --args="tune puct --knobs cpuct,territoryWeight"
+./gradlew :lab:run --args="spsa puct:eval=chamber --knobs parityWeight,sealPenalty --budget 1000"
+./gradlew :lab:run --args="train --rows 12 --cols 12 --hidden 16 --epochs 60"
 ```
 
-## The six subcommands, and which question each answers
+## The nine subcommands, and which question each answers
 
 They are separate because they are separate measurements, and one of them producing a number does not
 mean another would have produced the same one.
@@ -41,7 +44,10 @@ mean another would have produced the same one.
 | `rate` | how strong is each, with error bars | the log | — |
 | `ab` | **is this change better, and how sure are we** | — | the match log |
 | `report` | why is it losing | the log | — |
-| `tune` | what should this knob be | — | a journal |
+| `phases` | **when** is it losing — before the board splits, or after | the log's replays | — |
+| `tune` | what should this knob be, up to about three of them | — | a journal |
+| `spsa` | what should these ten knobs be | — | a journal |
+| `train` | **what should this value function's weights be** | the log's replays | a literal, on stdout |
 
 `ab` is the first one to reach for when deciding whether to keep a change. `play` gives a matrix, and
 a matrix has to be read against a threshold somebody invented; `ab` plays until the evidence settles
@@ -91,6 +97,22 @@ Every `play` and `ab` appends to `.lab/` (gitignored), which is what `rate` and 
 An entrant is recorded **expanded** — every declared knob at the value it played under — so a log line
 keeps its meaning after a default moves. `rate` and `report` shorten it back down for display by
 dropping whatever matches the registry's defaults today.
+
+### Naming one back
+
+`report` takes a **subset**, not a prefix: a slug plus however many `name=value` pairs it takes to
+pick one entrant, in any order. `puct:eval=horizon` finds the entrant playing that evaluation
+whatever else it was set to, and values compare as numbers, so `cpuct=1.5` finds `cpuct=1.50`. A name
+that could mean several fails and lists them.
+
+```bash
+./gradlew :lab:run --args="report puct:eval=horizon --against puct:eval=survival --worst 5"
+```
+
+Prefix matching looked equivalent and was not. It forced the bot's *declaration order* on the reader,
+so only the last knob in the list could ever be named on its own — which is why P2 had to append its
+new knob to keep existing commands working. It also cut inside a value, so `budget=10` silently
+selected `budget=1000`. Pasting a whole logged spec back still works and always did.
 
 ## Deciding whether a change helped
 
@@ -183,6 +205,183 @@ disjoint-seed re-run at a finer bound is the only part of `tune` whose number yo
 **"Nothing beat the default" is a result and is worth writing down.** It costs ~20 minutes to
 establish and it stops the next person spending them again. Both runs land in
 `.lab/tune-<slug>.tsv`; the confirming one is the row with a negative `pass`.
+
+## Tuning ten knobs
+
+```bash
+./gradlew :lab:run --args="spsa puct --knobs cpuct --budget 1000"
+```
+
+`tune` costs one sequential test per knob per stride per pass, and the knobs interact, so the passes
+have to be repeated — past about three knobs it is not a search you can afford to finish. `spsa`
+estimates a gradient over **every numeric knob at once from two measurements**, so an iteration costs
+the same at ten knobs as at one. It is what chess engines tune with, for exactly this situation.
+
+Four things about it decide whether a run means anything.
+
+**It searches the entrant you name, spec and all.** `tune` and `spsa` both take a full entrant spec
+rather than a bare slug, and everything the spec pins is held still — in both arms of every
+measurement *and* in the baseline the confirming run is played against. That second half is the one
+that leaves no trace when it is wrong: a confirmation against the bare defaults measures the spec and
+the point together and credits the whole difference to the point. A knob that is both pinned and
+named for searching is refused rather than resolved one way.
+
+The reason it is not a convenience is that a weight can live under a `Choice`. `ChamberEval`'s three
+weights are not read at all unless `eval=chamber`, so `spsa puct --knobs parityWeight` would perturb
+a number nothing looks at, find a flat objective, and print a well-formed answer about a bot it was
+not searching.
+
+**Numbers only.** A `Choice` or a `Flag` has no direction to be perturbed along, so naming one is an
+error rather than a coordinate silently built out of the order its values happen to be declared in.
+Left unnamed they stay at their defaults and the run says which. `tune` is what enumerates those.
+
+**The two arms play each other, over one set of boards.** That is common random numbers, and it is
+where most of the leverage is: a board's own difficulty is far larger than the difference two knob
+settings make, and sharing the board cancels it inside the difference instead of leaving it to be
+averaged away. Measured on a synthetic objective in `SpsaTest`, pairing is worth about **7× the
+games** — so an unpaired design is not a slower search, it is a different budget.
+
+The cost of pairing is that a run inherits `ab`'s blind spot whole. A knob that changes how the bot
+plays *other* opponents and not how it plays a copy of itself has no gradient here at all, every
+board splits down the middle, and the point never leaves its defaults. The run prints the split rate
+and says so; `chase --knobs roomShare` is the worked case, and the answer for it is a field.
+
+**Everything is counted in the knob's own declared steps**, which is the unit `tune`'s stride already
+speaks, so the same numbers mean the same thing on a `cpuct` that moves in tenths and a weight that
+moves in twentieths.
+
+| | what it sets | default |
+|---|---|---|
+| `--iterations` | gradient steps | 200 |
+| `--boards` | boards behind one gradient estimate | 6 |
+| `--spread` | declared steps between the centre and each arm | 8 |
+| `--stride` | **the most** a knob moves on the first iteration | 6 |
+
+`--iterations` and `--boards` buy the same total games and are **not** interchangeable: doubling
+either doubles the cost, but doubling the iterations also sharpens the answer, because the run
+averages the last quarter of its trajectory and those are more independent draws to average.
+Doubling the boards only sharpens one step that the next one overwrites. When a search has not
+settled, raise `--iterations`.
+
+`--stride` is a ceiling rather than a typical move — reached only if one arm won every board of an
+iteration — so on six boards the everyday move is about a step. `SpsaTest` walks a synthetic bowl of
+the curvature a knob here has: at 200 iterations the point finishes 12 of a hundred steps from the
+answer at a stride of 1, 7 at 6 and 8 again at 12. Below the balance a run never arrives; above it, a
+run arrives and then wanders.
+
+**What it answers with is the averaged tail, and never its own best iterate.** A search over a noisy
+objective visits its best-looking point by construction, so the maximum of a trajectory is a
+statement about the noise; the last iterate is one sample of a random walk. Averaging the last
+quarter is the standard answer to both, and it beats the last step on any run long enough to have
+arrived.
+
+**And the point it settles on is an attempt, not a finding.** Every run ends with a confirming `ab`
+of that point against the shipped defaults, over a disjoint seed base at a stricter bound, and prints
+that command so it can be re-run on its own. Only that number is worth acting on — the same rule
+`tune` follows, for the same reason. The journal in `.lab/spsa-<slug>.tsv` holds every iteration with
+its two arms, its sign vector and its seed, and no iteration in it carries a verdict, because none of
+them ran a test.
+
+A run resumes from its journal: recorded gaps are replayed rather than re-bought, and a resume whose
+arms do not match what was written stops rather than walking a different trajectory under the old
+run's name.
+
+## Fitting a value function
+
+```bash
+./gradlew :lab:run --args="train --log .lab/chamber-ab,.lab/prior-ab --rows 12 --cols 12 --hidden 16"
+```
+
+The one subcommand that plays nothing. A logged match is a move stream, and a move stream is a whole
+game that can be walked again for free — `ReplayCodec` gives back the spawns, the turn order and the
+rules, and `Match.playback` drives it without consulting a bot. So every batch any phase has ever
+run is training data, and `train` reads each position through the **same** `PositionFeatures` the bot
+reads it through. That sharing is the design: `:lab` cannot see `:bots`' internals, so a trainer that
+could not import the extractor would have to reimplement it, and a copy that drifts by one term
+produces a bot that is merely mediocre with nothing failing anywhere.
+
+Four things decide whether a run means anything.
+
+**`--log` takes a list, and which batches are on it is a judgement about the play in them.** A field
+of reactive bots and an `ab` between two searchers are both logged matches and are not both training
+data for a leaf that will only ever be asked about positions a search reached.
+
+**Everything it reports is held out by game.** Consecutive positions of a match differ by one move
+and share a label, so a row-wise split reports the training loss under another name. Read the holdout
+log-loss against `0.693`, which is what a model that always answers even scores.
+
+**Read the gap between the training and holdout columns before the loss itself.** Equal columns mean
+the fit is limited by what the features can say, and no amount of capacity or corpus will move it —
+which is a finding about the *feature design* and the only one this instrument can deliver.
+
+**`--stride` buys distinct games, not positions.** Rows from one match are correlated; rows from two
+are not. Within a fixed `--positions` ceiling, a larger stride spends the budget on more games.
+
+Like `tune` and `spsa` it **recommends and never edits**: it prints the literal `LearnedWeights`
+should hold, wrapped ready to paste, and adopting one is the sequence in [`Bots.md`](Bots.md) because
+it changes how the bot plays every game.
+
+## Asking when a bot's games are decided
+
+```bash
+./gradlew :lab:run --args="phases puct:eval=learned --log .lab/rave-field"
+```
+
+The other subcommand that plays nothing. A snakes match is two games in sequence — a contact game
+while the snakes can still reach each other, and a solo filling race once they cannot — and they ask
+for entirely different play. A rating cannot tell you which of them a bot is losing, and `report`
+answers a different question: *how* it went out, not *when* it stopped being able to win.
+
+`phases` replays the log, finds the move the free squares came apart **for good**, and reports the
+wins and losses on each side of that line. Three things about it are load-bearing.
+
+**The split is taken with hindsight, so this is a diagnostic and never a dispatch rule.** A bot
+choosing a move cannot know whether the separation it is looking at will hold.
+
+**The conservative predicate is vacuous at two snakes, and the run prints its count so you can see
+that rather than take it on trust.** Treating every *living* body as ground — the only reading under
+which a separation is provably permanent — leaves the whole playable rectangle connected, because a
+two-snake match ends at the first death and so never has a corpse in it. It becomes a real question
+with a third snake seated.
+
+**What stands in for it is measured, not argued:** the run reports how often a board that came apart
+was rejoined by the moves after it, which is the size of the mistake `SpaceOwnership.isolated` makes.
+
+## Measuring what a change costs
+
+**Pair each seed across two builds. Do not compare timing blocks.**
+
+`time` reports microseconds, and a microsecond is a statement about the machine as much as about the
+code. A block of timings taken now and a block taken an hour ago are not comparable, and nothing in
+either says so. The failure is not subtle and it is not rare: an unpaired 20×20 block taken during
+the bitboard conversion reproduced entirely plausible numbers **and put an unchanged `uct` control at
+0.82×** — the machine had degraded about 50% across the session and the block was reading drift as
+signal. **Absolute microseconds from a single block are worthless. Only paired ratios with a control
+survive.**
+
+The method:
+
+```bash
+git worktree add ../snakewarz-before <baseline-commit>     # a detached build of the old code
+./gradlew -p ../snakewarz-before :lab:run --args="time puct --budget 1000 --seed 7"
+./gradlew                        :lab:run --args="time puct --budget 1000 --seed 7"
+```
+
+Three parts, all of them load bearing:
+
+- **The same seed, back to back.** Not the same seed an hour apart, and not two seeds. The pair is
+  the measurement; either figure on its own is noise with a unit attached.
+- **A control the change cannot touch.** Carry an entrant the change does not reach — `uct` for a
+  change to `puct`'s leaf, a reactive bot for a change to a search primitive — and time it in the
+  same pairs. A control that moves is a machine that moved, and the run is void.
+- **A precondition: turn counts have to match per seed.** Back-to-back seed pairing measures cost
+  with the game held still, which is only true when the change is behaviour preserving. If it alters
+  a move, the two builds play different games of different lengths and the ratio is measuring both.
+  For a change that alters play, time it at a fixed position count instead and say so.
+
+Pairing is not a refinement. The same bitboard conversion measured 1.49× unpaired and **1.59×**
+paired on a 12×12, and 1.93× against **2.13×** on a 20×20 — the unpaired numbers understated the
+speedup, and would have overstated it just as easily on a machine drifting the other way.
 
 ## Why `:lab` is a module
 

@@ -49,13 +49,36 @@ import ao.snakewarz.core.grid.Grid
  * and `b` the same. Without it a comb reads as though every tooth were fillable, and the endgame this
  * evaluation exists for is nothing but combs.
  *
- * ### It is an upper bound, deliberately
+ * ### It is an upper bound on squares, and *not* one on moves
  *
- * Two things are not modelled: that the walk must *reach* the cut vertex it leaves by, and that a
- * block satisfying the parity count need not admit a Hamiltonian path through it — the centre of a
- * 3x3 is the small counterexample. Both would over-count in the same direction for everybody, and an
- * evaluation is read as a comparison. Tightening either means searching the region rather than
- * measuring it, which is the tree's job and not a leaf's.
+ * Two things are not modelled and both over-count: that the walk must *reach* the cut vertex it
+ * leaves by, and that a block satisfying the parity count need not admit a Hamiltonian path through
+ * it — the centre of a 3x3 is the small counterexample. Both err in the same direction for everybody,
+ * and an evaluation is read as a comparison.
+ *
+ * One thing is not modelled and **under**-counts, which is the more important gap because it is the
+ * one that makes the answer mean something other than it looks like it means. The opening sentence
+ * up there — a snake is a walk that never revisits a square — is true of classic Tron and false at
+ * the shipped `RulesConfig.growEveryNthMove` of two, where the tail retracts on alternating turns and
+ * a square is walkable again about `length` moves after the head leaves it. Both caps here assume
+ * self-avoidance and both are wrong under retraction: the chessboard parity bound, and the
+ * block-chain DP's premise that a cut vertex is crossed once. The distortion is not uniform, which is
+ * what makes it matter: brute-forced against the real rules, an open room is out by a factor of two
+ * flat — a 3x4 reads eleven squares and is worth twenty-two moves — while a dumbbell is out by
+ * whatever its neck is worth, because a neck this count calls one-way is one a retracting walk
+ * crosses twice whenever the far side takes longer to fill than the body is long.
+ * [SurvivalHorizon] is that correction, and `SurvivalHorizonTest` is where both numbers come from;
+ * this class stays the square count, which is the honest reading of the question it is asked.
+ *
+ * Tightening any of the three means searching the region rather than measuring it, which is the
+ * tree's job and not a leaf's.
+ *
+ * ### The decomposition has a second reader, which keeps what this one discards
+ *
+ * [ChamberTree] runs the same pass and answers per chamber instead of per region: what its parity is
+ * really worth, how much of it sits on ground somebody else reaches first, and how much of the region
+ * the chosen chain never gets to. Turn its weights to the cap and its discount off and it returns
+ * this number exactly, which `ChamberTreeTest` is what pins.
  *
  * One instance per bot per match. The visited set is a generation stamp, so a region costs the
  * squares it holds rather than the size of the board, and the four stacks are sized once from

@@ -2,8 +2,6 @@ package ao.snakewarz.bots.search
 
 import ao.snakewarz.bots.reactive.space.FloodFill
 import ao.snakewarz.bots.search.puct.TerritoryEval
-import ao.snakewarz.core.grid.Cell
-import ao.snakewarz.core.grid.Direction
 import ao.snakewarz.core.grid.Grid
 import ao.snakewarz.core.rules.BoardView
 import ao.snakewarz.core.rules.MatchEnd
@@ -27,21 +25,59 @@ import ao.snakewarz.core.snake.SnakeId
  *
  * The cost is one sweep of the free area regardless of how many snakes are on it, which is what makes
  * it affordable as a rollout cut-off evaluation — the same order as one [FloodFill], not one per
- * snake. Buffers are allocated once per bot per match, and the visited set is a generation stamp, so
- * a sweep costs the squares it reaches rather than the size of the board.
+ * snake. Buffers are allocated once per bot per match.
+ *
+ * ### A layer at a time, not a square at a time
+ *
+ * The sweep is a [CellBits] one: every slot's frontier is a bitmap and one breadth-first layer is a
+ * shift and a mask over a handful of `Long`s. That is exact rather than approximate, and the reason
+ * is the queue this replaces: its frontier is FIFO, so every square at distance `d` is claimed while
+ * a square at `d - 1` is being expanded and therefore *before* any square at `d` comes off the queue.
+ * All the claims and all the ties of one distance are settled before that distance spreads, which is
+ * precisely what advancing every frontier in lockstep does.
+ *
+ * Contact is read the same way and off the finished sweep: a slot has met somebody when a square next
+ * to its own ground is free and is not its own. Every free square next to a claimed one is itself
+ * claimed — the sweep would have taken it otherwise — so that is the same test as "one frontier ran
+ * into another", without having to catch the moment it happened.
  *
  * The one simplification worth naming: it ignores whose turn it is. A snake about to move reaches an
  * equidistant square first in reality, and here the square is contested. That is a half-step of
  * accuracy, uniformly applied, in a heuristic that is already an approximation of the game.
  */
 internal class SpaceOwnership(private val grid: Grid, private val snakeCount: Int) {
-    private val stamp = IntArray(grid.cellCount)
-    private val steps = IntArray(grid.cellCount)
-    private val owner = ByteArray(grid.cellCount)
-    private val frontier = IntArray(grid.cellCount)
+    /** What the sweep may walk on: every free square of the board it was handed. */
+    private val open = CellBits(grid)
+
+    /** Every square any frontier has reached, contested ones included. Nothing is claimed twice. */
+    private val taken = CellBits(grid)
+
+    /** Where each slot's frontier stands, and where it lands next. Swapped rather than copied. */
+    private val frontier = Array(snakeCount) { CellBits(grid) }
+    private val landing = Array(snakeCount) { CellBits(grid) }
+
+    /** Everything each slot holds, which is what [isolated] is read off once the sweep is done. */
+    private val owned = Array(snakeCount) { CellBits(grid) }
+
+    private val reachedThisLayer = CellBits(grid)
+    private val sharedThisLayer = CellBits(grid)
+
+    /** A slot's ground plus the head it spreads from, and what lies one step outside the pair. */
+    private val ground = CellBits(grid)
+    private val outside = CellBits(grid)
+
+    /** Every live head, because a head is spread from without ever being somewhere to spread to. */
+    private val heads = CellBits(grid)
+
+    /** Live slots, so a sweep over a field with corpses in it costs what the survivors cost. */
+    private val live = IntArray(snakeCount)
+    private var liveCount = 0
+
+    /** The live slots whose frontier still has somewhere to go. An empty one never fills again. */
+    private val spreading = IntArray(snakeCount)
+    private var spreadingCount = 0
+
     private val counts = IntArray(snakeCount)
-    private val directions = Direction.entries
-    private var generation = 0
 
     /**
      * Whether each slot's ground ever ran into somebody else's — see [isolated].
@@ -69,69 +105,36 @@ internal class SpaceOwnership(private val grid: Grid, private val snakeCount: In
      * nothing; a head is not counted, because it is occupied.
      */
     fun measure(board: BoardView): IntArray {
-        nextGeneration()
-        counts.fill(0)
-        touching.fill(false)
+        open.freeSquaresOf(board)
+        taken.clear()
+        heads.clear()
+        liveCount = 0
 
-        var tail = 0
         for (slot in 0 until snakeCount) {
+            counts[slot] = 0
+            touching[slot] = false
+            owned[slot].clear()
+            frontier[slot].clear()
+
             val snake = board.snake(SnakeId(slot))
             if (!snake.alive) {
                 continue
             }
-            val head = snake.head
-            stamp[head.index] = generation
-            steps[head.index] = 0
-            owner[head.index] = slot.toByte()
-            frontier[tail++] = head.index
+            frontier[slot].add(snake.head)
+            taken.add(snake.head)
+            heads.add(snake.head)
+            live[liveCount++] = slot
         }
 
-        var head = 0
-        while (head < tail) {
-            val cell = Cell(frontier[head++])
-            val by = owner[cell.index].toInt()
-            if (by == CONTESTED) {
-                continue
-            }
-
-            val distance = steps[cell.index] + 1
-            for (i in directions.indices) {
-                val next = grid.step(cell, directions[i])
-                if (!board.isFree(next)) {
-                    continue
-                }
-
-                if (stamp[next.index] != generation) {
-                    stamp[next.index] = generation
-                    steps[next.index] = distance
-                    owner[next.index] = by.toByte()
-                    counts[by]++
-                    frontier[tail++] = next.index
-                    continue
-                }
-
-                // Already claimed. A tie on the same step takes it off both of them; anything reached
-                // later than the incumbent was simply beaten to it.
-                val holder = owner[next.index].toInt()
-                if (holder != by) {
-                    // Contact, and it is *frontier adjacency* rather than the tie below — two
-                    // territories that touch, however lopsidedly. A corridor of even free length
-                    // divides cleanly with no square ever contested (1x6 with a head at each end
-                    // owns two and two), so a tie-based test would report two snakes about to
-                    // collide as separated. See SpaceOwnershipTest.
-                    touching[by] = true
-                    if (holder != CONTESTED) {
-                        touching[holder] = true
-                    }
-                }
-
-                if (steps[next.index] == distance && holder != by && holder != CONTESTED) {
-                    counts[holder]--
-                    owner[next.index] = CONTESTED.toByte()
-                }
-            }
+        if (liveCount > 0) {
+            spread()
         }
 
+        for (i in 0 until liveCount) {
+            val slot = live[i]
+            counts[slot] = owned[slot].count()
+            touching[slot] = meetsAnybody(board, slot)
+        }
         return counts
     }
 
@@ -154,7 +157,7 @@ internal class SpaceOwnership(private val grid: Grid, private val snakeCount: In
      * separated by anything this can see, and inventing a winner would feed the tree noise.
      */
     fun verdict(board: BoardView): MatchOutcome {
-        val owned = measure(board)
+        val share = measure(board)
 
         var leader = -1
         var best = -1
@@ -164,7 +167,7 @@ internal class SpaceOwnership(private val grid: Grid, private val snakeCount: In
             if (!board.snake(SnakeId(slot)).alive) {
                 continue
             }
-            val held = owned[slot]
+            val held = share[slot]
             when {
                 held > best -> {
                     best = held
@@ -179,18 +182,108 @@ internal class SpaceOwnership(private val grid: Grid, private val snakeCount: In
         return if (leader < 0 || tied) DRAWN else verdicts[leader]
     }
 
-    private fun nextGeneration() {
-        if (generation == Int.MAX_VALUE) {
-            stamp.fill(0)
-            generation = 0
+    // -- internals
+
+    /**
+     * Advances every live frontier one square at a time until none of them has anywhere left to go.
+     *
+     * A snake whose frontier lands nowhere is dropped for the rest of the sweep: an empty frontier
+     * spreads to nothing forever after, and a snake sealed into a corner while the other fills the
+     * board is the common shape of a leaf late in a game.
+     */
+    private fun spread() {
+        spreadingCount = liveCount
+        for (i in 0 until liveCount) {
+            spreading[i] = live[i]
         }
-        generation++
+
+        while (spreadingCount > 0) {
+            if (spreadingCount == 1) {
+                // Nobody left to tie with, which needs none of the machinery below.
+                if (!advanceAlone(spreading[0])) {
+                    spreadingCount = 0
+                }
+                continue
+            }
+            advanceTogether()
+        }
+    }
+
+    private fun advanceAlone(slot: Int): Boolean {
+        val landed = landing[slot]
+        if (!landed.spreadFrom(frontier[slot], open, taken)) {
+            return false
+        }
+
+        taken.addAll(landed)
+        owned[slot].addAll(landed)
+
+        landing[slot] = frontier[slot]
+        frontier[slot] = landed
+        return true
+    }
+
+    private fun advanceTogether() {
+        for (i in 0 until spreadingCount) {
+            val slot = spreading[i]
+            landing[slot].spreadFrom(frontier[slot], open, taken)
+        }
+
+        // A square two frontiers land on this layer is a tie: it goes to neither, and it stops
+        // there. It is still taken, so nothing arriving later may have it either.
+        reachedThisLayer.copyFrom(landing[spreading[0]])
+        sharedThisLayer.clear()
+        for (i in 1 until spreadingCount) {
+            val landed = landing[spreading[i]]
+            sharedThisLayer.addShared(reachedThisLayer, landed)
+            reachedThisLayer.addAll(landed)
+        }
+        taken.addAll(reachedThisLayer)
+
+        var stillSpreading = 0
+        for (i in 0 until spreadingCount) {
+            val slot = spreading[i]
+            val landed = landing[slot]
+            if (!landed.settleInto(sharedThisLayer, owned[slot])) {
+                continue
+            }
+
+            landing[slot] = frontier[slot]
+            frontier[slot] = landed
+            spreading[stillSpreading++] = slot
+        }
+        spreadingCount = stillSpreading
+    }
+
+    /**
+     * Whether anything next to [slot]'s ground belongs to somebody else.
+     *
+     * Two questions, because a sweep starts on squares it would never walk onto. The first is the
+     * one that reads as obvious — is a free square next to this snake's ground somebody else's, or a
+     * tie — and the head is spread from as well as the ground, because a snake whose every
+     * neighbouring square went to a rival holds nothing at all and is still standing in the fight.
+     *
+     * The second is the one a free-square test cannot see: another snake's **head** beside this
+     * snake's ground. A head is occupied, so it is never a square anybody may take, and it is still
+     * a snake standing one move away — and the sweep spreads from it, which is what makes the two
+     * frontiers adjacent. A snake whose own ground reaches the square a rival is standing on has
+     * plainly not been separated from it.
+     */
+    private fun meetsAnybody(board: BoardView, slot: Int): Boolean {
+        val head = board.snake(SnakeId(slot)).head
+
+        ground.copyFrom(owned[slot])
+        ground.add(head)
+        if (outside.spreadFrom(ground, open, owned[slot])) {
+            return true
+        }
+
+        ground.copyFrom(heads)
+        ground.remove(head)
+        return outside.spreadFrom(owned[slot], ground, owned[slot])
     }
 
     companion object {
-        /** Reached by two snakes on the same step, so held by neither. Fits in the owner byte. */
-        private const val CONTESTED = -1
-
         /** A judged draw: nobody is ahead by enough to call, which is a real reading of a position. */
         private val DRAWN = MatchOutcome(SnakeId.NONE, MatchEnd.TURN_LIMIT)
     }

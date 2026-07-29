@@ -3,6 +3,7 @@ package ao.snakewarz.bots.search.puct
 import ao.snakewarz.botapi.scratch.Playout
 import ao.snakewarz.bots.boardOf
 import ao.snakewarz.bots.search.SpaceOwnership
+import ao.snakewarz.bots.search.learned.LearnedEval
 import ao.snakewarz.bots.turnOn
 import ao.snakewarz.core.Budget
 import ao.snakewarz.core.grid.Direction
@@ -17,11 +18,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The three [LeafEval]s, on positions small enough to work out by hand.
+ * Every [LeafEval], on positions small enough to work out by hand.
  *
  * What every implementation owes the tree whatever it measures — the scale, the reading of a corpse,
  * one unit of allowance — plus the claims [TerritoryEval] makes on its own. [SurvivalEvalTest]
- * carries what only the fillable-space reading can say.
+ * carries what only the fillable-space reading can say, and `ChamberEvalTest` what only the chambers
+ * can.
  *
  * The weights are passed in rather than taken from [PuctBot]'s declared defaults, because those are
  * a measurement that will move and these are claims about the *shape* of the appraisal, which should
@@ -156,13 +158,15 @@ class LeafEvalTest {
     @Test
     fun `every evaluation is priced the same, so an allowance is a count of them`() {
         // Uncalibrated on purpose -- EvaluationCost says so out loud. What has to hold is that the
-        // three are one currency, because a matrix comparing them at "the same allowance" is
+        // four are one currency, because a matrix comparing them at "the same allowance" is
         // otherwise comparing nothing.
         val board = boardOf(5, 5, 0 to 0, 4 to 4)
 
         assertEquals(1, MobilityEval(2).cost)
         assertEquals(1, territory(board).cost)
         assertEquals(1, survival(board).cost)
+        assertEquals(1, horizon(board).cost)
+        assertEquals(1, chamber(board).cost)
     }
 
     @Test
@@ -223,6 +227,16 @@ class LeafEvalTest {
     ): TerritoryEval =
         TerritoryEval(board.grid, board.snakeCount, territoryWeight, mobilityWeight, trapPenalty, separationBonus)
 
+    /** A [HorizonEval] sized for [board], on the same weights and for the same reason. */
+    private fun horizon(
+        board: Board,
+        separationBonus: Double = 0.9,
+        trapPenalty: Double = 0.35,
+        territoryWeight: Double = 0.7,
+        mobilityWeight: Double = 0.2,
+    ): HorizonEval =
+        HorizonEval(board.grid, board.snakeCount, territoryWeight, mobilityWeight, trapPenalty, separationBonus)
+
     /** A [SurvivalEval] sized for [board], on the same weights and for the same reason. */
     private fun survival(
         board: Board,
@@ -254,9 +268,40 @@ class LeafEvalTest {
         return values[0]
     }
 
+    /**
+     * A [ChamberEval] sized for [board], on the same four weights and its own three.
+     *
+     * The three chamber weights are its shipped defaults rather than a fixture's, because unlike the
+     * four above they have no meaning outside this evaluation and no second implementation to be held
+     * still against. `ChamberEvalTest` is where they are varied.
+     */
+    private fun chamber(
+        board: Board,
+        separationBonus: Double = 0.9,
+        trapPenalty: Double = 0.35,
+        territoryWeight: Double = 0.7,
+        mobilityWeight: Double = 0.2,
+    ): ChamberEval =
+        ChamberEval(
+            board.grid,
+            board.snakeCount,
+            territoryWeight,
+            mobilityWeight,
+            trapPenalty,
+            separationBonus,
+            PuctBot.PARITY_WEIGHT.default,
+            PuctBot.FRONTIER_PENALTY.default,
+            PuctBot.SEAL_PENALTY.default,
+        )
+
     private fun evalsFor(board: Board): List<LeafEval> = listOf(
         territory(board),
         MobilityEval(board.snakeCount),
         survival(board),
+        horizon(board),
+        chamber(board),
+        // At the shipped literal, because what the tests above assert of every leaf — the scale, the
+        // reading of a corpse — is exactly what a fit could get wrong without failing anywhere else.
+        LearnedEval(board.grid, board.snakeCount),
     )
 }

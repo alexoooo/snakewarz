@@ -263,7 +263,16 @@ public sealed class BotKnob(
          * A bound on the *declaration* rather than on the form — [BotEntry.offered] is what a form
          * shows, and it is a handful — so this is really a bound on what a replay payload can be
          * made to carry, which is why the codec checks against it too.
+         *
+         * **Raising it is a decision about the payload rather than a number to nudge**, and the two
+         * halves of that are worth separating. The *encoding* does not move: a slot's knob count is
+         * a varint, so every payload written under a lower bound decodes unchanged and nothing about
+         * the layout depends on this figure. What moves is the worst case a decoder will accept
+         * before it allocates — at 20 names and values of [MAX_NAME_LENGTH] and [MAX_VALUE_LENGTH],
+         * about 1.3 KB per slot from a `#r=` link a stranger wrote, which is the number this bound
+         * exists to hold down. The ceiling is **per bot**, so a bot that wants more than this wants
+         * a second bot rather than a larger payload.
          */
-        public const val MAX_PER_BOT: Int = 16
+        public const val MAX_PER_BOT: Int = 20
     }
 }

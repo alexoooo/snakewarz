@@ -52,9 +52,13 @@ import ao.snakewarz.core.snake.SnakeId
  * `grid.playableCount`: the appraisal read 44% there and lost to the rollout, because it was being
  * charged a hundred and forty-four units for a leaf the rollout got for sixty.
  *
- * It is not free, and the second table is the one that keeps the first honest. A turn here is
- * 2,709 µs at 1,000 evaluations against the random rollout's 1,984 and `uct`'s 2,096, so a sweep
- * costs about 1.4 rollouts on this board. Handed the 730 that buys the same millisecond:
+ * It is not free, and the second table is the one that keeps the first honest. The allowances in it
+ * were worked out from a sweep costing about 1.4 rollouts on this board — 2,709 µs a turn at 1,000
+ * evaluations against the random rollout's 1,984 and `uct`'s 2,096. **That exchange rate no longer
+ * holds**: [ao.snakewarz.bots.search.EvaluationCost] carries the live one, where the sweep is
+ * *cheaper* than a rollout here, so the equal-clock allowance below is smaller than the one this bot
+ * should be handed today and the row is a record of a measurement rather than a live comparison.
+ * Handed the 730 that bought the same millisecond then:
  *
  * | | territory@730 | rollout | uct | score |
  * |---|---|---|---|---|
@@ -71,10 +75,32 @@ import ao.snakewarz.core.snake.SnakeId
  * ### It is no longer the best leaf here, and is still the default
  *
  * [SurvivalEval] beats this **31 of 40** at an equal allowance, which is a wider margin than
- * anything in either table above. At an equal *clock* the two are level — 48-52 over a hundred
- * rounds — because it costs about 1.6 times as much per evaluation on this board and better than
- * twice as much on a 20x20. Its KDoc carries both matrices and the non-transitivity warning that
- * comes with them. Level and cheaper is why `eval` still defaults here.
+ * anything in either table above. At an equal *clock* the two are level. Its KDoc carries both
+ * matrices and the non-transitivity warning that comes with them. Level and cheaper is why `eval`
+ * still defaults here.
+ *
+ * ### The exchange rate moved and the verdict did not — re-derived after the bitboard sweep
+ *
+ * `CellBits` made this evaluation **1.59x** cheaper a turn on this board and [SurvivalEval] only
+ * **1.18x**, because both sweep with the same primitive and only that one then walks every region
+ * with a depth-first pass no bitmap helps. So the allowance that buys [SurvivalEval] this one's
+ * millisecond fell from the **470** its KDoc records to **415**, and the honest equal-clock batch is
+ * a different batch than it was. Both numbers below are `ab` on 12x12, this bot as the baseline:
+ *
+ * | question | entrants | verdict |
+ * |---|---|---|
+ * | per iteration | `survival@1,000` against `territory@1,000` | **+81 Elo ±33**, 240 boards |
+ * | per millisecond | `survival@415` against `territory@1,000` | **+7 Elo ±10**, 2,000 boards |
+ *
+ * **The worked example survives being re-derived**, and that is the finding: the exchange rate moved
+ * against [SurvivalEval] and the outcome did not move with it. What changed is the width — the old
+ * *48-52 over a hundred rounds* was ±35 Elo of nothing, and ±10 over two thousand boards is a real
+ * null. Read the second row as level rather than as a win for either: it stopped at the `--max-pairs`
+ * ceiling rather than because the evidence settled, so ±10 is where the interval sat and not where it
+ * converged.
+ *
+ * The first row is the one to be careful with. It stopped at the sequential test's upper bound, so
+ * **the sign is solid and 81 is the generous end** — "at least 10 Elo" is what was actually proven.
  *
  * ### Two things the ablation found
  *

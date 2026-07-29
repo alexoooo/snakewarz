@@ -11,6 +11,7 @@ import ao.snakewarz.bots.reactive.WallHugBot
 import ao.snakewarz.bots.reactive.chase.ChaseBot
 import ao.snakewarz.bots.reactive.space.PressureBot
 import ao.snakewarz.bots.reactive.space.SpaceBot
+import ao.snakewarz.bots.search.AlphaBetaBot
 import ao.snakewarz.bots.search.FlatMonteCarloBot
 import ao.snakewarz.bots.search.puct.PuctBot
 import ao.snakewarz.bots.search.puct.TerritoryEval
@@ -71,6 +72,10 @@ public object ShippedBots : BotRegistry {
         // number is in, or leave it here and say why, but do not let it assert something nobody
         // checked.
         register("puct", "PUCT", ::PuctBot, PuctBot.KNOBS)
+
+        // The only exact search here, and registered for what it lets you measure rather than for
+        // where it places: everything else in this list samples lines and keeps a mean.
+        register("alphabeta", "Alpha-Beta", ::AlphaBetaBot, AlphaBetaBot.KNOBS)
     }
 
     private val byId: Map<BotId, BotEntry> = entries.associateByTo(LinkedHashMap()) { it.id }

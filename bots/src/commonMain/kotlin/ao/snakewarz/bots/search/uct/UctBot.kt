@@ -251,24 +251,32 @@ public class UctBot(setup: BotSetup) : Bot {
          *
          * | depth | wins of 40 | µs/turn, JVM | µs/turn, Chrome | against full |
          * |---|---|---|---|---|
-         * | 10 | 27 | 387 | 1,011 | 2.9× / 3.2× |
-         * | 25 | 20 | 269 | 575 | 2.0× / 1.8× |
-         * | 60 | 17 | 189 | 367 | 1.4× / 1.2× |
-         * | played out | — | 134 | 313 | — |
+         * | 10 | 27 | 225 | 355 | 1.5× / 1.3× |
+         * | 25 | 20 | 167 | 267 | 1.1× / 1.0× |
+         * | 60 | 17 | 176 | 322 | 1.1× / 1.2× |
+         * | played out | — | 154 | 264 | — |
          *
          * One sigma over forty matches is ±3.2, so cutting *hard* is a little ahead per iteration
          * (27 of 40 is two sigma) and cutting late is a little behind — which is the shape to
          * expect, since an ownership sweep is a less noisy reading of a position than one random
-         * playout, and a rollout cut at sixty has usually finished anyway. It is not free: reading
-         * the board costs 1.4 to 3.2 times the wall clock of playing it out, because a rollout here
-         * is mutate-and-undo over a flat arena at tens of nanoseconds a move and a hundred of them
-         * cost about what **one** board-wide sweep costs.
+         * playout, and a rollout cut at sixty has usually finished anyway.
          *
-         * So per *millisecond* it is still behind, and the currency has moved against it since it
-         * was proposed. An allowance is counted in evaluations now, so a truncated iteration and a
-         * full one buy exactly one each — the extra iterations that were the entire argument for
-         * truncating are not on offer any more, and what is left is a slightly better leaf for two
-         * to three times the price of the same number of them.
+         * **The cost columns are the ones to watch, and they have already moved once.** A rollout
+         * here is mutate-and-undo over a flat arena at tens of nanoseconds a move, and the sweep it
+         * is judged by is a bitmap one — [SpaceOwnership] advances whole breadth-first layers with a
+         * shift and a mask rather than a square at a time, which took the truncated iteration from
+         * costing two to three times a full rollout to costing between one and one and a half. Both
+         * targets agree on that, and Chrome agrees more strongly than the JVM does, which is what
+         * settles the standing worry about `Long` on wasm: a bitmap sweep is not paying an emulation
+         * tax there.
+         *
+         * So per *millisecond* the trade is now close to even where it used to be plainly bad, and
+         * the currency still does not favour it. An allowance is counted in evaluations, so a
+         * truncated iteration and a full one buy exactly one each — the extra iterations that were
+         * the entire argument for truncating are not on offer, and what is left is a slightly better
+         * leaf for a little more than the price of the same number of them. **That is a narrower gap
+         * than the one this default was settled on, and nobody has re-run the strength half of the
+         * table against it.** The wins column is what would have to move, and it is `:lab` work.
          *
          * It ships wired and off rather than deleted, because a measured "no" is worth more with the
          * thing still there to re-measure: `./gradlew :lab:run --args="play uct uct:rolloutDepth=25"`,

@@ -83,19 +83,28 @@ random number.
 
 **Nothing in `:bots`' main sources may call `kotlin.math.ln`, `exp` or `pow`.**
 
-A test may, and exactly one does: `PortableLogTest` uses `kotlin.math.ln` as the oracle `portableLog`
-is measured against, which is the only way to check it at all — and is what would notice somebody
-replacing the series with `ln` for tidiness. The source-set qualifier is what makes the rest of the
-rule a `grep` rather than a thing a reviewer has to remember; without it the check fails on day one
-against the test that proves the rule is being kept.
+A test may, and exactly two do: `PortableLogTest` and `PortableExpTest` take `kotlin.math.ln` and
+`kotlin.math.exp` as the oracles their portable counterparts are measured against, which is the only
+way to check either at all — and is what would notice somebody replacing a series with the stdlib
+call for tidiness. The source-set qualifier is what makes the rest of the rule a `grep` rather than a
+thing a reviewer has to remember; without it the check fails on day one against the tests that prove
+the rule is being kept.
 
 `+ - * / sqrt` are specified bit-identical by IEEE-754. `log` and `exp` are not, so the same
 expression can land on a different move in Chrome than it did on the JVM. UCB1 is
 `sqrt(log(v) / (5 * cv))`, so `UctBot` takes its logarithm from `portableLog`, which is built from
 `+ - * /` alone; the UCT golden hash then reproduces bit-for-bit in the browser.
 
-`PuctBot` needs no logarithm at all — PUCT is `Q + c·P·sqrt(N)/(1+n)` — and its prior is proportional
-rather than a softmax for the same reason. That costs nothing and removes a temperature to tune.
+`PuctBot` needs no logarithm at all — PUCT is `Q + c·P·sqrt(N)/(1+n)` — so its *selection* costs
+nothing to keep here. Its **prior** is where the rule bites: a softmax over the move features wants
+`exp`, and the answer was to build one rather than to except the bot. `portableExp` reduces the
+argument against a two-part `ln 2` and sums a Taylor series, all `+ - * /`, and `MovePrior` calls it
+at most three times per expansion. Both portable series are pinned by a raw-bits test that runs in
+Chrome as well as on the JVM, which is what turns "these operations are specified" into evidence.
+
+**The bar for a new transcendental is that test, not an argument.** A branching factor of three is
+what makes a bounded series affordable here; a bot that genuinely cannot afford one belongs outside
+`GoldenMoveStreamTest`'s cross-target set, saying so in its KDoc.
 
 **Why:** The failure this buys is a golden hash that passes on the JVM and fails in the browser,
 which reads as a compiler bug and is not one. Whoever hits it will spend a day on the toolchain

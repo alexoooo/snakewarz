@@ -1,9 +1,9 @@
 package ao.snakewarz.bots.search.puct
 
 import ao.snakewarz.bots.reactive.space.FloodFill
+import ao.snakewarz.bots.search.CellBits
 import ao.snakewarz.bots.search.SpaceOwnership
 import ao.snakewarz.core.grid.Cell
-import ao.snakewarz.core.grid.Direction
 import ao.snakewarz.core.grid.Grid
 import ao.snakewarz.core.rules.BoardView
 import ao.snakewarz.core.snake.SnakeId
@@ -42,21 +42,62 @@ import ao.snakewarz.core.snake.SnakeId
  * permanent wall under-counts every region on it late in a game — which is precisely when
  * [SurvivalEval] is being asked the question that matters.
  *
+ * ### One half-step at a time, over a bitmap
+ *
+ * The sweep is a [CellBits] one, and the alternation above is what it looks like there: an even
+ * half-step advances the mover's frontier alone and an odd one advances every other snake's at once,
+ * against the same set of squares already taken. Because only one snake moves on the even half-steps,
+ * a tie is possible only among the waiting ones, which is the same statement the arithmetic above
+ * makes. `SpaceOwnership` carries why advancing whole layers reproduces a queue exactly.
+ *
+ * A snake whose frontier lands nowhere is dropped for the rest of the sweep: an empty frontier
+ * spreads to nothing forever after, and a snake sealed into a corner is the common case late in a
+ * game — which is when this evaluation is being asked the question that decides it.
+ *
  * Read the counts, then [ownerOf] per square and [isolated] per slot, before the next sweep.
  */
 internal class TempoOwnership(private val grid: Grid, private val snakeCount: Int) {
-    private val stamp = IntArray(grid.cellCount)
-    private val steps = IntArray(grid.cellCount)
+    /** What the sweep may walk on: every free square, plus every tail retracting within the round. */
+    private val open = CellBits(grid)
+
+    /** Every square any frontier has reached, contested ones included. Nothing is claimed twice. */
+    private val taken = CellBits(grid)
+
+    /** Where each slot's frontier stands, and where it lands next. Swapped rather than copied. */
+    private val frontier = Array(snakeCount) { CellBits(grid) }
+    private val landing = Array(snakeCount) { CellBits(grid) }
+
+    /** Everything each slot holds, which is what [isolated] is read off once the sweep is done. */
+    private val owned = Array(snakeCount) { CellBits(grid) }
+
+    private val reachedThisLayer = CellBits(grid)
+    private val sharedThisLayer = CellBits(grid)
+
+    /** A slot's ground plus the head it spreads from, and what lies one step outside the pair. */
+    private val ground = CellBits(grid)
+    private val outside = CellBits(grid)
+
+    /** Every live head, because a head is spread from without ever being somewhere to spread to. */
+    private val heads = CellBits(grid)
+
+    /** Which slot reached each square, and when — the per-square reading [FillableSpace] walks. */
     private val owner = ByteArray(grid.cellCount)
-    private val frontier = IntArray(grid.cellCount)
+    private val steps = IntArray(grid.cellCount)
+
+    /** Somewhere to spell a layer out square by square while [owner] and [steps] are written. */
+    private val landed = IntArray(grid.cellCount)
+
+    /** Live slots for the readout, and the waiting ones still spreading. Both shrink, differently. */
+    private val live = IntArray(snakeCount)
+    private var liveCount = 0
+    private val waiting = IntArray(snakeCount)
+    private var waitingCount = 0
+
+    private var mover = NOBODY
+    private var moverSeeded = false
+
     private val counts = IntArray(snakeCount)
     private val touching = BooleanArray(snakeCount)
-
-    /** Each slot's retracting tail square this sweep, or [NO_CELL]. Refilled by [measure]. */
-    private val vacating = IntArray(snakeCount)
-
-    private val directions = Direction.entries
-    private var generation = 0
 
     /**
      * Squares each slot reaches strictly before every other, indexed by slot.
@@ -65,95 +106,47 @@ internal class TempoOwnership(private val grid: Grid, private val snakeCount: In
      * nothing; a head is not counted, because it is occupied.
      */
     fun measure(board: BoardView): IntArray {
-        nextGeneration()
-        counts.fill(0)
-        touching.fill(false)
+        open.freeSquaresOf(board)
+        taken.clear()
+        heads.clear()
+        owner.fill(NOBODY.toByte())
+        liveCount = 0
+        waitingCount = 0
 
         for (slot in 0 until snakeCount) {
+            counts[slot] = 0
+            touching[slot] = false
+            owned[slot].clear()
+            frontier[slot].clear()
+
             val snake = board.snake(SnakeId(slot))
             // A length-one snake's tail is its head, and calling that square free would hand the
             // ground under a living snake to whoever is standing next to it.
-            vacating[slot] = if (snake.alive && !snake.growsOnNextMove && snake.tail != snake.head) {
-                snake.tail.index
-            } else {
-                NO_CELL
+            if (snake.alive && !snake.growsOnNextMove && snake.tail != snake.head) {
+                open.add(snake.tail)
             }
         }
 
-        var tail = 0
-
-        // The mover first, and at zero. Seeding in arrival order is what keeps the frontier a plain
-        // FIFO: every push is the parent's time plus STEP, and parents come off in nondecreasing
-        // order, so pushes are nondecreasing too and no priority queue is needed.
-        val onTheClock = board.toAct.index
-        val mover = board.snake(board.toAct)
-        if (mover.alive) {
-            val head = mover.head
-            stamp[head.index] = generation
-            steps[head.index] = 0
-            owner[head.index] = onTheClock.toByte()
-            frontier[tail++] = head.index
+        // The mover first, and at zero. Everybody else is half a step behind, everywhere at once.
+        mover = board.toAct.index
+        moverSeeded = board.snake(board.toAct).alive
+        if (moverSeeded) {
+            seed(board, mover, 0)
         }
-
         for (slot in 0 until snakeCount) {
-            if (slot == onTheClock) {
-                continue
-            }
-            val snake = board.snake(SnakeId(slot))
-            if (!snake.alive) {
-                continue
-            }
-            val head = snake.head
-            stamp[head.index] = generation
-            steps[head.index] = BEHIND
-            owner[head.index] = slot.toByte()
-            frontier[tail++] = head.index
-        }
-
-        var head = 0
-        while (head < tail) {
-            val cell = Cell(frontier[head++])
-            val by = owner[cell.index].toInt()
-            if (by == NOBODY) {
-                continue
-            }
-
-            val arrival = steps[cell.index] + STEP
-            for (i in directions.indices) {
-                val next = grid.step(cell, directions[i])
-                if (!passable(board, next)) {
-                    continue
-                }
-
-                if (stamp[next.index] != generation) {
-                    stamp[next.index] = generation
-                    steps[next.index] = arrival
-                    owner[next.index] = by.toByte()
-                    counts[by]++
-                    frontier[tail++] = next.index
-                    continue
-                }
-
-                // Already claimed. A tie on the same half-step takes it off both of them; anything
-                // reached later than the incumbent was simply beaten to it.
-                val holder = owner[next.index].toInt()
-                if (holder != by) {
-                    // Contact, and it is frontier adjacency rather than the tie below — see
-                    // SpaceOwnership, which found that an even corridor divides with no square ever
-                    // contested and so cannot be told apart from a separation by ties alone.
-                    touching[by] = true
-                    if (holder != NOBODY) {
-                        touching[holder] = true
-                    }
-                }
-
-                if (steps[next.index] == arrival && holder != by && holder != NOBODY) {
-                    counts[holder]--
-                    owner[next.index] = NOBODY.toByte()
-                }
+            if (slot != mover && board.snake(SnakeId(slot)).alive) {
+                seed(board, slot, BEHIND)
+                waiting[waitingCount++] = slot
             }
         }
 
+        spread()
+
+        for (i in 0 until liveCount) {
+            val slot = live[i]
+            counts[slot] = owned[slot].count()
+            touching[slot] = meetsAnybody(board, slot)
+        }
         return counts
     }
 
@@ -164,32 +157,157 @@ internal class TempoOwnership(private val grid: Grid, private val snakeCount: In
      * from is part of the region it starts in, and it is the one square in that region the walk
      * cannot spend.
      */
-    fun ownerOf(cell: Cell): Int =
-        if (stamp[cell.index] != generation) NOBODY else owner[cell.index].toInt()
+    fun ownerOf(cell: Cell): Int = owner[cell.index].toInt()
 
     /** Whether [slot] can no longer reach any ground anybody else can. Read after [measure]. */
     fun isolated(slot: Int): Boolean = !touching[slot]
 
-    private fun passable(board: BoardView, cell: Cell): Boolean {
-        if (board.isFree(cell)) {
-            return true
-        }
-        // Only reached for an occupied square, which on an open board is a small minority of the
-        // tests, and the loop is over two to four snakes.
-        for (slot in 0 until snakeCount) {
-            if (vacating[slot] == cell.index) {
-                return true
-            }
-        }
-        return false
+    /** Squares [slot] reaches first, by index rather than through the array [measure] returns. */
+    fun ownedBy(slot: Int): Int = counts[slot]
+
+    /**
+     * How many squares the sweep could set foot on at all — free ones plus the tails retracting
+     * within the round.
+     *
+     * Against `Grid.playableCount` that is how full the board is, which is a reading about the
+     * *phase* of the game rather than about any one snake and so has nowhere else to come from.
+     */
+    fun walkableCount(): Int = open.count()
+
+    /**
+     * Whether the sweep could set foot on [cell] at all — free, or a tail retracting within the round.
+     *
+     * What [ownerOf] cannot say on its own. A square nobody reached and a square that is wall both
+     * read [NOBODY], and the difference is the whole of what "contested" means: ground somebody else
+     * got to first is a boundary, and a wall is a back. [ChamberTree] is what reads the pair.
+     */
+    fun walkable(cell: Cell): Boolean = open.contains(cell)
+
+    /**
+     * Moves from its owner's head to [cell], for a square [ownerOf] gives somebody.
+     *
+     * The frontier advances in [STEP] half-steps from a seed that is [BEHIND] at worst, so halving
+     * recovers whole moves for the mover and for everybody else alike. Read it the way [ownerOf] is
+     * read — for a square this sweep gave somebody, before the next sweep.
+     */
+    fun distanceTo(cell: Cell): Int = steps[cell.index] / STEP
+
+    // -- internals
+
+    private fun seed(board: BoardView, slot: Int, arrival: Int) {
+        val head = board.snake(SnakeId(slot)).head
+        frontier[slot].add(head)
+        taken.add(head)
+        heads.add(head)
+        owner[head.index] = slot.toByte()
+        steps[head.index] = arrival
+        live[liveCount++] = slot
     }
 
-    private fun nextGeneration() {
-        if (generation == Int.MAX_VALUE) {
-            stamp.fill(0)
-            generation = 0
+    /**
+     * Advances the sweep half-step by half-step until nobody has anywhere left to go.
+     *
+     * The mover's arrivals are even and everybody else's odd, so the two alternate and a half-step
+     * with nobody on it costs one test.
+     */
+    private fun spread() {
+        var moving = moverSeeded
+        var arrival = BEHIND
+
+        while (moving || waitingCount > 0) {
+            arrival++
+            if (arrival and 1 == 0) {
+                // An even half-step is the snake on the clock, alone, so nothing it lands on is a tie.
+                if (moving) {
+                    moving = advanceAlone(mover, arrival)
+                }
+            } else if (waitingCount == 1) {
+                // And so is an odd one with a single snake still waiting, which is every two-snake
+                // game — the shape everything here is measured on.
+                if (!advanceAlone(waiting[0], arrival)) {
+                    waitingCount = 0
+                }
+            } else if (waitingCount > 1) {
+                advanceWaiting(arrival)
+            }
         }
-        generation++
+    }
+
+    /** One half-step for a snake nobody can tie with, which needs none of the machinery below. */
+    private fun advanceAlone(slot: Int, arrival: Int): Boolean {
+        val next = landing[slot]
+        if (!next.spreadFrom(frontier[slot], open, taken)) {
+            return false
+        }
+
+        taken.addAll(next)
+        owned[slot].addAll(next)
+        record(next, slot, arrival)
+
+        landing[slot] = frontier[slot]
+        frontier[slot] = next
+        return true
+    }
+
+    /** One odd half-step with several snakes waiting, so squares two of them reach are ties. */
+    private fun advanceWaiting(arrival: Int) {
+        for (i in 0 until waitingCount) {
+            val slot = waiting[i]
+            landing[slot].spreadFrom(frontier[slot], open, taken)
+        }
+
+        reachedThisLayer.copyFrom(landing[waiting[0]])
+        sharedThisLayer.clear()
+        for (i in 1 until waitingCount) {
+            val next = landing[waiting[i]]
+            sharedThisLayer.addShared(reachedThisLayer, next)
+            reachedThisLayer.addAll(next)
+        }
+        taken.addAll(reachedThisLayer)
+
+        var stillSpreading = 0
+        for (i in 0 until waitingCount) {
+            val slot = waiting[i]
+            val next = landing[slot]
+            if (!next.settleInto(sharedThisLayer, owned[slot])) {
+                continue
+            }
+            record(next, slot, arrival)
+
+            landing[slot] = frontier[slot]
+            frontier[slot] = next
+            waiting[stillSpreading++] = slot
+        }
+        waitingCount = stillSpreading
+    }
+
+    /** Spells one layer out square by square, which is the only way a per-square reading gets written. */
+    private fun record(layer: CellBits, slot: Int, arrival: Int) {
+        val code = slot.toByte()
+        val found = layer.cellsInto(landed)
+        for (i in 0 until found) {
+            val cell = landed[i]
+            owner[cell] = code
+            steps[cell] = arrival
+        }
+    }
+
+    /**
+     * Whether anything next to [slot]'s ground belongs to somebody else — [SpaceOwnership]'s two
+     * questions, over the squares a retracting tail adds to the first of them.
+     */
+    private fun meetsAnybody(board: BoardView, slot: Int): Boolean {
+        val head = board.snake(SnakeId(slot)).head
+
+        ground.copyFrom(owned[slot])
+        ground.add(head)
+        if (outside.spreadFrom(ground, open, owned[slot])) {
+            return true
+        }
+
+        ground.copyFrom(heads)
+        ground.remove(head)
+        return outside.spreadFrom(owned[slot], ground, owned[slot])
     }
 
     companion object {
@@ -201,7 +319,5 @@ internal class TempoOwnership(private val grid: Grid, private val snakeCount: In
 
         /** What a snake that is not about to move gives away: half a step, everywhere at once. */
         private const val BEHIND = 1
-
-        private const val NO_CELL = -1
     }
 }

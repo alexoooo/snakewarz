@@ -1,10 +1,12 @@
 package ao.snakewarz.bots
 
+import ao.snakewarz.botapi.knob.BotKnob
 import ao.snakewarz.botapi.registry.BotId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ShippedBotsTest {
     @Test
@@ -18,7 +20,7 @@ class ShippedBotsTest {
                 // Contributed. `tomsnake` was here and was retired; a slug is not reused.
                 "burninhell",
                 // Experimental.
-                "puct",
+                "puct", "alphabeta",
             ),
             ShippedBots.entries.map { it.id.slug },
         )
@@ -54,6 +56,7 @@ class ShippedBotsTest {
                 "flat-monte-carlo" to listOf("budget"),
                 "uct" to listOf("budget", "exploration"),
                 "puct" to listOf("budget", "eval"),
+                "alphabeta" to listOf("budget", "eval"),
             ),
             ShippedBots.entries
                 .filter { it.offered.isNotEmpty() }
@@ -70,9 +73,26 @@ class ShippedBotsTest {
 
         val puct = ShippedBots.entryOf(BotId("puct"))
         assertEquals(
-            listOf("eval", "cpuct", "territoryWeight", "mobilityWeight", "trapPenalty", "separationBonus"),
+            listOf(
+                "eval", "cpuct", "territoryWeight", "mobilityWeight", "trapPenalty", "separationBonus", "solver",
+                // Appended, never inserted: `:lab` logs an entrant as its knobs in this order and
+                // `report` resolves one by a prefix of that string.
+                "parityWeight", "frontierPenalty", "sealPenalty",
+                "priorLiberty", "priorPinch", "priorWall", "priorTail", "priorTemperature",
+                "rave",
+            ),
             puct.params.map { it.name },
         )
+    }
+
+    @Test
+    fun `puct is what the ceiling on a bot's knobs is set by`() {
+        // Not a limit anybody is near by accident: one knob past the bound fails BotEntry's own
+        // require, and raising it is a decision about the replay payload rather than a number to
+        // nudge -- `ReplayCodec` reads the same constant when it decodes a slot. Pinned as an exact
+        // count so that adding a knob here is that decision rather than a silent slide toward it.
+        assertEquals(17, ShippedBots.entryOf(BotId("puct")).knobs.size)
+        assertTrue(ShippedBots.entryOf(BotId("puct")).knobs.size <= BotKnob.MAX_PER_BOT)
     }
 
     @Test
@@ -81,7 +101,7 @@ class ShippedBotsTest {
             listOf(
                 "Random", "Wall Hugger", "Space Filler", "Pressure", "Chaser", "Flat Monte Carlo", "UCT",
                 "Burnin Hell",
-                "PUCT",
+                "PUCT", "Alpha-Beta",
             ),
             ShippedBots.entries.map { it.displayName },
         )

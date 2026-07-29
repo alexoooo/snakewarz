@@ -3,6 +3,7 @@ package ao.snakewarz.lab
 import ao.snakewarz.botapi.registry.BotRegistry
 import ao.snakewarz.lab.log.LoggedMatch
 import ao.snakewarz.lab.log.MatchLog
+import ao.snakewarz.lab.log.resolveSpec
 import ao.snakewarz.lab.report.Diagnosis
 import java.nio.file.Path
 import kotlin.math.roundToInt
@@ -13,6 +14,9 @@ import kotlin.math.roundToInt
  * The half of the loop a rating cannot do. A rating orders bots; this says what to change — whether
  * the losses are blunders or squeezes, early or late, from tempo or from position — and then hands
  * over the worst of them as links, because the last step of understanding a loss is watching it.
+ *
+ * [subject] and [against] are names in the sense [resolveSpec] defines: a slug plus whatever subset
+ * of its knobs it takes to pick one of the entrants the log holds.
  */
 internal class ReportCommand(
     val subject: String,
@@ -28,8 +32,8 @@ internal class ReportCommand(
         val everything = store.matches()
         val specs = everything.flatMapTo(LinkedHashSet()) { match -> match.slots.map { it.spec } }
 
-        val spec = resolve(subject, specs)
-        val opponent = against?.let { resolve(it, specs) }
+        val spec = resolveSpec(subject, specs)
+        val opponent = against?.let { resolveSpec(it, specs) }
         val mine = everything.filter { match ->
             match.slots.any { it.spec == spec } &&
                 (opponent == null || match.slots.any { it.spec == opponent })
@@ -50,26 +54,6 @@ internal class ReportCommand(
     }
 
     override fun toString(): String = "Report($subject, against=$against)"
-
-    /**
-     * Turns what somebody typed into the expanded spec the log actually holds.
-     *
-     * A logged entrant is written out in full — every knob at the value it played under — which is
-     * unusable as something to type. A prefix is enough as long as it is unambiguous, and being told
-     * which candidates a prefix matched is more use than being made to paste one.
-     */
-    private fun resolve(typed: String, specs: Set<String>): String {
-        if (typed in specs) {
-            return typed
-        }
-
-        val matching = specs.filter { it.startsWith(typed) }
-        return when (matching.size) {
-            1 -> matching.single()
-            0 -> error("nothing in the log is called '$typed'. It holds: ${specs.joinToString()}")
-            else -> error("'$typed' could be any of: ${matching.joinToString()}")
-        }
-    }
 
     private fun record(diagnosis: Diagnosis, log: (String) -> Unit) {
         log(

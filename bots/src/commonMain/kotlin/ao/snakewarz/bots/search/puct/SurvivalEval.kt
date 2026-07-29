@@ -37,8 +37,10 @@ import ao.snakewarz.core.snake.SnakeId
  *
  * ### What it is worth, measured
  *
- * `:lab`, 12x12, both seatings of every seed. **Per iteration this is the strongest leaf in the
- * box.** Forty rounds a pairing at 1,000 evaluations each, so one sigma is about ±3.2 wins:
+ * `:lab`, 12x12, both seatings of every seed. **Per iteration this was the strongest leaf in the box
+ * until [ChamberEval] was swept** — that one is this reading with the chambers kept rather than
+ * summed, costs 9% more a turn, and beats this by `+85 Elo ±32` at the shipped allowance. Forty
+ * rounds a pairing at 1,000 evaluations each, so one sigma is about ±3.2 wins:
  *
  * | | survival | territory | mobility | uct | score |
  * |---|---|---|---|---|---|
@@ -51,8 +53,8 @@ import ao.snakewarz.core.snake.SnakeId
  * prior and the allowance all held still. The whole gap is the three corrections above.
  *
  * **Per unit of time it is level with what it refines**, which is the reading that decides the
- * default. A turn is 3,924 µs at 1,000 evaluations against [TerritoryEval]'s 2,400, so 470 of these
- * buy 2,515 µs and are the fair trade for its 1,000. Over a hundred rounds, one sigma being about ±5:
+ * default. A turn was 3,924 µs at 1,000 evaluations against [TerritoryEval]'s 2,400, so 470 of these
+ * bought 2,515 µs and were the fair trade for its 1,000. Over a hundred rounds, one sigma ±5:
  *
  * | | survival@470 | territory@1,000 | territory@770 | score |
  * |---|---|---|---|---|
@@ -62,7 +64,7 @@ import ao.snakewarz.core.snake.SnakeId
  *
  * **A better leaf buys back almost exactly what it costs.** Which is a real finding and not a
  * shrug: an evaluation this much dearer would normally lose badly on the clock, and this one does
- * not — so [EvaluationCost] getting calibrated is what would settle it, rather than another batch.
+ * not.
  *
  * The third row is the warning that comes with the second. `territory@770` is level with
  * `territory@1,000` at 50-50 and beats `survival@470` 74-26 where `territory@1,000` cannot — over a
@@ -71,13 +73,41 @@ import ao.snakewarz.core.snake.SnakeId
  * a fact about that pairing. Read the score column against a common field; do not build an ordering
  * out of one row.
  *
+ * ### The exchange rate has since moved against this one, and the verdict held anyway
+ *
+ * `CellBits` made [TerritoryEval] **1.59x** cheaper a turn on this board and this one only **1.18x**,
+ * for the reason the section above gives — both sweep with the same primitive, and only this one then
+ * walks every region with a depth-first pass no bitmap helps. So the table above is a record of a
+ * measurement rather than a live comparison: what buys this one [TerritoryEval]'s millisecond is now
+ * **415** evaluations rather than 470, and [ao.snakewarz.bots.search.EvaluationCost] carries the
+ * figures that say so. Re-derived at that allowance, `ab` against `territory@1,000` on 12x12:
+ *
+ * | question | this at | verdict |
+ * |---|---|---|
+ * | per iteration | `1,000` | **+81 Elo ±33** over 240 boards |
+ * | per millisecond | `415` | **+7 Elo ±10** over 2,000 boards |
+ *
+ * **A dearer leaf handed 12% fewer iterations than before still buys back what it costs.** The
+ * exchange rate moved and the answer did not, which is worth more than either number alone: it makes
+ * *level* a property of the two evaluations rather than of one lucky allowance. What did improve is
+ * the precision — the *48-52 over a hundred rounds* above is ±35 Elo of nothing, and ±10 over two
+ * thousand boards is a null somebody can act on. It is still a null: that run stopped at the
+ * `--max-pairs` ceiling rather than because the evidence settled.
+ *
+ * The per-iteration row stopped at the sequential test's **upper bound**, so only its sign is solid
+ * and 81 is the generous end of the interval; "at least 10 Elo" is what was proven. It is the same
+ * claim the 31-of-40 matrix above makes, measured a second way over six times the boards.
+ *
  * ### Why `territory` is still the default
  *
  * Level on the clock and dearer, and the clock is what the browser actually enforces: `:ui` gives a
- * frame 8 ms and can only stop between turns, and this is 10.9 ms a turn on a 20x20 at the shipped
- * allowance against [TerritoryEval]'s 4.6. Being level is not a reason to make the expensive one the
- * thing everybody gets — and `PuctBot.EVAL` has a second reason, which is that the default is what
- * an `eval=expert` link from before the rename resolves to. Pick this one when the allowance is a
+ * frame 8 ms and can only stop between turns. The gap that decides this is on the **large** board,
+ * and the bitboard sweep widened it rather than closing it: on a 20x20 at the shipped allowance
+ * [TerritoryEval] came down by 2.13x and this one by 1.22x, so where the two were 4.6 ms against
+ * 10.9 they are now about **2.2 ms against 8.9** — the cheap leaf moved inside the slice and this one
+ * did not. Being level is not a reason to make the expensive one the thing everybody gets — and
+ * `PuctBot.EVAL` has a second reason, which is that the default is what an `eval=expert` link from
+ * before the rename resolves to. Pick this one when the allowance is a
  * count of iterations, which is what a `:lab` matrix makes it.
  *
  * ### Squares, not moves, and the factor that cancels

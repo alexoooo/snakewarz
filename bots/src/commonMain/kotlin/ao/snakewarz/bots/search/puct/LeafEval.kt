@@ -12,10 +12,11 @@ import ao.snakewarz.bots.search.uct.truncatedPlayout
  * This is the thing a neural network would be, in a PUCT that had one. [PuctBot] declares which
  * implementation it wants as a knob rather than picking one, because the interesting question about
  * a hand-written evaluation is not whether it works but whether it is *worth what it costs*, and
- * that is a comparison rather than an assertion. The three answer it at three prices: [MobilityEval]
+ * that is a comparison rather than an assertion. The five answer it at five prices: [MobilityEval]
  * reads sixteen squares, [TerritoryEval] sweeps the board once, [SurvivalEval] sweeps it and then
- * takes each region apart. Two entrants differing only in this line is what makes a matrix over them
- * mean something.
+ * takes each region apart, [HorizonEval] prices the pieces in moves rather than in squares,
+ * [ChamberEval] keeps the pieces rather than summing them. Two entrants differing only in this line
+ * is what makes a matrix over them mean something.
  *
  * There used to be a fourth that played the position out at random, so that one entrant judged a
  * leaf exactly as [UctBot] does. It is gone: `uct` was always in the matrix beside it, and `uct` is

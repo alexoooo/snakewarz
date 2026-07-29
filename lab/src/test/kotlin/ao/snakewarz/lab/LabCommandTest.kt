@@ -1,12 +1,15 @@
 package ao.snakewarz.lab
 
+import ao.snakewarz.botapi.knob.BotKnob
 import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.bots.ShippedBots
 import ao.snakewarz.lab.arena.Openings
 import ao.snakewarz.lab.log.Replays
+import ao.snakewarz.lab.tune.SpsaJournal
 import ao.snakewarz.match.MatchSetup
 import ao.snakewarz.match.tournament.TournamentFormat
 import java.nio.file.Files
+import kotlin.io.path.readLines
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -198,6 +201,22 @@ class LabCommandTest {
     }
 
     @Test
+    fun `phases splits one entrant's logged matches and needs a log to read`() {
+        assertFailsWith<IllegalArgumentException> { LabCommand.of(listOf("phases"), ShippedBots) }
+        assertFailsWith<IllegalStateException> {
+            LabCommand.of(listOf("phases", "puct", "--log", "none"), ShippedBots)
+        }
+
+        val command = LabCommand.of(
+            "phases puct:eval=learned --against uct".split(' '),
+            ShippedBots,
+        ) as PhasesCommand
+
+        assertEquals("puct:eval=learned", command.subject)
+        assertEquals("uct", command.against)
+    }
+
+    @Test
     fun `ab compares two different entrants and carries its bounds`() {
         val command = LabCommand.of(
             "ab uct uct:exploration=2.5 --elo0 -2 --elo1 12".split(' '),
@@ -225,6 +244,41 @@ class LabCommandTest {
             LabCommand.of(listOf("tune", "puct", "--knobs", "cpuct,wibble"), ShippedBots)
         }
         assertContains(failure.message.orEmpty(), "wibble")
+    }
+
+    @Test
+    fun `spsa searches only the numeric knobs, and says which it left alone`() {
+        val command = LabCommand.of("spsa puct".split(' '), ShippedBots) as SpsaCommand
+
+        // `eval` is a choice and `solver` a flag: a perturbation has no direction to move a name in.
+        assertTrue(command.knobs.none { it is BotKnob.Choice || it is BotKnob.Flag }, command.knobs.toString())
+        assertContains(command.ignored, "eval")
+        assertContains(command.ignored, "solver")
+        assertContains(command.knobs.map { it.name }, "cpuct")
+    }
+
+    @Test
+    fun `naming a knob with no gradient is refused before anything is played`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of(listOf("spsa", "puct", "--knobs", "cpuct,eval"), ShippedBots)
+        }
+
+        assertContains(failure.message.orEmpty(), "eval")
+        assertContains(failure.message.orEmpty(), "tune")
+    }
+
+    @Test
+    fun `spsa carries its schedule and its confirming bound`() {
+        val command = LabCommand.of(
+            "spsa puct --knobs cpuct --iterations 30 --boards 4 --spread 5 --stride 2 --elo1 12".split(' '),
+            ShippedBots,
+        ) as SpsaCommand
+
+        assertEquals(30, command.iterations)
+        assertEquals(4, command.boardsPerIteration)
+        assertEquals(5.0, command.spread)
+        assertEquals(2.0, command.stride)
+        assertEquals(12.0, command.confirm.elo1)
     }
 
     @Test
@@ -309,6 +363,132 @@ class LabCommandTest {
     }
 
     @Test
+    fun `a gradient search runs end to end, journals every iteration and demands a confirmation`() {
+        // Zero allowance and a tiny board, so this is a check that the wiring holds rather than a
+        // measurement -- SpsaTest is where the optimiser is verified, against a function with an
+        // answer, because on the real objective a broken search and a flat knob look the same.
+        val journal = Files.createTempDirectory("snakewarz-lab").resolve("spsa.tsv")
+        val arguments = "spsa pressure --knobs adjacencyPenalty --iterations 4 --boards 2".split(' ') +
+            "--rows 8 --cols 8 --budget 0 --threads 1 --max-pairs 40".split(' ') +
+            listOf("--journal", journal.toString())
+
+        val lines = mutableListOf<String>()
+        LabCommand.of(arguments, ShippedBots).run(ShippedBots, lines::add)
+
+        // Rule one of the shared measurement protocol: the honest sample size, always, first.
+        assertTrue(lines.any { it.contains("distinct games") }, lines.toString())
+
+        // Every iteration, plus the confirming row if the search moved anywhere at all.
+        val rows = journal.readLines().drop(1)
+        assertTrue(rows.size == 4 || rows.size == 5, rows.toString())
+        assertEquals(listOf("0", "1", "2", "3"), rows.take(4).map { it.substringBefore('\t') })
+
+        // And no iteration may carry a verdict: only the confirming run reaches one.
+        for (row in rows.take(4)) {
+            assertEquals(SpsaJournal.NONE, row.split('\t')[VERDICT])
+        }
+
+        val settled = lines.single { it.contains("nothing to confirm") || it.contains("CONFIRMED") }
+        if (!settled.contains("nothing to confirm")) {
+            assertTrue(lines.any { it.contains("record of attempts, not of findings") }, lines.toString())
+            // The follow-up is meant to be pasted, so the entrant in it has to parse.
+            val rerun = lines.single { it.contains("  ab ") }.substringAfter("  ab ").split(' ')
+            LabCommand.contestantOf(rerun[0], ShippedBots)
+            LabCommand.contestantOf(rerun[1], ShippedBots)
+        }
+    }
+
+    @Test
+    fun `a search takes a full entrant spec, and holds it still in both arms`() {
+        // The gap this closes was silent by construction, which is why it is pinned end to end
+        // rather than at the parser. `spsa puct:eval=chamber` used to fail on the slug outright, and
+        // the settings it wrote named only the knobs it was searching -- so `eval` sat at its
+        // default, where ChamberEval's three weights are not read at all, and a run would have
+        // reported a perfectly well-formed answer about a bot it was not searching.
+        val journal = Files.createTempDirectory("snakewarz-lab").resolve("spsa.tsv")
+        val arguments = "spsa puct:eval=chamber --knobs parityWeight,frontierPenalty,sealPenalty".split(' ') +
+            "--iterations 2 --boards 2 --rows 6 --cols 6 --budget 0 --threads 1 --max-pairs 40".split(' ') +
+            listOf("--journal", journal.toString())
+
+        val command = LabCommand.of(arguments, ShippedBots) as SpsaCommand
+        assertEquals("chamber", command.fixed.string("eval", ""))
+        assertEquals(listOf("parityWeight", "frontierPenalty", "sealPenalty"), command.knobs.map { it.name })
+
+        // A pinned knob is not "left at its default", so it does not belong in that list either.
+        assertTrue("eval" !in command.ignored, command.ignored.toString())
+
+        command.run(ShippedBots) {}
+
+        val rows = journal.readLines().drop(1).map { it.split('\t') }
+        assertEquals(2, rows.size, rows.toString())
+        for (row in rows) {
+            assertContains(row[PLUS], "eval=chamber")
+            assertContains(row[MINUS], "eval=chamber")
+            // Held still is not the same as held identical: the weights are what moves.
+            assertTrue(row[PLUS] != row[MINUS], row.toString())
+        }
+    }
+
+    @Test
+    fun `the spec is in the baseline a search confirms against, not only in its candidate`() {
+        // The half that leaves no trace when it is wrong. A confirmation against the bare defaults
+        // would measure the spec and the point together and credit the whole difference to the point.
+        // `uct` at a small allowance rather than a reactive bot at none, because this needs a search
+        // that actually moves: two arms of a bot that draws no randomness split every board, the
+        // point never leaves its start, and there is no confirmation to inspect. Seeded throughout,
+        // so which point it settles on is fixed.
+        val journal = Files.createTempDirectory("snakewarz-lab").resolve("spsa.tsv")
+        val arguments = "spsa uct:rolloutDepth=20 --knobs exploration".split(' ') +
+            "--iterations 6 --boards 2 --rows 8 --cols 8 --budget 30 --threads 1 --max-pairs 40".split(' ') +
+            listOf("--journal", journal.toString())
+
+        val lines = mutableListOf<String>()
+        LabCommand.of(arguments, ShippedBots).run(ShippedBots, lines::add)
+
+        val confirmation = journal.readLines().drop(1).map { it.split('\t') }
+            .single { it[0].toInt() == SpsaJournal.CONFIRMATION }
+
+        // Both sides of the confirming test, and the `ab` printed for re-running it by hand.
+        assertContains(confirmation[MINUS], "rolloutDepth=20")
+        assertContains(confirmation[PLUS], "rolloutDepth=20")
+
+        val rerun = lines.single { it.contains("  ab ") }.substringAfter("  ab ").split(' ')
+        assertEquals("20", LabCommand.contestantOf(rerun[0], ShippedBots).params.string("rolloutDepth", ""))
+        assertEquals("20", LabCommand.contestantOf(rerun[1], ShippedBots).params.string("rolloutDepth", ""))
+    }
+
+    @Test
+    fun `a knob cannot be pinned by the spec and searched at the same time`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of(listOf("spsa", "puct:cpuct=2.0", "--knobs", "cpuct"), ShippedBots)
+        }
+
+        assertContains(failure.message.orEmpty(), "cpuct")
+
+        // And an allowance is `--budget`, because every measurement a search makes is at the same one.
+        val allowance = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of(listOf("tune", "puct:budget=400", "--knobs", "cpuct"), ShippedBots)
+        }
+        assertContains(allowance.message.orEmpty(), "--budget")
+    }
+
+    @Test
+    fun `a gradient search resumes from its journal instead of buying the same measurements twice`() {
+        val journal = Files.createTempDirectory("snakewarz-lab").resolve("spsa.tsv")
+        val arguments = "spsa pressure --knobs adjacencyPenalty --iterations 4 --boards 2".split(' ') +
+            "--rows 8 --cols 8 --budget 0 --threads 1 --max-pairs 40".split(' ') +
+            listOf("--journal", journal.toString())
+
+        LabCommand.of(arguments, ShippedBots).run(ShippedBots) {}
+        val lines = mutableListOf<String>()
+        LabCommand.of(arguments, ShippedBots).run(ShippedBots, lines::add)
+
+        assertTrue(lines.any { it.contains("resuming: 4 iterations") }, lines.toString())
+        assertEquals(4, lines.count { it.contains("(replayed)") }, lines.toString())
+        assertTrue(lines.any { it.contains("every iteration was replayed") }, lines.toString())
+    }
+
+    @Test
     fun `a small batch runs end to end and fills the matrix in`() {
         // Zero allowance and a tiny board, so this is a check that the wiring holds rather than a
         // measurement -- the measurements are what `:lab:run` is for, and they take minutes.
@@ -322,5 +502,12 @@ class LabCommandTest {
 
         assertTrue(lines.any { it.startsWith("[lab]") && it.contains("2 matches") }, lines.toString())
         assertTrue(lines.any { it.contains("wallhug") }, lines.toString())
+    }
+
+    private companion object {
+        /** The `plus`, `minus` and `verdict` columns of a journal row — see `SpsaJournal`. */
+        const val PLUS = 3
+        const val MINUS = 4
+        const val VERDICT = 8
     }
 }

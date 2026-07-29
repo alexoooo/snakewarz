@@ -15,12 +15,13 @@ suite a *correct but useless* bot would fail. Then come the bots contributed to 
 ordered by slug and claiming nothing about strength: `burninhell`. Then **experimental**:
 `puct`, which is ahead of `uct` at an equal allowance and level with it per unit of *time*, and the
 gap between those two readings is the reason it makes no claim a rung would make — see `TerritoryEval`
-for both tables. All three sections are gated by the same contract suite.
+for both tables; and `alphabeta`, the only exact search here. All three sections are gated by the
+same contract suite.
 
 `:ui` opens slot 2 on the slug `uct` — the page should start on the game somebody came here to play
 — and falls back to `entries.first()` when a registry does not offer it, so registration order still
-shows through. Append new bots; do not prepend. Of the nine, only `flat-monte-carlo`, `uct` and `puct`
-touch `Turn.scratch`; the other six consume no budget at all.
+shows through. Append new bots; do not prepend. Of the ten, only `flat-monte-carlo`, `uct`, `puct` and
+`alphabeta` touch `Turn.scratch`; the other six consume no budget at all.
 
 ### A bot earns its place by what it lets you measure
 
@@ -38,6 +39,7 @@ keeping one:
 | `uct` | the flagship |
 | `burninhell` | the second bot that draws no randomness, which is what `ArenaTest` measures openings with |
 | `puct` | the frontier, and ahead of `uct` at an equal allowance |
+| `alphabeta` | the only **exact** search, over `puct`'s own leaf — what a full-width minimax is worth here |
 
 A bot that is merely *weak* is not an instrument: `random` is already the floor, more cleanly, and a
 second one only adds a picker row and a column to every matrix. That is what retired `tomsnake`, an
@@ -80,8 +82,25 @@ distances and first steps, `SpaceOwnership` for the board carved up between the 
 `PvpAi`'s reduction, `randomPlayout` for a rollout, `truncatedPlayout` for a short one judged by
 ownership, `UctTree` for a flat-array search tree, `PuctTree` for one guided by a prior, and
 `LeafEval` for a hand-written value at a leaf. Inside `search.puct`, `TempoOwnership` is the sweep
-with turn order and retracting tails in it, and `FillableSpace` answers how much of a region a single
-walk can actually spend — which is not how big it is.
+with turn order and retracting tails in it, `FillableSpace` answers how much of a region a single
+walk can actually spend — which is not how big it is — `ChamberTree` runs that same block
+decomposition without summing it away, so a leaf can ask what each chamber is worth on its own, and
+`MovePrior` is the other half of what a network would supply: a weighted reading of each candidate
+destination, normalised proportionally or as a softmax. `PuctTree` carries two mechanisms that are
+built only when asked for and cost nothing when they are not — the MCTS-Solver's proof arrays and
+RAVE's AMAF ones — and each carries in its knob's KDoc how often it fires, which is the number that
+bounds what it can be worth. `portableExp` is beside it, for
+`portableLog`'s reason — a temperature needs an exponential and `puct` is in the cross-target golden
+set, so the exponential is built from `+ - * /` rather than the rule being excepted.
+
+`search.learned` is the one leaf whose weights nobody chose. `PositionFeatures` reads a position as
+twenty-five bounded numbers — the sweep, the chamber decomposition and the readings six phases of
+measurement say carry the signal — and `LearnedNet` turns them into a probability of winning off
+`LearnedWeights`, a fixed-point literal `:lab`'s `train` fitted to half a million logged positions.
+**`PositionFeatures` is the only public class in `:bots` besides `ShippedBots`, and that is
+deliberate**: `:lab` cannot see this module's internals, so a trainer that could not import the
+extractor would have to reimplement it, and a copy that drifts by one term produces a bot that is
+merely mediocre with nothing failing anywhere. One definition, read by the trainer and by the bot.
 
 `truncatedPlayout` and `SpaceOwnership` ship **wired and off**, and the reason is measured rather
 than aesthetic — see `UctBot.ROLLOUT_DEPTH`. Do not turn them on without re-running
@@ -147,8 +166,9 @@ buy is a row in front of somebody who has no way to judge the number and no reas
 default is wrong.
 
 The two lists on `BotEntry` are that split. `params` is complete and is what `:lab` validates against;
-`offered` is the handful a form reads. Of the nine shipped bots, three offer anything at all: an
-allowance, `uct`'s `exploration`, and `puct`'s `eval`. `ShippedBotsTest` pins that list, so a knob
+`offered` is the handful a form reads. Of the ten shipped bots, four offer anything at all: an
+allowance, `uct`'s `exploration`, and the `eval` `puct` and `alphabeta` each declare.
+`ShippedBotsTest` pins that list, so a knob
 cannot arrive on the sidebar without somebody having said so.
 
 The failure this prevents is quiet and was real: `puct` used to show four appraisal weights that do
@@ -237,14 +257,25 @@ default.
 A search bot's strength is how much search fits in its allowance, so most of the design questions
 here were settled by a batch rather than by an argument. Each of those numbers is the reason
 something is or is not in the code, which is exactly the kind of fact that gets re-proposed every
-year or two. Four live in the KDoc of the constant they set: `UctBot.ROLLOUT_DEPTH` carries the
+year or two. Five live in the KDoc of the constant they set: `UctBot.ROLLOUT_DEPTH` carries the
 rollout-truncation table, `MatchSetup.DEFAULT_BUDGET_PER_TURN` the allowance table and the 8ms frame
 budget that sets it, `TerritoryEval` the two that keep `puct` in the experimental section rather than
-on the ladder, and `EvaluationCost` what an evaluation of each kind actually costs — the one that is
-recorded and deliberately *not* acted on. Re-running any of them is a `:lab` command rather than an
-archaeology.
+on the ladder, `EvaluationCost` what an evaluation of each kind actually costs — the one that is
+recorded and deliberately *not* acted on — `ChamberEval` the three-weight sweep that made it the
+strongest leaf in the box, including the weight the sweep moved and the ablation refused, and
+`MovePrior` the four-weight sweep over the *prior*, where the ablation and the head-to-head that
+produced it disagreed on the sign of the coordinate that mattered, `AlphaBetaBot` how deep an
+exact search actually gets here and what it is worth once it does, `LearnedEval` what a value
+function fitted to half a million logged positions buys over the best hand-written one, and
+`PuctBot.RAVE` why AMAF statistics buy nothing behind a searcher that has no rollout to harvest them
+from. Re-running any of them is a `:lab` command rather than an archaeology.
 
-The fourth has no constant to live in, because what it settled was that there is no code.
+**`MovePrior`'s is the one to read before designing a sweep.** Ablating a multi-weight point is not
+optional — that is `ChamberEval`'s lesson — and doing it as a stack of `ab` runs is an ordering built
+out of one row, which the protocol already forbids and which came out intransitive here. Enter every
+ablation into **one field** and `rate` it.
+
+The next one has no constant to live in, because what it settled was that there is no code.
 
 **Tree reuse across turns was built, measured and rejected.** It looks free: a bot instance lives for
 the whole match, so a tree kept in a field needs no new API, and `BoardView.hash` makes finding last

@@ -1,16 +1,14 @@
 package ao.snakewarz.lab
 
 import ao.snakewarz.botapi.registry.BotRegistry
-import ao.snakewarz.lab.arena.Arena
 import ao.snakewarz.lab.arena.Openings
 import ao.snakewarz.lab.log.MatchLog
 import ao.snakewarz.lab.log.Replays
 import ao.snakewarz.lab.log.expandedSpec
 import ao.snakewarz.lab.log.recordBatch
+import ao.snakewarz.lab.strength.SequentialTest
 import ao.snakewarz.lab.strength.Sprt
-import ao.snakewarz.lab.strength.pairScores
 import ao.snakewarz.match.tournament.Contestant
-import ao.snakewarz.match.tournament.TournamentConfig
 import java.nio.file.Path
 import kotlin.math.roundToInt
 import kotlin.time.TimeSource
@@ -22,10 +20,8 @@ import kotlin.time.TimeSource
  * happened"; this answers "is it better, and how sure are we" — which is the only question worth
  * asking of a change, and the one a win matrix cannot be read for without inventing a threshold.
  *
- * Boards are played in blocks and the test consulted after each, so a plain result costs a fraction
- * of a conclusive-looking one. Each block moves on to fresh seeds: replaying the same boards would
- * add matches without adding evidence, which is precisely the failure a sequential test is most
- * exposed to.
+ * [SequentialTest] plays it; what this adds is the reading — the running bar, the match log, and the
+ * note that says when a null verdict is this instrument's blind spot rather than the change's size.
  */
 internal class AbCommand(
     val baseline: Contestant,
@@ -46,43 +42,42 @@ internal class AbCommand(
         log("[lab] $sprt, stopping between ${sprt.lower.round()} and ${sprt.upper.round()}")
 
         val started = TimeSource.Monotonic.markNow()
-        val scores = mutableListOf<Double>()
-        var report = sprt.test(scores)
-        var block = 0
-
-        while (report.verdict == Sprt.Verdict.UNDECIDED && scores.size < maxPairs) {
-            val batch = Arena(
-                config = configFor(block),
-                registry = registry,
-                openings = openings,
-                threads = threads,
-                keepRecords = logDirectory != null,
-            ).run()
-
+        val outcome = SequentialTest(
+            baseline = baseline,
+            candidate = candidate,
+            rows = rows,
+            cols = cols,
+            seed = seed,
+            budgetPerTurn = budgetPerTurn,
+            openings = openings,
+            threads = threads,
+            sprt = sprt,
+            blockPairs = blockPairs,
+            maxPairs = maxPairs,
+            keepRecords = logDirectory != null,
+        ).run(registry) { batch, sofar ->
             if (batch.forfeits > 0) {
                 log("[lab] ${batch.forfeits} FORFEITS -- a bot threw. Fix that before believing anything below.")
             }
             logDirectory?.let {
                 recordBatch(MatchLog(it), batch, registry, openings.name, threads, Replays.DECISIVE)
             }
-
-            scores += pairScores(batch, CANDIDATE)
-            report = sprt.test(scores)
-            block++
-
-            log("[lab] ${scores.size} boards, LLR ${report.llr.round()} ${bar(report)} ${outcome(report)}")
+            log(
+                "[lab] ${sofar.boards} boards, LLR ${sofar.report.llr.round()} " +
+                    "${bar(sofar.report)} ${elo(sofar.report)}",
+            )
         }
 
         log("")
-        log(conclusion(report))
+        log(conclusion(outcome.report))
         log(
-            "[lab] ${scores.size} boards in ${started.elapsedNow().inWholeSeconds}s, " +
-                "standardized effect ${report.effect.round(2)} per board",
+            "[lab] ${outcome.boards} boards in ${started.elapsedNow().inWholeSeconds}s, " +
+                "standardized effect ${outcome.report.effect.round(2)} per board",
         )
-        if (report.verdict == Sprt.Verdict.UNDECIDED && scores.size >= maxPairs) {
+        if (outcome.cappedOut) {
             log("[lab] stopped at the --max-pairs ceiling, not because the evidence settled.")
         }
-        blindness(report, scores, registry, log)
+        blindness(outcome, registry, log)
     }
 
     /**
@@ -100,18 +95,11 @@ internal class AbCommand(
      * on every board of it. So a `NO_BETTER` verdict sitting on top of a pile of exact splits is a
      * change that mostly did not happen in this pairing, and the honest next move is a field.
      */
-    private fun blindness(
-        report: Sprt.Report,
-        scores: List<Double>,
-        registry: BotRegistry,
-        log: (String) -> Unit,
-    ) {
-        if (report.verdict != Sprt.Verdict.NO_BETTER || scores.isEmpty()) {
+    private fun blindness(outcome: SequentialTest.Outcome, registry: BotRegistry, log: (String) -> Unit) {
+        if (outcome.report.verdict != Sprt.Verdict.NO_BETTER || outcome.boards == 0) {
             return
         }
-
-        val splits = scores.count { it == EVEN }
-        if (splits * 2 < scores.size) {
+        if (outcome.splits * 2 < outcome.boards) {
             return
         }
 
@@ -120,31 +108,15 @@ internal class AbCommand(
         val entrants = listOf(baseline, candidate).joinToString(" ") { expandedSpec(it, registry, budgetPerTurn) }
 
         log(
-            "[lab] NOTE: $splits of ${scores.size} boards split exactly, so on most of them these two " +
-                "played the same game and this test never saw the change. That is expected of a " +
-                "change that only shows against *other* opponents -- measure one against a field:",
+            "[lab] NOTE: ${outcome.splits} of ${outcome.boards} boards split exactly, so on most of " +
+                "them these two played the same game and this test never saw the change. That is " +
+                "expected of a change that only shows against *other* opponents -- measure one " +
+                "against a field:",
         )
         log("[lab]   play $entrants <others...> --rounds 600   then   rate")
     }
 
     override fun toString(): String = "Ab($candidate vs $baseline, $sprt)"
-
-    /**
-     * Fresh boards for every block.
-     *
-     * A block is [blockPairs] boards, each played from both seats, so the seeds it consumes are
-     * `seed + block * blockPairs` onwards and the next block starts where this one stopped. Blocks
-     * that shared seeds would add matches to the sample without adding anything to the evidence, and
-     * the test has no way of telling the difference.
-     */
-    private fun configFor(block: Int): TournamentConfig = TournamentConfig(
-        contestants = listOf(baseline, candidate),
-        rows = rows,
-        cols = cols,
-        rounds = blockPairs * MATCHES_PER_BOARD,
-        seed = seed + block.toLong() * blockPairs,
-        budgetPerTurn = budgetPerTurn,
-    )
 
     private fun conclusion(report: Sprt.Report): String {
         val measured = report.elo?.let { elo ->
@@ -173,9 +145,9 @@ internal class AbCommand(
         return "[" + "=".repeat(at) + " ".repeat(BAR - at) + "]"
     }
 
-    private fun outcome(report: Sprt.Report): String {
-        val elo = report.elo ?: return "no losses yet"
-        return "${elo.round()} Elo"
+    private fun elo(report: Sprt.Report): String {
+        val measured = report.elo ?: return "no losses yet"
+        return "${measured.round()} Elo"
     }
 
     private fun Double.round(places: Int = 0): String =
@@ -187,15 +159,6 @@ internal class AbCommand(
         }
 
     private companion object {
-        /** Baseline enters first, so the candidate is contestant one. */
-        const val CANDIDATE = 1
-
-        /** A board is played from both seats, which is what makes it one observation. */
-        const val MATCHES_PER_BOARD = 2
-
-        /** A board shared down the middle — what two entrants that play alike score on every one. */
-        const val EVEN = 0.5
-
         const val BAR = 20
     }
 }
