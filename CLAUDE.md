@@ -26,6 +26,7 @@ file per audience. **Read the row that matches before you edit, not after the fi
 | change the page shell, the boot path or Pages | [`docs/UI.md`](docs/UI.md#deployment) | `#app` revealed after the first measure sizes every board to the minimum cell |
 | run a build, a benchmark or `:lab` | [`docs/Workflow.md`](docs/Workflow.md) | A mistyped knob name silently measures the default and wastes however long the batch takes |
 | measure whether a change helped, or tune a knob | [`docs/Workflow.md`](docs/Workflow.md#deciding-whether-a-change-helped) | A batch of a hundred matches can be four games played twenty-five times, and nothing in a win matrix says so |
+| plan or run a research phase, or dispatch agents for one | [`docs/Research-Process.md`](docs/Research-Process.md) | A head-to-head between two settings of one bot is a style match-up; report it as strength and the agenda records the wrong sign — as one phase did, by +250 |
 | compare against the pre-rewrite Java | [`docs/Legacy.md`](docs/Legacy.md) | Several of its algorithms are dead-broken and look intentional |
 
 The module graph, the forbidden edges and the four non-obvious facts are **below, not in `docs/`**:

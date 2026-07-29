@@ -1,7 +1,13 @@
-# Bot research agenda
+# Research agenda — 2026-07-28
 
 Ten directions past `puct`, ordered into phases, written so a fresh session can pick up a workstream
 without re-deriving the ground truth. Status lives in the table at the bottom; update it as phases land.
+
+**Closed 2026-07-28. All eight phases landed and every defect they found is fixed.** What is still open
+is at the bottom, under [Open at the close](#open-at-the-close). This document stays as it is now — the
+record of what was tried, what it measured, and which of its own premises it falsified. A new agenda
+gets a new dated file beside it; [`../Research-Process.md`](../Research-Process.md) is how one is
+written and run, and most of what it says was learned here.
 
 **Read first:** [`../Bots.md`](../Bots.md) (the bot contract, the registry rules, the three things that
 bite), [`../Coding-Standards.md`](../Coding-Standards.md) (the rule ids a review cites),
@@ -752,3 +758,45 @@ diagnostic and the measurement agreed.
 
 **P5b's cost confound does not generalise:** here the *weakest* entrant had the *highest* µs/turn. A
 field's `µs/turn` column is unreliable in both directions; only paired `time` runs measure cost.
+
+---
+
+## Open at the close
+
+What this agenda finished without settling. Each is stated as the *next* thing someone does about it,
+so a later agenda can lift a line and start.
+
+**Three shipping decisions, all the user's.** Nothing in eight phases became a default, deliberately:
+moving one moves `GoldenMoveStreamTest`'s hash and `BotLadderTest`'s thresholds, which is a release
+decision rather than a measurement.
+
+| Decision | What is measured | What is not |
+|---|---|---|
+| `puct`'s default `eval` — `territory` today, `chamber` +85 and `learned` +29 over that | Each against the incumbent, in a field, on disjoint intervals | Either against the *shipped* `territory` at the *shipped* budget, composed with the prior |
+| `MovePrior`'s five knobs, all shipping as no-ops | `priorPinch=0.8,priorTail=0.8,priorTemperature=0.9` rates **+103** on top of `eval=chamber` for 1-2% cost | The same weights on top of `eval=learned`, or at `eval=territory`. `priorWall` never moved and has **no verdict** |
+| `MatchSetup.DEFAULT_BUDGET_PER_TURN`, left at 1,000 | The ~8 ms slice now affords **≈1,180** after P3, up from ≈590 | Whether the ladder thresholds and the human-vs-bot feel survive the raise |
+
+**The composed configuration is unmeasured and is plausibly the strongest thing in the tree.**
+`eval=learned` + the tuned prior + the raised budget have each been measured *alone*, against
+different baselines, in different fields. Nobody has rated them together. P5b's rule says the way to
+do it is one field carrying every combination — `learned` alone, `chamber` alone, `chamber`+prior,
+`learned`+prior, `alphabeta`, `uct` and the reactive tail — rated in one fit, with cost taken by
+paired `time` runs and never off the field's `µs/turn` column. **That is the run the three decisions
+above are waiting on.**
+
+**Root-proven-lost early exit (from P2).** `chooseMove` stops searching when the root is proven,
+including proven **lost** — but a line lost against max^n is not lost against an opponent who may err.
+Not a one-liner: selection also skips proven children, so an all-losing root has nothing left to
+descend into. Both ends change together, and the phase that does it should re-measure P2's sign flip
+(+33 ±19 on 12×12, −41 ±25 on 20×20) rather than inherit it.
+
+**Four features nobody has tried, named by P7's residual.** Train loss equals holdout loss to five
+places, so `eval=learned` is bounded by its 25 features and not by its capacity: a tempo margin off
+`TempoOwnership.distanceTo`, an articulation count, the second-best chamber's worth, and a region's
+raw colour imbalance kept separate from the parity cap. This is the cheapest known Elo in the tree
+*if* the diagnosis holds — and the diagnosis is a measurement, not a hope.
+
+**One instrument gap.** The `puct territory, JVM` column in `MatchSetup.DEFAULT_BUDGET_PER_TURN`'s
+table is pre-bitboard by ~2.13×. Re-deriving it needs P3's six-seeds-interleaved-with-a-control
+protocol, not a single `time` run, so the KDoc dates the figure and points at `EvaluationCost`
+instead.

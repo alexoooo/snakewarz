@@ -166,6 +166,12 @@ for one that alters how often it loses games it should not.** A rating over a fi
 instrument per game played — no pairing, wider intervals — and it is the only one that can see the
 second kind at all.
 
+There is a sharper form for the case where both entrants are the *same bot at different knobs*: that
+head-to-head measures a style match-up, and only a common field converts it into strength. The worked
+case — an ablation that came out intransitive and put the wrong sign on the coordinate carrying the
+point — is in [`Research-Process.md`](Research-Process.md#3-head-to-head-knowing-what-it-measures),
+with the rest of what an experiment does before and after this step.
+
 ## Tuning a knob
 
 ```bash
