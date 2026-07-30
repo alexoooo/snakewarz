@@ -483,6 +483,15 @@ Pairing is not a refinement. The same bitboard conversion measured 1.49× unpair
 paired on a 12×12, and 1.93× against **2.13×** on a 20×20 — the unpaired numbers understated the
 speedup, and would have overstated it just as easily on a machine drifting the other way.
 
+**A sweep is not a pair, and its self-consistency is not evidence.** One JVM process timing seven
+subjects in sequence produced ratios that agreed with themselves on every pass and were wrong by
+**4–5×** against three independent references: the subjects share a warmed JIT, a heap and a run of
+the clock, so what the passes agree about is the process rather than the code. `AppraisalTape`
+(`bots/src/commonTest/`) is what replaced it — it seats the subject at *no* slot and gives the line
+bot a private `SplitMix64`, so a subject drawing a different count of random values cannot shift the
+line under itself, which is what makes the ratio a statement about two appraisals rather than two
+games.
+
 ## Why `:lab` is a module
 
 `Tournament.runToCompletion` had no caller it was written for. `:match` may not see `:bots`, and

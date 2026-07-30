@@ -1,9 +1,13 @@
 # Research process
 
 How a research agenda is written, run and closed in this repository. Everything here was learned by
-doing it once — [`research/2026-07-28_Research-Agenda.md`](research/2026-07-28_Research-Agenda.md), ten
-workstreams over eight phases — and most of it was learned by getting something wrong first. Where a
-rule has a worked case, the case is quoted, because the numbers are what make it stick.
+doing it — [`research/2026-07-28_Research-Agenda.md`](research/2026-07-28_Research-Agenda.md), ten
+workstreams over eight phases, and
+[`research/2026-07-29_Research-Agenda.md`](research/2026-07-29_Research-Agenda.md), eight over eight —
+and most of it was learned by getting something wrong first. Where a rule has a worked case, the case
+is quoted, because the numbers are what make it stick.
+
+A case names its agenda where the two would otherwise be confused. **A bare `P<n>` is 2026-07-28's.**
 
 This is a *process* document. The instruments themselves are in
 [`Workflow.md`](Workflow.md#deciding-whether-a-change-helped) and are not repeated; what is here is the
@@ -54,6 +58,14 @@ account of anything.
 **Closing an agenda.** When the last phase lands, add an **Open at the close** section: the decisions
 left to a person, the measurements nobody ran, the follow-ups deliberately dropped. Then stop editing
 it. A new agenda gets a new dated file and cites the old one — it does not reopen it.
+
+**Then harvest the ledger, and delete it.** The agenda holds what the run learned about snakes; the
+ledger holds what it learned about *running a phase*, and that belongs here rather than in a dated
+file nobody opens again. So the last act of a close is to read the ledger for the lessons that are not
+findings, write them into this document, and delete the file — which is what [the WIP
+README](research/wip/README.md) asks for from the other end. The 2026-07-28 ledger was lost with the
+temp directory it lived in and this document exists anyway, because it had been written from it first.
+That is the order, not the lucky escape it looks like.
 
 ---
 
@@ -157,6 +169,38 @@ instrument for the phase.
 Dispatch more than two only when the phase genuinely has independent halves (P5 had a prior and an
 eval). A third agent that needs the first two's context is a false economy.
 
+**The two halves run sequentially as well, whenever one of them is the timing half.** The reason
+phases do not overlap — a second Gradle build corrupts every millisecond in the report — does not care
+that the two agents are inside one phase. 2026-07-29's P1 ran integrity-then-cost for exactly that
+reason, and handed over rather than overlapping by an hour.
+
+**And the short half goes first.** Where one half is a diagnostic the other's fields will be read
+*through*, running it second wastes the field. 2026-07-29's P2 built its lead-size rider and took a
+third board's allowances before the three-board batch, and the ordering paid twice: the rider halved a
+25 Elo conversion bound, and the allowance sweep found that cost is not monotone in board size — which
+the field agent would otherwise have met as an anomaly it had no way to explain. It also stops a code
+change landing while a long batch runs, which is the collision
+[Phases run sequentially](#phases-run-sequentially) is about, one level down.
+
+### Name the price at which the next phase stops
+
+When a phase can price the thing the next one is about, put the number in the brief together with the
+threshold it has to clear. **A kill criterion stated in the brief is worth more than one discovered in
+the batch**, because it lets a phase close on a cost table rather than on a field nobody would have
+believed either way.
+
+2026-07-29's P5 handed P6 both halves of a computable threshold — a 2.2× cost ceiling and an exchange
+rate of 82–93 Elo per e-fold of allowance — and P6 was dispatched scoped down on P5's own
+recommendation: one board, and the candidate priced *first*. It used the threshold. An hour's
+measurement closed a workstream that had been carried through two agendas, and the phase spent the
+rest of its session on a lead P5 had turned up incidentally. That was the cheapest phase on the agenda
+and the pattern is worth repeating deliberately.
+
+The same brief is where the previous phase's *instrument* findings go, and they pay the same way. Told
+what P5 had measured, P6 reached for an `internal` test-only seam rather than freezing a `Choice`
+value or putting a second bot class at the timed call site — the second being a defect P5 had priced
+at 25% of a control's own reading, one phase earlier, and written into its handover.
+
 ### The coordinator's job
 
 - Hold the **ledger** (`docs/research/wip/<agenda-date>-ledger.md`) and the agenda's Status table.
@@ -164,6 +208,13 @@ eval). A third agent that needs the first two's context is a false economy.
 - Read what comes back sceptically. Agents report confidently and are sometimes wrong; the D6 case is
   the pattern — a table the whole phase was read against turned out to carry ±8 points of noise on the
   effect it recorded, and only re-deriving it at 1,000 rounds settled it.
+- **Scepticism cuts both ways: believe the agent that reports the batch it wasted.** 2026-07-29 had
+  two, six phases apart. P1b's first cost instrument — a JVM sweep timing seven bots in one process —
+  produced a self-consistent, every-pass-agreeing set of ratios that were wrong by 4–5× against three
+  independent references; the agent caught it, threw it away and built `AppraisalTape`. P7b's
+  transposed analysis key briefly ranked `random` second in a field and was, in its own words,
+  *"caught by disbelief, not by a test."* A report that names its own dead end is a report whose
+  surviving numbers are worth more, and it is the disposition to ask for in a brief.
 - Write findings into the agenda. Do this **as each phase lands**, not at the end: an agenda written up
   at the end is written from a summary of a summary.
 
@@ -229,6 +280,20 @@ control at 0.82×. Never compare timing blocks; only paired ratios with an unaff
 **A field's `µs/turn` column is not a cost measurement.** It ordered seven entrants almost exactly *by
 rating* in one phase (stronger bot → longer game → fuller board → dearer leaf) and inversely in
 another. Unreliable in both directions.
+
+**When two readings of a cost disagree, record the disagreement. Never average them.** 2026-07-29's
+P5a published 1.98–2.01× at 20×20 and reported two runs agreeing to within 2%; the coordinator's own
+runs read 2.45× and then 1.93×, with the *control itself* swinging 11% on that board. The KDoc carries
+the wider band and the reason, which is worth more than a tighter number would have been. A later
+agent had a free 20×20 cross-check of an earlier phase's cost cell, found its own control pair
+swinging 13–18% *within* a run, and declined to overwrite the cell — recording the instability instead
+of averaging two instruments. That is the correct move both times.
+
+**And an allowance is not the reciprocal of a ratio, however much it looks like one.** An allowance
+asserted directly against the default's clock and verified to 94–113% over five runs is a *measured*
+number; the cost ratio beside it is *derived* and carries real spread. They do not have to agree,
+because cost per turn is a tree term plus a rollout term and a change usually touches only one of
+them. Quote each as what it is.
 
 ### 3. Head-to-head, knowing what it measures
 
