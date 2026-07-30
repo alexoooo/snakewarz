@@ -223,6 +223,27 @@ class MatchSetupTest {
     }
 
     @Test
+    fun `the shipped allowance is copied by hand into bots, so moving it is a two-file change`() {
+        // Nothing links this figure to the tests that certify the ladder at it. `:bots` may not
+        // depend on `:match` — not in production and not in a test either, and `:bots`'
+        // `checkModulePurity` walks the test classpath — so `:bots` types the number out, in
+        // `ShippedBudget.kt`'s `SHIPPED_BUDGET`. Raising this constant without following it there
+        // leaves `BotLadderTest` certifying a rung nobody plays and `ThroughputTest` timing one,
+        // both of them green, which is worse than a red test.
+        //
+        // So the pin is the tripwire, and answering it is the whole procedure: change
+        // `SHIPPED_BUDGET` in `:bots`' test sources, re-measure `BotLadderTest`'s thresholds at the
+        // new figure, then move this number. `ReplayCodecTest.SHIPPED_BUDGET` is not one of those
+        // copies — it records what this constant was when that suite's payload was captured, and it
+        // must stay where it is.
+        assertEquals(
+            1_000,
+            MatchSetup.DEFAULT_BUDGET_PER_TURN,
+            "the shipped allowance moved; :bots' SHIPPED_BUDGET has to move with it",
+        )
+    }
+
+    @Test
     fun `spawns are playable indices, not the engine's padded ones`() {
         // The replay format must not encode the padded-grid layout, or changing the padding would
         // invalidate every recorded match.

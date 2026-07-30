@@ -1,9 +1,9 @@
 package ao.snakewarz.bots.search.uct
 
 import ao.snakewarz.botapi.scratch.Playout
+import ao.snakewarz.bots.search.RolloutPolicy
 import ao.snakewarz.bots.search.SpaceOwnership
 import ao.snakewarz.bots.search.randomPlayout
-import ao.snakewarz.core.grid.Direction
 import ao.snakewarz.core.random.Rng
 import ao.snakewarz.core.rules.MatchOutcome
 
@@ -18,23 +18,22 @@ import ao.snakewarz.core.rules.MatchOutcome
  * table and the answer, which is no — and an allowance counted in evaluations has since taken the
  * extra iterations away too, since a truncated one costs the same unit as a full one.
  *
- * Everything [randomPlayout] does, this does — same policy, same re-read of `outcome` after every
- * advance, same `NORTH` for a trapped snake — up to the point where the cut-off lands.
+ * Everything [randomPlayout] does, this does — same [policy], same re-read of `outcome` after every
+ * advance — up to the point where the cut-off lands.
  */
 internal fun truncatedPlayout(
     playout: Playout,
     rng: Rng,
     depth: Int,
     space: SpaceOwnership,
+    policy: RolloutPolicy,
 ): MatchOutcome {
     var result = playout.outcome
     var remaining = depth
 
     while (result == null && remaining > 0) {
-        val legal = playout.board.legalMoves(playout.toAct)
-        val move = if (legal.isEmpty) Direction.NORTH else legal.nth(rng.nextInt(legal.size))
-
-        playout.advance(move)
+        val mover = playout.toAct
+        playout.advance(policy.pick(playout.board, mover, playout.board.legalMoves(mover), rng))
         result = playout.outcome
         remaining--
     }

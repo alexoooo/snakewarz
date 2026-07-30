@@ -50,6 +50,11 @@ import ao.snakewarz.core.snake.SnakeId
  * a tie is possible only among the waiting ones, which is the same statement the arithmetic above
  * makes. `SpaceOwnership` carries why advancing whole layers reproduces a queue exactly.
  *
+ * At **two snakes only one frontier ever moves per half-step** — the mover on an even one, the single
+ * waiting snake on an odd one — so [advanceWaiting] is never reached at all, measured at 0.0 calls a
+ * sweep on every board. It exists for three seats and up, and anything costed on this sweep at two
+ * snakes is costing [advanceAlone] alone.
+ *
  * A snake whose frontier lands nowhere is dropped for the rest of the sweep: an empty frontier
  * spreads to nothing forever after, and a snake sealed into a corner is the common case late in a
  * game — which is when this evaluation is being asked the question that decides it.

@@ -77,6 +77,18 @@ internal class ChamberTree(
     private val parityWeight: Double,
     /** How much of a chamber's worth the share of it on a contested boundary takes off. */
     private val frontierPenalty: Double,
+    /**
+     * Whether to keep the two readings that cost work **per square** — [secondWorth] and [distanceSum].
+     *
+     * Off by default, and that is not a micro-optimisation: [ChamberEval] reads neither, and turning
+     * them on for it would put a load and a store on the per-square path of a leaf whose cost is
+     * published in `EvaluationCost` and whose allowance is set from it. [articulations] and
+     * [colourImbalance] need no flag — both are counters in the block pop, of which there are far
+     * fewer than there are squares. With this off both gated readings report **zero** rather than
+     * whatever the last caller left behind, so a misread is a reading of no information rather than
+     * a reading of another position.
+     */
+    private val allReadings: Boolean = false,
 ) {
     /** The chessboard colouring, built once — [FillableSpace]'s, off the padded index for its reason. */
     private val colour = ByteArray(grid.cellCount) { (((it / grid.stride) + (it % grid.stride)) and 1).toByte() }
@@ -91,6 +103,12 @@ internal class ChamberTree(
     /** Per cut vertex, the best chain hanging below it: what it is worth, and the squares it covers. */
     private val best = DoubleArray(grid.cellCount)
     private val bestArea = IntArray(grid.cellCount)
+
+    /** The runner-up at each cut vertex — see [secondWorth], which is the only place it is read. */
+    private val second = DoubleArray(grid.cellCount)
+
+    /** Stamped on a cut vertex the first time a block closes under it, so each is counted once. */
+    private val cutMark = IntArray(grid.cellCount)
 
     private val stackCell = IntArray(grid.cellCount)
     private val stackParent = IntArray(grid.cellCount)
@@ -128,6 +146,60 @@ internal class ChamberTree(
     var exposedArea: Int = 0
         private set
 
+    /**
+     * What the *second* best chain out of the head is worth, in the same effective squares.
+     *
+     * [chainWorth] is a max over the branches hanging off the head, and a max says nothing about what
+     * is behind it: a snake with two equally good ways out and one with a single way out and a dead
+     * end read identically. This is the runner-up, so the pair is an **optionality** reading — how
+     * much is left if the best branch turns out to be the wrong one. Zero when the region is one
+     * chamber, which is the honest answer: there is no second branch to take.
+     *
+     * Read as a share of [chainWorth] rather than on its own, because only the ratio is board-free.
+     */
+    var secondWorth: Double = 0.0
+        private set
+
+    /**
+     * Cut vertices in the region — the squares whose loss breaks it into pieces.
+     *
+     * [chamberCount] counts the *blocks*, which cannot tell a corridor of five chambers in a line
+     * (four chokepoints) from five chambers around one square (one chokepoint), and those are
+     * different positions: the first is a walk that keeps its options, the second a walk that spends
+     * them all at once. Hopcroft-Tarjan settles this in the pop it is already doing, so the count is
+     * free — the finding that *"a true articulation test is unaffordable"* was about `MovePrior`,
+     * which would have to run three sweeps per iteration to get it.
+     *
+     * The head counts by the standard rule — a root is a cut vertex when it has two subtrees below
+     * it — and that is the right reading here rather than an artefact of it: a head standing on a cut
+     * vertex is one about to commit its region to whichever side it steps.
+     */
+    var articulations: Int = 0
+        private set
+
+    /**
+     * Squares of the region the chessboard colouring cannot pair off, summed over every chamber.
+     *
+     * [FillableSpace]'s cap is `2 * min(a, b) + spare`, which folds this into an answer. Here it is
+     * carried raw, for [ChamberTree]'s own reason for handing [exposedArea] over separately: a weight
+     * already applied is a weight that cannot be learned. Against [regionArea] it is the share of a
+     * region a retracting walk can never spend, which is the parity argument as a reading rather than
+     * as a correction — and the parity relaxation has now lost twice as a correction.
+     */
+    var colourImbalance: Int = 0
+        private set
+
+    /**
+     * Every square of the region weighted by how many moves the sweep says it takes to get there.
+     *
+     * Read against [regionArea] as a mean, and against a rival's as a margin: two snakes holding the
+     * same number of squares are not in the same position if one of them has to walk twice as far to
+     * spend them. Nothing else in the box reads the sweep's *arrival times* at all — every consumer
+     * reads only who owns what — and this costs one array lookup per square already being walked.
+     */
+    var distanceSum: Long = 0
+        private set
+
     /** The share of its own region the best chain never reaches, in `0.0..1.0`. */
     val sealed: Double
         get() = if (regionArea == 0) 0.0 else (regionArea - chainArea).toDouble() / regionArea
@@ -150,6 +222,7 @@ internal class ChamberTree(
         low[start] = timer
         best[start] = 0.0
         bestArea[start] = 0
+        second[start] = 0.0
 
         var sp = 0
         stackCell[0] = start
@@ -159,7 +232,11 @@ internal class ChamberTree(
         var blockTop = 0
         var squares = 0
         var chambers = 0
+        var cuts = 0
+        var rootBlocks = 0
+        var distance = 0L
         exposedArea = 0
+        colourImbalance = 0
 
         while (sp >= 0) {
             val here = stackCell[sp]
@@ -198,6 +275,10 @@ internal class ChamberTree(
                 low[next] = timer
                 best[next] = 0.0
                 bestArea[next] = 0
+                if (allReadings) {
+                    distance += space.distanceTo(Cell(next))
+                    second[next] = 0.0
+                }
                 blockStack[blockTop++] = next
 
                 sp++
@@ -221,13 +302,26 @@ internal class ChamberTree(
                 // root, for which this holds trivially and gives the same answer.
                 blockTop = closeBlock(parent, here, blockTop)
                 chambers++
+
+                // The root's own test is different — it is a cut vertex only with two subtrees under
+                // it — so it is counted after the walk rather than here. Every other parent that
+                // closes a block is one, and is counted the first time it does.
+                if (parent == start) {
+                    rootBlocks++
+                } else if (cutMark[parent] != generation) {
+                    cutMark[parent] = generation
+                    cuts++
+                }
             }
         }
 
         chainWorth = best[start]
         chainArea = bestArea[start]
+        secondWorth = if (allReadings) second[start] else 0.0
         regionArea = squares
         chamberCount = chambers
+        articulations = cuts + if (rootBlocks > 1) 1 else 0
+        distanceSum = distance
     }
 
     /**
@@ -266,6 +360,7 @@ internal class ChamberTree(
 
         val area = sameColour + otherColour
         exposedArea += exposed
+        colourImbalance += if (sameColour > otherColour) sameColour - otherColour else otherColour - sameColour
 
         // A walk leaving `entry` steps to the other colour first and alternates, so it can pair off
         // min(a, b) of each and take one more of the opposite colour if there is one spare.
@@ -278,8 +373,13 @@ internal class ChamberTree(
         val fill = worth + branchWorth
         val covered = area + branchArea
         if (fill > best[entry] || (fill == best[entry] && covered > bestArea[entry])) {
+            if (allReadings) {
+                second[entry] = best[entry]
+            }
             best[entry] = fill
             bestArea[entry] = covered
+        } else if (allReadings && fill > second[entry]) {
+            second[entry] = fill
         }
         return blockTop
     }
@@ -288,6 +388,7 @@ internal class ChamberTree(
         if (generation == Int.MAX_VALUE) {
             mark.fill(0)
             contested.fill(0)
+            cutMark.fill(0)
             generation = 0
         }
         generation++

@@ -96,7 +96,7 @@ internal object EvaluationCost {
     /** [MobilityEval] — a liberty count per snake, and the cheapest thing here by a long way. */
     const val MOBILITY: Int = 1
 
-    /** [TerritoryEval] — one board-wide ownership sweep; measured at about three [ROLLOUT]s on a 20x20. */
+    /** [TerritoryEval] — one board-wide ownership sweep; measured at 0.9 [ROLLOUT]s on a 12x12 and 1.7 on a 20x20. */
     const val TERRITORY: Int = 1
 
     /** [SurvivalEval] — a sweep, and then every region taken apart. The dearest of them. */
@@ -128,12 +128,24 @@ internal object EvaluationCost {
     /**
      * [LearnedEval] — [CHAMBER]'s sweep and decomposition, read as a feature vector into a fit.
      *
-     * The same two passes over the board, then 400 multiply-adds and about thirty divisions per live
-     * snake. **1.11-1.16x [ChamberEval] a turn on a 12x12**, paired seed by seed with [UctBot]'s
-     * rollout carried as a control — which is more than it looks, and the reason to state it here:
-     * an evaluation at that setting is under four microseconds, so a few hundred arithmetic
-     * operations really is a tenth of one. `LearnedEval` carries the table and what the readings buy
-     * back for it.
+     * The same two passes over the board, then about 500 multiply-adds and thirty divisions per live
+     * snake. The 12x12 figure was **1.11-1.16x [ChamberEval]** at twenty-five readings; re-measured in
+     * Chrome at twenty-nine, on three boards at once:
+     *
+     * | | 8x8 | 12x12 | 20x20 |
+     * |---|---|---|---|
+     * | this, against [ChamberEval] | 1.28x | 1.19x | 1.09x |
+     * | this, against a bare [TerritoryEval] search | 3.00x | 4.21x | 5.24x |
+     *
+     * **The ratio against [ChamberEval] falls as the board grows, and that is the shape to expect**:
+     * the fit is a fixed cost per live snake while the sweep under it grows with the board, so the
+     * dearer the shared work the less the arithmetic on top of it shows. Quoting the 12x12 figure
+     * alone reads as a constant and it is not one.
+     *
+     * What the four readings added in P4 cost on their own is **not** isolated here: two sessions and
+     * two instruments separate 1.16x from 1.19x, and P1 measured browser ratios moving 3% between runs
+     * on one machine. The three-board row is a measurement; the difference from the old band is not.
+     * `LearnedEval` carries the table and what the readings buy back for it.
      */
     const val LEARNED: Int = 1
 }

@@ -69,6 +69,13 @@ import kotlin.math.abs
  * region apart, so thirty-odd extra reads beside it do not show. P3's exchange rate prices a 2% cost
  * at about **5 Elo**, which is the whole of what any of these readings has to buy back.
  *
+ * **Both figures are about the rate this runs at and not about the readings, and somewhere else the
+ * same readings are ruinous.** Inside a *rollout* — paid per step of a hundred-odd rather than once
+ * per expansion — the swept point below costs **1.4x to 1.6x** what the shipped one-feature prior
+ * costs there and takes a whole `uct` turn to **2.3x-3.3x** a uniform draw's.
+ * [ao.snakewarz.bots.search.RolloutPolicy]'s swept-prior row is that measurement, and it is why
+ * nothing was built on it.
+ *
  * **Do not read the cost off a field's `us/turn` column instead.** It puts the strongest entrant 13%
  * above the weakest and orders the seven of them almost exactly by rating, which is the confound
  * rather than a measurement: a stronger bot survives longer, a longer game is a fuller board, and a

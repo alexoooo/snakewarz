@@ -11,11 +11,16 @@ import ao.snakewarz.core.snake.SnakeId
  * A leaf whose weights were fitted to games rather than argued for.
  *
  * Every other [LeafEval] here is a shape somebody chose and a handful of weights a sweep settled.
- * This is the same idea taken as far as it goes: [PositionFeatures] reads twenty-five bounded numbers
+ * This is the same idea taken as far as it goes: [PositionFeatures] reads twenty-nine bounded numbers
  * off the position — the readings six phases of measurement say carry the signal — and [LearnedNet]
  * turns them into a probability of winning, with every coefficient fitted by gradient descent on
  * positions replayed out of the match log. `:lab`'s `train` is the command; `LearnedWeights` is what
  * it produced and carries the fit's own numbers.
+ *
+ * > **The next two sections are about the fit this leaf shipped before P4** — twenty-five readings
+ * > over a 12x12-only corpus — and are kept as the record of what that one was worth on the board it
+ * > was fitted for. They are not a description of what is in [LearnedWeights] now. What replaced it,
+ * > and why, is two sections down.
  *
  * ### It is the same sweep [ChamberEval] pays for, plus a forward pass
  *
@@ -64,15 +69,29 @@ import ao.snakewarz.core.snake.SnakeId
  * head-to-head. And the field's own `us/turn` column is not a cost measurement: it orders entrants by
  * rating, because a stronger bot plays longer games on fuller boards.
  *
- * ### Where the ceiling is, and it is not the model
+ * ### Where the ceiling is — and the first answer to this was wrong
  *
- * The fit's training and holdout log-losses land on the **same** number — 0.568 against 0.693 for a
- * model that always answers even — at 433 weights over half a million positions. Nothing there is
- * short of capacity, of data or of optimisation. A hidden layer is worth 0.023 of loss over plain
- * logistic regression and saturates at sixteen units; sixty epochs and thirty land in the same place.
- * What is short is **what twenty-five readings off one sweep can say**, which is the agenda's framing
- * of this workstream as feature design rather than modelling, arriving as a measurement. The next
- * gain here is a reading, not a layer.
+ * The fit's training and holdout log-losses land on the **same** number, 0.5728 against 0.5737 at 497
+ * weights, where a model that always answers even scores 0.693. Nothing there is short of capacity, of
+ * data or of optimisation, and a hidden layer is worth 0.023 of loss over plain logistic regression
+ * and saturates at sixteen units.
+ *
+ * That equality was read as *"what is short is what twenty-five readings off one sweep can say — the
+ * next gain here is a reading, not a layer"*, and **the inference does not follow**. The holdout was
+ * drawn from the same one-board corpus as the training rows, so the equality is a statement about
+ * capacity *on that board* and cannot see a transfer failure at all — which is exactly what the leaf
+ * turned out to have. P4 measured all three on the same scale, on 13,200 fresh matches per board:
+ *
+ * | what | worth, in log-loss |
+ * |---|---|
+ * | refitting the identical twenty-five readings on the board being played | 0.011 / 0.014 / **0.048** |
+ * | the hidden layer, over plain logistic regression | 0.023 |
+ * | the four readings P4 added off the residual | **0.0039 ± 0.0017** |
+ *
+ * So the binding constraint was the **corpus**, by roughly an order of magnitude over the features,
+ * and it bound hardest at 20x20 where this leaf was worst. The four readings are real, consistent in
+ * sign at every seed on every board, and small. [LearnedWeights] carries both tables and the fit that
+ * replaced the one those sentences were written about.
  *
  * ### What the model is asked, and what it is not
  *
@@ -85,7 +104,30 @@ import ao.snakewarz.core.snake.SnakeId
  *
  * **Not a default, and not proposed as one.** Everything above is measured at `eval=chamber`, which
  * is itself not what this bot ships at, and moving `PuctBot.EVAL` moves `GoldenMoveStreamTest`'s
- * `puct` hash and `BotLadderTest`'s thresholds. The sequence is in `docs/Bots.md`.
+ * bare `puct` hash — the one that pins whatever the default is, rather than the case beside it that
+ * names `territory`. **It now moves two ladder thresholds as well**: `BotLadderTest` seated `puct`
+ * and `alphabeta` when they graduated, so the `puct` over `uct` and `alphabeta` over `puct` rungs are
+ * both pairings a `puct` default reaches. That was not true when this paragraph was written and the
+ * claim is worth re-reading rather than inheriting. The sequence is in `docs/Bots.md`.
+ *
+ * **And the reason it is not proposed is the clock, which is a different reason than it used to be.**
+ * P2 measured the previous fit at **−167** at equal clock on a 20x20 and **−11** even when handed
+ * 4.65x of it — a collapse. P4 refitted on all three boards and re-ran the field, 4,200 matches a
+ * board, as a rating against the bare baseline in the same field:
+ *
+ * | | 8x8 | 12x12 | 20x20 |
+ * |---|---|---|---|
+ * | this at **equal allowance** (3.0-5.2x the clock) | +118 | +252 | **+88** |
+ * | this at **equal clock** | +82 | +4 | **−74** |
+ * | the same two, at the fit P4 replaced | +92 / +40 | +81 / −7 | **−160 / −316** |
+ *
+ * **The collapse is gone and the verdict is not.** At equal allowance this is now first in its field
+ * on all three boards, where the old fit was first on none; at equal *clock* it is level with the bare
+ * baseline at 12x12 and behind it at 20x20, because the readings cost 3-5.2x a turn and the fit does
+ * not buy that back. Two cautions on the table: the two fields differ in composition, and contrasts
+ * that ought to be unchanged move ±30-90 between them — so the 8x8 and 12x12 rows say nothing, and
+ * only the 20x20 move of about +240 is outside that. The two fits have **never been seated in one
+ * field**; what is measured directly, on identical corpora, is the loss.
  */
 internal class LearnedEval(
     grid: Grid,

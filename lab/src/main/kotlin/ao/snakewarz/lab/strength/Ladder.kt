@@ -25,6 +25,8 @@ internal class Ladder private constructor(
     val table: TournamentTable,
     val matches: List<LoggedMatch>,
     private val turnCounts: LongArray,
+    private val seatCounts: IntArray,
+    private val winCounts: IntArray,
 ) {
     val ratings: Ratings = fitRatings(table)
 
@@ -36,6 +38,33 @@ internal class Ladder private constructor(
 
     /** Turns this entrant played, so a cost can be read per turn rather than per batch. */
     fun turns(entrant: Int): Long = turnCounts[entrant]
+
+    /** Matches this entrant was seated in — matches, not the comparisons [table] counts. */
+    fun seated(entrant: Int): Int = seatCounts[entrant]
+
+    /**
+     * How often this entrant was the last snake moving, in `0.0..1.0`, or `null` if it never played.
+     *
+     * **The other question, and past two seats it is a different one from the rating above it.**
+     * [pairwiseOutcomes] scores a free-for-all by *outlasting* — who survived more moves, both alive
+     * a draw — so what `fitRatings` is fitted to is a survival order and not a victory order. Head to
+     * head those coincide, for the engine reason `pairwiseOutcomes`' own KDoc gives. At three seats
+     * they come apart, and that KDoc carries how far: the ordering survives (79 of 84 triples on a
+     * 12x12) and the scale does not (65/35 by outlasting where 90/10 by victory, low in the field).
+     *
+     * So this is read beside the rating rather than instead of it, and [RateCommand] prints both.
+     * A bot that never contests ground and dies second of the two losers moves the rating and does
+     * not move this column, which is the failure mode the pair of columns exists to make visible.
+     *
+     * What is **not** available is a fitted *win* rating. `fitRatings` takes a matrix, the matrix is
+     * filled from the one scoring rule both `Tournament` and `:lab` share, and a second rule belongs
+     * in `:match` beside the first rather than in a `:lab` column that could disagree with it. The
+     * evidence for not building one is the 79 of 84: over the whole shipped field the two rules put
+     * the same bots in the same order, so a second fit would have moved nothing and would have been
+     * a second thing to keep honest.
+     */
+    fun winShare(entrant: Int): Double? =
+        if (seatCounts[entrant] == 0) null else winCounts[entrant].toDouble() / seatCounts[entrant]
 
     /**
      * What this entrant cost a turn, or `null` where the batch cannot say — see [turnCosts].
@@ -103,6 +132,8 @@ internal class Ladder private constructor(
 
             val table = TournamentTable(specs.map { entrantOf(it, registry) })
             val turnCounts = LongArray(specs.size)
+            val seatCounts = IntArray(specs.size)
+            val winCounts = IntArray(specs.size)
 
             for (match in matches) {
                 val seating = IntArray(match.slots.size) { entrant.getValue(match.slots[it].spec) }
@@ -110,11 +141,16 @@ internal class Ladder private constructor(
                     table.record(comparison, seating)
                 }
                 for (slot in match.slots) {
-                    turnCounts[entrant.getValue(slot.spec)] += slot.movesMade.toLong()
+                    val index = entrant.getValue(slot.spec)
+                    turnCounts[index] += slot.movesMade.toLong()
+                    seatCounts[index]++
+                    if (slot.winner) {
+                        winCounts[index]++
+                    }
                 }
             }
 
-            return Ladder(specs, table, matches, turnCounts)
+            return Ladder(specs, table, matches, turnCounts, seatCounts, winCounts)
         }
 
         /**

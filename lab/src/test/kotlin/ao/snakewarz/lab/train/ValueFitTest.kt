@@ -108,7 +108,16 @@ class ValueFitTest {
             labels[i] = if (rng.nextDouble() < logisticOf(logit(row))) 1.0 else 0.0
             group[i] = i / ROWS_PER_GROUP
         }
-        return Corpus(rows, WIDTH, features, labels, group, rows / ROWS_PER_GROUP, 0, rows)
+        // One synthetic geometry: these rows come off no board at all, and a fit over a single-board
+        // corpus is exactly the case `Corpus` reports pooled rather than per board.
+        return Corpus(
+            rows, WIDTH, features, labels, group,
+            board = IntArray(rows),
+            boards = listOf("synthetic"),
+            matches = rows / ROWS_PER_GROUP,
+            drawn = 0,
+            positionsSeen = rows,
+        )
     }
 
     /** The log-loss a model that knew the rule exactly would still pay on this sample. */

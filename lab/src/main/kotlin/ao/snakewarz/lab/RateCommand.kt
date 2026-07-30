@@ -9,6 +9,7 @@ import ao.snakewarz.lab.strength.Bootstrap
 import ao.snakewarz.lab.strength.Interval
 import ao.snakewarz.lab.strength.Ladder
 import ao.snakewarz.lab.strength.bootstrapIntervals
+import ao.snakewarz.lab.strength.winShareIntervals
 import ao.snakewarz.match.tournament.TournamentFormat
 import java.nio.file.Path
 import kotlin.math.abs
@@ -21,6 +22,14 @@ import kotlin.math.roundToInt
  * more matches than another and still lose to it, having met easier opposition. What a rating adds is
  * a single ordering; what it hides is that the ordering may not exist, and the residual table below
  * is what makes that visible rather than a footnote.
+ *
+ * ### Free for all prints a second ordering, and it is not decoration
+ *
+ * The rating is fitted to what `pairwiseOutcomes` scores, and past two seats that is **outlasting**
+ * rather than winning. So a free-for-all table also carries the raw win share and a block saying
+ * whether the two order the field the same way — see [Ladder.winShare]. Head to head it prints
+ * neither, because there the engine ends the match at the first death and the two questions have one
+ * answer.
  */
 internal class RateCommand(
     val logDirectory: Path,
@@ -55,7 +64,7 @@ internal class RateCommand(
 
         log("[lab] ${played.size} matches, ${ladder.size} entrants, ${summarise(eligible)}")
         log("")
-        report(ladder, bootstrapIntervals(ladder, registry, format), played, eligible, log)
+        report(ladder, bootstrapIntervals(ladder, registry, format), format, played, eligible, log)
     }
 
     override fun toString(): String = "Rate($logDirectory, $filters)"
@@ -78,6 +87,7 @@ internal class RateCommand(
     private fun report(
         ladder: Ladder,
         intervals: List<Interval>,
+        format: TournamentFormat,
         played: List<LoggedMatch>,
         runs: List<RunHeader>,
         log: (String) -> Unit,
@@ -85,9 +95,16 @@ internal class RateCommand(
         val order = ladder.ratings.ranking()
         val width = (0 until ladder.size).maxOf { ladder.label(it).length }.coerceAtLeast(MIN_LABEL)
 
+        // The win columns are free-for-all only, and their absence head to head is the finding
+        // rather than an omission: there the engine resolves the field the instant one snake dies,
+        // so outlasting *is* winning and a second column would restate the first. See
+        // `Ladder.winShare` and `pairwiseOutcomes`.
+        val victory = if (format == TournamentFormat.FREE_FOR_ALL) winShareIntervals(ladder) else null
+
         log(
             "entrant".padEnd(width) + "   rating   " + Bootstrap.CONFIDENCE.padStart(INTERVAL) +
-                "  games   score    us/turn",
+                "  games   score" + (if (victory != null) "     win      win ${Bootstrap.CONFIDENCE}" else "") +
+                "    us/turn",
         )
         for (entrant in order) {
             val rating = ladder.ratings
@@ -103,14 +120,77 @@ internal class RateCommand(
                     intervals[entrant].render().padStart(INTERVAL) +
                     "  ${ladder.table.played(entrant).toString().padStart(GAMES)}" +
                     "  ${percent(ladder.table.scoreRate(entrant))}" +
+                    (victory?.let { "  ${percent(ladder.winShare(entrant) ?: 0.0)}  ${it[entrant].asShare()}" } ?: "") +
                     "  ${cost?.let { render(it) } ?: "-"}".padStart(COST) +
                     if (rating.priorDetermined(entrant)) "   (unbounded)" else "",
             )
         }
 
         unbounded(ladder, log)
+        if (victory != null) {
+            longevityAgainstVictory(ladder, victory, order, log, width)
+        }
         residuals(ladder, log, width)
         diversity(played, runs, log)
+    }
+
+    /**
+     * Whether the two orderings a free-for-all produces are the same ordering.
+     *
+     * Printed for every free-for-all, never on request, for the reason the diversity line is: the
+     * rating above is fitted to *outlasting* and the game is decided by *winning*, and the two are
+     * only the same question at two seats. A rung that rates above another while winning fewer
+     * matches than it is the whole shape of the problem — a bot can climb a free-for-all rating by
+     * refusing to contest ground and dying second of the two losers.
+     *
+     * Only inversions whose win-share intervals are **disjoint** are named. Every field of any width
+     * has adjacent rungs whose win shares cross on noise, and a block that listed those would be
+     * ignored within a week.
+     *
+     * **What it cannot tell you is whether the rules disagree or the schedule was unbalanced**, and
+     * the difference matters. A win is a three-way event, so a win share is conditioned on the pairs
+     * of opponents an entrant happened to sit with; a log built out of a *covering* design balances
+     * every entrant's opponents one at a time and still gives them different company. P7 saw exactly
+     * that: a Steiner triple system over the nine shipped bots fires this block on `chase` against
+     * `space`, and the complete design over the same nine on the same board does not. So read a
+     * firing as *check the schedule, then check the rule*, in that order.
+     */
+    private fun longevityAgainstVictory(
+        ladder: Ladder,
+        victory: List<Interval>,
+        order: List<Int>,
+        log: (String) -> Unit,
+        width: Int,
+    ) {
+        val rated = order.filter { ladder.ratings.measured(it) && ladder.winShare(it) != null }
+        val inverted = buildList {
+            for (above in rated.indices) {
+                for (below in above + 1 until rated.size) {
+                    val one = rated[above]
+                    val other = rated[below]
+                    if (victory[one].high < victory[other].low) {
+                        add(one to other)
+                    }
+                }
+            }
+        }
+
+        log("")
+        if (inverted.isEmpty()) {
+            log("[lab] free for all: the rating is fitted to who OUTLASTED whom, not to who won.")
+            log("  No rung here rates above another while winning conclusively fewer matches.")
+            return
+        }
+
+        log("[lab] free for all: the rating is fitted to who OUTLASTED whom, and it disagrees with")
+        log("  the `win` column beside it. Longevity is not victory, and here they order differently:")
+        for ((one, other) in inverted.take(WORST_RESIDUALS)) {
+            log(
+                "  ${ladder.label(one).padEnd(width)} rates above ${ladder.label(other).padEnd(width)}" +
+                    "  and wins ${percent(ladder.winShare(one) ?: 0.0)} against ${percent(ladder.winShare(other) ?: 0.0)}",
+            )
+        }
+        log("  Quote the win column beside any strength claim taken off this table, or neither.")
     }
 
     /**
@@ -205,6 +285,10 @@ internal class RateCommand(
     private fun Interval.render(): String =
         if (low.isNaN()) "-" else "${signed(low)}..${signed(high)}"
 
+    /** A win-share bar, which is a fraction rather than an Elo and so wants no sign. */
+    private fun Interval.asShare(): String =
+        if (low.isNaN()) "-".padStart(SHARE) else "${percent(low).trim()}..${percent(high).trim()}".padStart(SHARE)
+
     private fun signed(value: Double): String {
         val rounded = value.roundToInt()
         return if (rounded > 0) "+$rounded" else rounded.toString()
@@ -222,6 +306,7 @@ internal class RateCommand(
         const val INTERVAL = 13
         const val GAMES = 5
         const val PERCENT = 5
+        const val SHARE = 9
         const val COST = 9
 
         /** Five points of score. Below that a cell is sampling noise rather than a shape. */

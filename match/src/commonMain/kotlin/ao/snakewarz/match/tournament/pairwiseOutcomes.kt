@@ -21,7 +21,43 @@ import ao.snakewarz.match.stats.SlotStats
  * For two contestants the two rules agree, but only because of an engine detail: [ao.snakewarz.core.rules.Board]
  * resolves a field of two down to `LAST_SNAKE_STANDING` the instant one of them dies, so the
  * `movesMade` comparison below never has to break a tie. That is one rules change away from not
- * holding, which is the argument for asking the format rather than assuming the answer.
+ * holding, which is the argument for asking the format rather than assuming the answer. Verified
+ * rather than reasoned: over 14,400 two-seat matches on a 12x12 the outlasting score and the outright
+ * win rate came out equal to the last digit for all nine shipped bots, with no draw in any of them.
+ *
+ * ### Past two seats this rates a survival order, and that is not a victory order
+ *
+ * Worth stating here because a free-for-all **rating** is fitted to what this function emits, so a
+ * three-seat Elo in this repository is an Elo of *outlasting*. A snake that never contests ground
+ * and goes out second of the two losers scores here exactly as one that goes out second having
+ * fought. P7 of the 2026-07-29 agenda measured what that costs, over all 84 triples of the nine
+ * shipped bots at a 12x12, 25,200 matches, every one a distinct game:
+ *
+ * - **The direction survives.** With the company held still — one triple, the same matches scored
+ *   twice — the two rules put the three entrants in the same order in **79 of 84** triples, and each
+ *   of the five flips is between two entrants five points of win share or less apart. The rules never
+ *   disagreed about a gap either of them could see.
+ * - **The scale does not, and how badly is a function of how often a third snake wins.** Most of
+ *   what this rule resolves is games *neither* of the compared pair won, and there it is grading two
+ *   doomed snakes on the order they died in.
+ *
+ * | pair, 2,100 matches each | a third snake won | this rule says | of the two, who won |
+ * |---|---|---|---|
+ * | `pressure` vs `wallhug` | 67% | 65 / 35 | **90 / 10** |
+ * | `chase` vs `space` | 55% | 63 / 37 | **76 / 24** |
+ * | `alphabeta` vs `uct` | 8% | 53 / 47 | 52 / 48 |
+ * | `puct` vs `uct` | 8% | 51 / 49 | 50 / 50 |
+ *
+ * So the top of a three-seat field is the part to trust: there a third snake almost never takes the
+ * match away and the two rules nearly coincide. Down the field they diverge by the width of the
+ * table, always in the same direction — **this rule flatters whoever merely survives**, which is
+ * `wallhug` exactly, and `wallhug` wins 3% of its matches at three seats.
+ *
+ * Sound as an ordering, then, and misleading as a magnitude — which is why `:lab`'s `rate` prints
+ * the outright win share beside every free-for-all rating. A rating of *winning* would need a second
+ * rule here, the winner beating every loser and the losers drawing with each other, and a second
+ * rule is exactly what this function exists to stop two callers inventing separately. Nobody has
+ * needed one yet, and the 79 of 84 is the check that says so.
  */
 public fun pairwiseOutcomes(format: TournamentFormat, stats: MatchStats): List<PairwiseOutcome> {
     val outcome = requireNotNull(stats.outcome) { "a match still being played has settled nothing" }

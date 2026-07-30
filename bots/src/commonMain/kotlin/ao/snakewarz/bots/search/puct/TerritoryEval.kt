@@ -68,9 +68,18 @@ import ao.snakewarz.core.snake.SnakeId
  *
  * **A hand-written appraisal is worth about what a random rollout is worth, per unit of time**, and
  * is comfortably ahead of one per unit of search. Both readings are inside two sigma of each other,
- * which is why `puct` is still registered as experimental rather than as a ladder rung — and why
- * [ao.snakewarz.bots.search.EvaluationCost] leaving every evaluation at `1` is a thing to know about
- * before quoting the first table: it is a count of iterations and makes no claim about the clock.
+ * which is why `puct` was registered as experimental for as long as these two tables were the whole
+ * evidence — and why [ao.snakewarz.bots.search.EvaluationCost] leaving every evaluation at `1` is a
+ * thing to know about before quoting the first table: it is a count of iterations and makes no claim
+ * about the clock.
+ *
+ * **That is no longer the whole evidence, and `puct` is a ladder rung now.** These two tables are
+ * forty rounds of one pairing on one board. What settled it was three twelve-rung fields at equal
+ * clock, one per board size, with every entrant's allowance taken from a Chrome cost sweep rather
+ * than assumed: `puct` clears `uct` by **+54 / +58 / +62** Elo on 8x8 / 12x12 / 20x20, intervals
+ * disjoint on all three. `BotLadderTest` seats it above `uct` and `ShippedBots` records the decision.
+ * The lesson these tables keep is the method one — two readings inside two sigma of each other are
+ * two readings, and the instrument that separates them is a field and not a longer pairing.
  *
  * ### It is no longer the best leaf here, and is still the default
  *

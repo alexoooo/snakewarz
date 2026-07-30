@@ -38,6 +38,15 @@ import kotlin.io.path.listDirectoryEntries
  * Consecutive positions of one match differ by a single move and share an outcome, so a row-wise
  * validation split leaks the answer: a model that memorised the training half would score well on a
  * held-out row of the same game. [group] carries the match ordinal and [ValueFit] splits on it.
+ *
+ * ### And which board each row came off, because a fit is not board-agnostic
+ *
+ * The feature vector is built out of shares so that the same reading means the same thing on any
+ * geometry, and that was taken to mean a fit taken on one board would serve another. It does not: the
+ * `LearnedWeights` P4 replaced was fitted `--rows 12 --cols 12` and lost **0.048 of log-loss** to a
+ * model of the identical shape refitted on 20x20 positions. So [board] rides along with every row,
+ * and a corpus spanning more than one geometry reports its holdout **per board** — one pooled number
+ * over a mixture is the reading that hid this for six phases.
  */
 internal class Corpus(
     val size: Int,
@@ -48,11 +57,15 @@ internal class Corpus(
     val labels: DoubleArray,
     /** Which match each row came from, so a split can hold whole games out. */
     val group: IntArray,
+    /** Which of [boards] each row was played on. */
+    val board: IntArray,
+    /** The geometries present, in the order they were first met — `"12x12"`, and so on. */
+    val boards: List<String>,
     val matches: Int,
     val drawn: Int,
     val positionsSeen: Int,
 ) {
-    override fun toString(): String = "Corpus($size rows, $matches matches)"
+    override fun toString(): String = "Corpus($size rows, $matches matches, ${boards.joinToString("/")})"
 }
 
 /**
@@ -118,6 +131,8 @@ internal fun corpusFrom(
     val features = DoubleArray(limit * width)
     val labels = DoubleArray(limit)
     val group = IntArray(limit)
+    val board = IntArray(limit)
+    val boards = mutableListOf<String>()
     val readers = LinkedHashMap<String, PositionFeatures>()
     val row = DoubleArray(width)
 
@@ -154,6 +169,13 @@ internal fun corpusFrom(
             PositionFeatures(match.grid, slots)
         }
 
+        val geometry = "${record.setup.rows}x${record.setup.cols}"
+        var geometryAt = boards.indexOf(geometry)
+        if (geometryAt < 0) {
+            geometryAt = boards.size
+            boards.add(geometry)
+        }
+
         val offset = SplitMix64(seed + index).nextInt(stride)
         var at = 0
         matches++
@@ -170,6 +192,7 @@ internal fun corpusFrom(
                     row.copyInto(features, size * width)
                     labels[size] = labelOf(outcome.winner, slot)
                     group[size] = matches
+                    board[size] = geometryAt
                     size++
                 }
             }
@@ -194,6 +217,8 @@ internal fun corpusFrom(
         features = features.copyOf(size * width),
         labels = labels.copyOf(size),
         group = group.copyOf(size),
+        board = board.copyOf(size),
+        boards = boards.toList(),
         matches = matches,
         drawn = drawn,
         positionsSeen = positions,

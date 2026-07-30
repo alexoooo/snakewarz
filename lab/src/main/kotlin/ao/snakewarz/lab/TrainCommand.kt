@@ -3,10 +3,16 @@ package ao.snakewarz.lab
 import ao.snakewarz.botapi.registry.BotRegistry
 import ao.snakewarz.bots.search.learned.LearnedNet
 import ao.snakewarz.bots.search.learned.PositionFeatures
+import ao.snakewarz.lab.train.Corpus
+import ao.snakewarz.lab.train.ModelScore
 import ao.snakewarz.lab.train.ValueFit
 import ao.snakewarz.lab.train.corpusFrom
 import ao.snakewarz.lab.train.logDirectoriesUnder
+import ao.snakewarz.lab.train.modelOf
+import ao.snakewarz.lab.train.scoreByBoard
+import ao.snakewarz.lab.train.scoreOf
 import java.nio.file.Path
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.math.abs
 
@@ -32,6 +38,15 @@ import kotlin.math.abs
  * model that was fitted. The run re-scores the **decoded** literal over the same held-out games and
  * prints both, so a quantisation that mattered would be visible rather than arriving later as a bot
  * that is slightly worse than its own training run said.
+ *
+ * ### `--model` asks a different question, and P4 is why it exists
+ *
+ * With `--model FILE` nothing is fitted: the literal in that file is scored over the whole corpus and
+ * the run stops. A holdout says whether a fit is short of capacity **on the data it was fitted on**;
+ * it cannot say whether the fit transfers, because every row in it is drawn from the same population.
+ * `LearnedWeights.ENCODED` has train and holdout losses agreeing to five places and still collapses on
+ * a 20x20, which is exactly the failure a split of a one-board corpus is blind to. [ModelScore]
+ * carries the reasoning and the calibration readings that go with it.
  */
 internal class TrainCommand(
     val logDirectories: List<Path>,
@@ -46,6 +61,8 @@ internal class TrainCommand(
     val batch: Int,
     val seed: Long,
     val out: Path?,
+    /** A literal to score instead of fitting one — see the class KDoc. */
+    val model: Path?,
 ) : LabCommand {
     override fun run(registry: BotRegistry, log: (String) -> Unit) {
         val directories = logDirectories.flatMap { logDirectoriesUnder(it) }.distinct()
@@ -60,6 +77,11 @@ internal class TrainCommand(
 
         val even = corpus.labels.count { it > 0.5 }.toDouble() / corpus.size
         log("[train] ${"%.3f".format(even)} of rows are a slot that went on to win")
+
+        if (model != null) {
+            score(corpus, log)
+            return
+        }
 
         val fit = ValueFit(corpus, hiddenUnits, epochs, learningRate, decay, batch, seed)
         log("[train] $fit, ${fit.trainingRows} training rows and ${fit.holdoutRows} held out")
@@ -83,6 +105,8 @@ internal class TrainCommand(
         log("[train] against ${"%.5f".format(EVEN_LOSS)} for a model that always answers even")
         log("[train] holdout accuracy ${"%.4f".format(fit.accuracy())}")
         log("[train] holdout answers spread ${"%.4f".format(fit.spread())} either side of even")
+
+        reportBoards("holdout", fit.holdoutByBoard(baked), corpus.boards.size, log)
 
         if (hiddenUnits == 0) {
             reportCoefficients(weights, baked, log)
@@ -110,7 +134,62 @@ internal class TrainCommand(
     }
 
     override fun toString(): String =
-        "Train(${logDirectories.joinToString()}, $hiddenUnits hidden, $epochs epochs, seed $seed)"
+        if (model != null) {
+            "Score($model over ${logDirectories.joinToString()})"
+        } else {
+            "Train(${logDirectories.joinToString()}, $hiddenUnits hidden, $epochs epochs, seed $seed)"
+        }
+
+    /**
+     * Scores a literal fitted elsewhere over every row of this corpus.
+     *
+     * No split, and the KDoc on [ModelScore] says why: a model that has never seen any of these games
+     * needs no games held back from it, and holding seven eighths of them back would throw away the
+     * evidence rather than protect it.
+     */
+    private fun score(corpus: Corpus, log: (String) -> Unit) {
+        val net = modelOf(model!!.readText())
+        val scored = scoreOf(corpus, net)
+
+        log("")
+        log("[score] $net from $model")
+        log("[score] ${scored.rows} rows, log-loss ${"%.5f".format(scored.loss)}")
+        log("[score] against ${"%.5f".format(EVEN_LOSS)} for a model that always answers even")
+        log("[score] accuracy ${"%.4f".format(scored.accuracy)}, answers spread ${"%.4f".format(scored.spread)}")
+        log(
+            "[score] answers average ${"%.4f".format(scored.meanValue)} " +
+                "where the rows average ${"%.4f".format(scored.meanLabel)}",
+        )
+        log("[score] nothing was fitted -- this is what a model taken elsewhere is worth here")
+
+        reportBoards("score", scoreByBoard(corpus, net), corpus.boards.size, log)
+    }
+
+    /**
+     * The same reading per geometry, printed only when there is more than one to tell apart.
+     *
+     * A single-board corpus would print its own pooled number a second time, which reads as
+     * corroboration and is the same arithmetic.
+     */
+    private fun reportBoards(tag: String, byBoard: List<Pair<String, ModelScore>>, boards: Int, log: (String) -> Unit) {
+        if (boards <= 1) {
+            return
+        }
+        log("")
+        log("[$tag] per board, because a pooled loss over a mixture is not a claim about any of them:")
+        log("[$tag]   board      rows   log-loss  accuracy   spread")
+        for ((board, scored) in byBoard) {
+            log(
+                "[$tag]   %-7s %8d   %.5f    %.4f   %.4f".format(
+                    board,
+                    scored.rows,
+                    scored.loss,
+                    scored.accuracy,
+                    scored.spread,
+                ),
+            )
+        }
+    }
 
     /**
      * The weights beside the readings they price, largest first.

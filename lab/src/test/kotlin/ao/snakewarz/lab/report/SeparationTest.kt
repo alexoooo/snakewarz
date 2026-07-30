@@ -13,11 +13,18 @@ import ao.snakewarz.match.StepResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * [Separation], and the claim worth pinning: the conservative predicate the research agenda proposes
- * as a test for *permanent* separation can never be true in a two-snake match on a rectangle.
+ * [Separation], and the two claims worth pinning, which are a pair rather than one claim and its
+ * caveat.
+ *
+ * The conservative predicate — the test for *permanent* separation — can never be true in a
+ * two-snake match on a rectangle, because such a match ends at the first death and so never holds a
+ * corpse. **Seat a third snake and it becomes a real predicate**, and both halves are tested here:
+ * the vacuity at two, structurally and over a real game, and the smallest position at three where it
+ * is true.
  */
 class SeparationTest {
     @Test
@@ -67,7 +74,41 @@ class SeparationTest {
     }
 
     @Test
-    fun `the free squares come apart in a real game and the conservative flood never does`() {
+    fun `a corpse is a permanent wall, which is what the third seat buys`() {
+        // The smallest position that falsifies the vacuity above, and it needs exactly three seats
+        // to exist. On a 1x5 corridor the outer two close in, the middle one is trapped between
+        // them, and the match runs on with two alive -- which a two-snake match never does. What is
+        // left of the third is wall under both readings for the rest of the game.
+        //
+        // The spawns are `mostDistantSpawns(Grid(1, 5), 3)` exactly: 0, 4, then 2.
+        val board = boardOf(1, 5, 0 to 0, 0 to 4, 0 to 2)
+        board.apply(board.toAct, Direction.EAST) // slot 0 walks in from the left
+        board.apply(board.toAct, Direction.WEST) // slot 1 walks in from the right
+        board.apply(board.toAct, Direction.EAST) // slot 2, in the middle, has nowhere to go
+
+        assertEquals(2, board.aliveCount, "the middle snake was walled in by the other two")
+        assertNull(board.outcome, "and two of three still standing is not a finished match")
+
+        val separation = Separation(board.grid)
+        assertTrue(separation.naive(board), "the free squares lie either side of the corpse")
+        assertTrue(separation.permanent(board), "and no retraction can ever join them again")
+    }
+
+    @Test
+    fun `at three seats a living body is still not a permanent wall`() {
+        // The other half: seating a third snake does not make the conservative reading cheap. Before
+        // anybody dies the passable set is the whole rectangle again, whatever the free squares say,
+        // so the predicate is answering the question it was built to answer rather than tracking
+        // `naive` with an extra seat on the board.
+        val board = boardOf(1, 5, 0 to 0, 0 to 4, 0 to 2)
+        val separation = Separation(board.grid)
+
+        assertFalse(separation.naive(board), "the middle snake is in contact with both")
+        assertFalse(separation.permanent(board), "and every body on the board still retracts")
+    }
+
+    @Test
+    fun `the free squares come apart in a two-snake game and the conservative flood never does`() {
         // The whole reason `PhasesCommand` splits a match with hindsight rather than on a predicate.
         // Under the conservative reading a living body is ground, a rectangle minus its wall ring is
         // connected, and a two-snake match ends at the first death -- so there is never a corpse to

@@ -8,6 +8,7 @@ import ao.snakewarz.botapi.knob.BotKnob
 import ao.snakewarz.botapi.scratch.Playout
 import ao.snakewarz.bots.reactive.space.SpaceBot
 import ao.snakewarz.bots.search.EvaluationCost
+import ao.snakewarz.bots.search.RolloutPolicy
 import ao.snakewarz.bots.search.SpaceOwnership
 import ao.snakewarz.bots.search.randomPlayout
 import ao.snakewarz.core.grid.Direction
@@ -44,7 +45,14 @@ import ao.snakewarz.core.rules.MatchOutcome
  * entirely (it pondered on a background thread, which wasm does not have and determinism would not
  * survive).
  */
-public class UctBot(setup: BotSetup) : Bot {
+public class UctBot private constructor(
+    setup: BotSetup,
+    /** What each snake plays inside a rollout — see [ROLLOUT_POLICY] and [withRolloutPolicy]. */
+    private val policy: RolloutPolicy,
+) : Bot {
+    /** The registry's path, and the only one a match ever takes: the policy comes off the knob. */
+    public constructor(setup: BotSetup) : this(setup, RolloutPolicy(ROLLOUT_POLICY.read(setup.params), setup.grid))
+
     private val rng = setup.rng
     private val unbudgeted = SpaceBot(setup)
     private val exploration = EXPLORATION.read(setup.params)
@@ -146,13 +154,29 @@ public class UctBot(setup: BotSetup) : Bot {
      * Which it is, is a *measurement* rather than a preference — see [ROLLOUT_DEPTH].
      */
     private fun simulate(playout: Playout): MatchOutcome {
-        val judge = space ?: return randomPlayout(playout, rng)
-        return truncatedPlayout(playout, rng, rolloutDepth, judge)
+        val judge = space ?: return randomPlayout(playout, rng, policy)
+        return truncatedPlayout(playout, rng, rolloutDepth, judge, policy)
     }
 
     override fun toString(): String = "UctBot"
 
     internal companion object {
+        /**
+         * This bot with a [RolloutPolicy] no knob can name — a measurement seam, and nothing else.
+         *
+         * [ROLLOUT_POLICY] is a [BotKnob.Choice] and `Choice.read` coerces a value it does not offer
+         * back to the default, so there is no [ao.snakewarz.botapi.knob.BotParams] spelling that
+         * reaches a policy this bot does not declare. Pricing one that it does not — the swept prior
+         * of [RolloutPolicy]'s own table — otherwise means either freezing a `Choice` value for a
+         * setting nobody has yet shown is worth playing, or timing the policy outside the bot and
+         * composing the turn back together out of two blocks.
+         *
+         * The whole point of the seam is that the timed call site stays **monomorphic**: every
+         * subject a block hands [ao.snakewarz.bots.AppraisalTape] is still a `UctBot`, which is what
+         * `RolloutPolicyTest` records a foreign control costing 25% of a control's own reading.
+         */
+        internal fun withRolloutPolicy(setup: BotSetup, policy: RolloutPolicy): UctBot = UctBot(setup, policy)
+
         /**
          * How many evaluations of a turn this may spend, and over what range moving it is worth
          * anything.
@@ -293,8 +317,138 @@ public class UctBot(setup: BotSetup) : Bot {
          * one: `MatchSetup.DEFAULT_BUDGET_PER_TURN` carries the only exchange rate of that kind and
          * it was taken at the shipped 1,000 rather than at the hundred this table is played at.
          *
+         * **Somebody has now measured that one, by accident, and the answer is not the one above.**
+         * The table is played at 100 evaluations on a 12x12 and `RolloutTruncationTest.BUDGET` said
+         * in as many words that the ratio does not turn on the allowance. The strength half of it
+         * does. Same pairing, same mirrored openings, 200 distinct games a cell, at the **shipped
+         * 1,000**:
+         *
+         * | `rolloutDepth=25` against the undepthed bot | 8x8 | 12x12 | 20x20 |
+         * |---|---|---|---|
+         * | at 100 evaluations — the table above | not measured | 51.7% | not measured |
+         * | at 1,000 | **50.8%** | **58.5%** | **67.0%** |
+         *
+         * The 8x8 cell was filled last and is not one of that block's: it is 400 games pooled out of
+         * the field below, on seeds neither of the other two touched. The two it sits beside are 200
+         * distinct games a cell.
+         *
+         * That was recorded as a **lead and not a finding**, because it was neither a cost result —
+         * nothing had been timed at the shipped allowance, and this whole trade is decided by cost —
+         * nor a strength one, a head-to-head between two settings of one bot being a style match-up.
+         * **It has since had both, on all three boards, and it survives them on one of the three.**
+         *
+         * ### The cost, paired, at the allowance the bot ships at
+         *
+         * [ao.snakewarz.bots.AppraisalTape]'s fixed line, five passes a cell, median of three whole
+         * runs on the two larger boards and of eight on the 8x8, the undepthed bot read first and
+         * last as the control — both subjects this class, so the timed call site stays monomorphic,
+         * which is what [ao.snakewarz.bots.search.RolloutPolicy] records a foreign control swinging
+         * 25% for want of. Control pairs landed within 1% on both larger boards and within 2% on
+         * every one of the eight 8x8 runs.
+         *
+         * | at 1,000 evaluations | 8x8 | 12x12 | 20x20 |
+         * |---|---|---|---|
+         * | `rolloutDepth=25` against the undepthed turn | **1.05x** | **1.12x** | **1.32x** |
+         * | the allowance that buys the same wall clock | **950** | **890** | **760** |
+         * | what that costs, at 80-137 Elo per e-fold | 4-7 Elo | 9-16 Elo | 23-38 Elo |
+         *
+         * The 1.0-1.1x in the table above is not wrong so much as taken somewhere else: an ownership
+         * sweep is priced by the squares and the rollout it replaces is not, so the ratio grows with
+         * the board. [ao.snakewarz.bots.search.EvaluationCost] asks for exactly this re-measurement
+         * whenever two kinds of rollout stop costing the same, and this is it.
+         *
+         * **The 8x8 row was taken last, and it is the bottom of that trend rather than a fourth
+         * shape.** Eight whole runs spread 1.04-1.08x — far tighter than
+         * [ao.snakewarz.bots.search.RolloutPolicy]'s own 8x8 row, because what is being measured here
+         * is a few percent of a turn rather than half of one, and a small effect on a short line is
+         * not automatically a noisy one. `RolloutTruncationTest.EQUAL_CLOCK`'s 950 is *verified*
+         * against the control's clock at 96-99% over three runs rather than derived from the ratio,
+         * for that constant's stated reason. At `ln(1000/950)` = 0.051 e-folds the handicap the 8x8
+         * field below carries is **4-5 Elo** at the conservative end of the exchange rate, which is
+         * inside every bar in it.
+         *
+         * Three of those runs re-read the other two boards for free and both reproduce — 1.06-1.10x
+         * at 12x12 and 1.31-1.51x at 20x20 — but read the second of those as agreement in sign only:
+         * its control pair swung 13-18% *within* a run, which is the 20x20 instability
+         * [ao.snakewarz.bots.search.RolloutPolicy] measures at 11% on the same instrument. Those two
+         * cells stay where the runs that were taken for them put them. It is the reason the allowance
+         * and not the ratio is the quantity anything is verified against.
+         *
+         * ### The strength, in a field, because the percentages above are a style match-up
+         *
+         * Eight rungs, two blocks of 200 rounds on disjoint seeds pooled per board, 11,200 matches a
+         * board, 92-97% of them distinct games, no forfeits. **Every rating below is quotable only
+         * beside this field**: the baseline `uct:budget=1000`; `rolloutDepth=25` at the allowance
+         * above *and* at `budget=1000` as a labelled control, which is the handicap quantified rather
+         * than a candidate; `uct:rolloutPolicy=liberty` at its own allowance; `puct:eval=territory`
+         * and `alphabeta:eval=territory` at 1,000; `flat-monte-carlo`, which shares this bot's
+         * rollout and never got this knob; and `chase`.
+         *
+         * | rating, 95% | 8x8 | 12x12 | 20x20 |
+         * |---|---|---|---|
+         * | `alphabeta:eval=territory@1k` | 176 (+163..+189) | 179 (+166..+193) | 162 (+149..+173) |
+         * | `puct:eval=territory@1k` | 144 (+132..+156) | 108 (+95..+120) | 77 (+63..+88) |
+         * | `rolloutDepth=25` at **equal allowance**, *control* | 78 (+65..+91) | 66 (+54..+78) | 125 (+112..+138) |
+         * | **`rolloutDepth=25` at equal clock** | **74 (+60..+89)** | **64 (+52..+75)** | **99 (+86..+113)** |
+         * | `uct:budget=1000` — the baseline | 78 (+65..+89) | 51 (+39..+63) | 21 (+10..+33) |
+         * | `uct:rolloutPolicy=liberty` at its allowance | 56 (+43..+68) | 13 (+2..+25) | 35 (+23..+48) |
+         *
+         * **At 20x20 it is +78 over the baseline with the intervals disjoint, and it passes
+         * `puct:eval=territory` by +22. At 12x12 it is +13 and the intervals overlap**, which is a
+         * null on this evidence. A paired sequential test at `elo0=0, elo1=10` says the same thing
+         * twice: **BETTER, +93 Elo ±33 over 260 boards** at 20x20, and **UNDECIDED, +17 ±17 over
+         * 800** at 12x12, stopped at the ceiling rather than settled. No blindness note fired on
+         * either.
+         *
+         * **At 8x8 it is −4, and the row above it is the reason: the equal-allowance control rates
+         * exactly level with the baseline as well.** The other two boards have something for the
+         * allowance to hand back — +15 at 12x12 and +104 at 20x20 per iteration — and the smallest
+         * board has **nothing**, so the 4-5 Elo the clock takes is not what makes this a null. The
+         * paired `ab` agrees rather than fighting it: **UNDECIDED, −1 Elo ±16 over 800 boards**,
+         * stopped at the ceiling, no blindness note. That agreement is worth stating because 8x8 is
+         * where this repository's field and head-to-head have disagreed before — an unrelated phase
+         * has a rung rating +131 above bare `puct` there while losing to it 89-111 — and here they do
+         * not. It does live in that field, though, one rung up and between two entrants this is not
+         * about: `puct:eval=territory` scores 54% off `alphabeta:eval=territory` while rating 32
+         * below it, and the fit says so itself. Read the 8x8 bars knowing they are optimistic by up
+         * to ~1.6x as well: an opening is a function of the match seed and an 8x8 has about 40 usable
+         * ones, so 400 rounds resample ~40 boards while the interval treats 100 groups as
+         * independent. Widening them changes nothing about a 4-point gap.
+         *
+         * The head-to-heads pool, per board, to **47.5% / 55.8% / 64.8%** at equal clock and
+         * **50.8% / 57.8% / 65.5%** at equal allowance. The 12x12 and 20x20 cells of the second row
+         * reproduce the 58.5% and 67.0% above **on seeds that measurement never touched**, which is
+         * the part that says the lead was real rather than a lucky block; the 8x8 cell is the first
+         * reading that board has ever had at any allowance, and it is a coin.
+         *
+         * **And the two depth rungs are a third reading of the exchange rate, for free.** They differ
+         * in nothing but allowance, so the 26 Elo between them at 20x20 over `ln(1000/760)` = 0.274
+         * e-folds is **95 Elo per e-fold** — inside [ao.snakewarz.bots.search.RolloutPolicy]'s 80-137
+         * band and beside the 111 an unrelated phase measured on `alphabeta`. The 12x12 pair differ
+         * by 2 Elo over 0.113 e-folds and the 8x8 pair by 4 over 0.051, and overlapping intervals
+         * cannot resolve either, so neither says anything in either direction.
+         *
+         * ### What it is still not, which is a default
+         *
+         * Moving this one moves `GoldenMoveStreamTest`'s `UCT against random on 12x12` on **both**
+         * targets, inverts `RolloutTruncationTest`'s fixture — which compares a depthed variant
+         * against a default that plays out — and moves three `BotLadderTest` figures: `uct` over
+         * `flat-monte-carlo`, the cramped-allowance `uct`-against-itself case, and **`puct` over
+         * `uct`, which is the narrowest rung on that ladder at 12 of 20 against a threshold of 11.**
+         * A stronger `uct` pushes that rung down, and the board this is worth the most on is not the
+         * board the ladder is measured on. That is a release decision and it belongs to a person.
+         *
+         * **What the three boards say together, which is what the decision is actually about:** the
+         * gain is monotone in board size and it is worth nothing at the bottom of the range. One
+         * board of the three supports adopting, and the two that do not are the ladder's own 12x12
+         * and the 8x8 `index.html` opens on — so the board a player meets first is the board where
+         * this default would buy them **−4 Elo against 4-5 Elo of clock**. That is not an argument
+         * against the 20x20 result, which is large and replicated; it is the shape of the tradeoff a
+         * single default has to be right about on every board at once.
+         *
          * It ships wired and off rather than deleted, because a measured "no" is worth more with the
-         * thing still there to re-measure: `./gradlew :lab:run --args="play uct uct:rolloutDepth=25"`,
+         * thing still there to re-measure — and this is what that is for:
+         * `./gradlew :lab:run --args="play uct uct:rolloutDepth=25"`,
          * or set `rolloutDepth` in [ao.snakewarz.botapi.knob.BotParams], and `RolloutTruncationTest`
          * re-runs the table above.
          *
@@ -315,12 +469,45 @@ public class UctBot(setup: BotSetup) : Bot {
         )
 
         /**
+         * What each snake plays inside a rollout, which until this existed was uniform-random and
+         * nothing else.
+         *
+         * [RolloutPolicy] carries the settings, what each costs to read, and the divergence probe
+         * that says how often each of them would play a different move from the default — the number
+         * that had to come first, since a policy that changes one step in a thousand cannot move a
+         * search however good it is.
+         *
+         * **It defaults to [RolloutPolicy.UNIFORM] and the blast radius of that is nothing.** A
+         * rollout is what `flat-monte-carlo` is made of as well, so a default moving here would move
+         * two golden hashes and the ladder rung between those two bots; declaring the alternatives as
+         * a setting reaches them from `:lab` and from a replay while leaving every shipped bot
+         * playing the stream it played.
+         *
+         * Not a [BotKnob.tradeoff], and after the field below that is settled rather than pending:
+         * the whole question this asks is which policy is *stronger per millisecond*, and
+         * [ao.snakewarz.bots.search.EvaluationCost.ROLLOUT] being a flat `1` means a matrix at equal
+         * allowance cannot answer it — a dearer policy there buys the same number of iterations and
+         * pays for them in wall clock nobody charged it for. Measured at equal clock, neither setting
+         * is worth playing on the two boards a match is usually played on. [RolloutPolicy] carries
+         * the ratings, the field they are only quotable beside, and the one board where the sign
+         * turns over.
+         */
+        val ROLLOUT_POLICY = BotKnob.Choice(
+            name = "rolloutPolicy",
+            label = "Rollout policy",
+            help = "How a rollout picks moves: at random, refusing dead ends, or from the move prior.",
+            default = RolloutPolicy.UNIFORM,
+            values = RolloutPolicy.VALUES,
+        )
+
+        /**
          * Everything this bot lets you tune, in the order a form would show it.
          *
-         * The sidebar shows the first two — see [ao.snakewarz.botapi.registry.BotEntry.offered]. The other two are settled
-         * numbers, tunable from `:lab` and from a replay and nowhere a player can reach.
+         * The sidebar shows the first two — see [ao.snakewarz.botapi.registry.BotEntry.offered]. The other three are
+         * settled numbers, tunable from `:lab` and from a replay and nowhere a player can reach.
+         * Appended, never inserted: `:lab` logs an entrant as its knobs in this order.
          */
-        val KNOBS: List<BotKnob> = listOf(SEARCH, EXPLORATION, MAX_NODES, ROLLOUT_DEPTH)
+        val KNOBS: List<BotKnob> = listOf(SEARCH, EXPLORATION, MAX_NODES, ROLLOUT_DEPTH, ROLLOUT_POLICY)
 
         /**
          * Deeper than the tree can grow at any sane allowance: one node is added per iteration, so

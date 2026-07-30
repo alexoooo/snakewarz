@@ -172,6 +172,69 @@ case — an ablation that came out intransitive and put the wrong sign on the co
 point — is in [`Research-Process.md`](Research-Process.md#3-head-to-head-knowing-what-it-measures),
 with the rest of what an experiment does before and after this step.
 
+## Measuring at three seats
+
+Everything above and everything the shipped ladder says was measured at two. `--format ffa` seats
+more, and seven things about it are not the same measurement.
+
+**A free-for-all batch has exactly as many entrants as it has seats.** `TournamentConfig.seatsPerMatch`
+is `contestants.size` under `FREE_FOR_ALL` and `--rounds` counts matches rather than matches per
+pairing, so a three-seat batch is three entrants and there is no `--seats` flag. **A field wider than
+three is several triples pooled**, which needs no code — `comparabilityKey` does not include the
+contestants and `Ladder` keys entrants on the expanded spec — but does need a **disjoint `--seed` per
+triple**, or two triples sharing a pair measure it twice on the same boards while
+`bootstrapIntervals` counts them as independent evidence. Keep `--rounds` a multiple of the seat
+count times two so no seed group is cut short. Do not mix formats in one log directory: `rate` takes
+the format off the first eligible run and applies it to everything.
+
+**`ab`, `tune` and `spsa` do not exist here.** `SequentialTest.configFor` builds two contestants and
+no `format`, so all three subcommands are head-to-head whatever they are handed. The instruments at
+three seats are `play`, `rate`, `report` and `phases`, and **every three-seat number is a field
+rating** — there is no sequential test to decide anything with.
+
+**`--openings mirrored` or the batch is void.** `Openings.FIXED` puts the third snake in a third
+corner, which no seating rotation evens out: three identical entrants score **83.4 / 0.05 / 16.6%**
+by seat under `fixed` and **32.8 / 31.6 / 35.6%** under `mirrored`. A seat there is worth more than
+any bot in this repository. Under `mirrored` the seating is fair and it has been checked twice — with
+identical entrants by P7a, and on a nine-bot field of 14,400 matches at 33.4 / 33.1 / 33.5%, χ² 0.39
+on 2 df. Acting first, which is a real advantage at two seats, is worth nothing measurable at three.
+
+**Read the score column and not a cell.** The seat rotation is cyclic, so at three seats a pair meets
+in each unordered pair of seats once and never reversed; any residual seat effect lands on the same
+side of every cell and shows up as a perfect intransitive cycle while every score column still reads
+50%. `rate`'s "the ladder does not fully describe these pairings" block is expected output here and
+is not by itself evidence of intransitivity between bots. `TournamentSchedule.seatInto` carries the
+demonstration.
+
+**The rating is fitted to who *outlasted* whom, not to who won**, because that is what
+`pairwiseOutcomes` scores past two seats. So `rate` prints a `win` column and its bar beside every
+free-for-all rating, and says whether the two order the field the same way. Read them together and
+quote them together. Measured over all 84 triples of the nine shipped bots on a 12x12, 25,200
+matches, the two rules **ordered the triple identically in 79 of them**, and each of the five flips
+is between two entrants five points of win share or less apart — so the rules never disagree about a
+difference either of them can see. What they do disagree about is the **scale**, and by how much
+depends on where in the field you are: `pressure` against `wallhug` reads **65 / 35** by outlasting
+and **90 / 10** by who actually won, because a third snake takes 67% of those matches and the rule
+spends them grading two doomed snakes on the order they died in. At the top, where a third snake wins
+8%, the two rules agree to a point or two. **So trust the top of a three-seat table and read the
+bottom of it with the `win` column open.**
+
+**And nothing here is comparable with a two-seat number.** Different scoring rule, different
+schedule, different game — the same nine bots on the same board at the same allowance span **1,215
+Elo at two seats and 663 at three**, in the same order, so a three-seat rating is the same ladder at
+55% of its width. There is no three-seat ladder of record; a phase that wants one builds it.
+
+**A covering design balances pairs; only the complete design balances company.** A pairwise cell
+moves **12.7 points on average and up to 33.7** on the identity of the third snake alone — a cell is
+nearest even when the third snake is the strongest available and nearest its two-seat value when the
+third snake is the weakest. `fitRatings` has one parameter per contestant and nowhere to put that.
+A seven-triple Steiner design over nine bots, which meets every pair exactly once, produced two
+inversions against the two-seat ladder that the complete design did not reproduce: the pairs had been
+measured under their own worst company. **State the exact triples beside any three-seat rating**, and
+prefer the complete design where the field is small enough to afford it — 84 triples of 300 rounds at
+12x12 was **ten minutes of arena**, and half an hour of wall clock, because eighty-four `:lab:run`
+invocations are eighty-four Gradle starts and that is what dominates a batch of triples.
+
 ## Tuning a knob
 
 ```bash
@@ -316,9 +379,25 @@ data for a leaf that will only ever be asked about positions a search reached.
 and share a label, so a row-wise split reports the training loss under another name. Read the holdout
 log-loss against `0.693`, which is what a model that always answers even scores.
 
-**Read the gap between the training and holdout columns before the loss itself.** Equal columns mean
-the fit is limited by what the features can say, and no amount of capacity or corpus will move it —
-which is a finding about the *feature design* and the only one this instrument can deliver.
+**Read the gap between the training and holdout columns before the loss itself — and read what it
+says, which is narrower than it looks.** Equal columns mean the fit is not short of *capacity* on the
+population it was fitted to. They say nothing whatever about whether it transfers to another one. P4
+of the 2026-07-29 agenda cost six phases on that inference: `LearnedWeights` had equal columns to five
+places, was read as "bounded by its twenty-five features", and was in fact bounded by a corpus drawn
+entirely from one board size — refitting the *identical* readings on a 20x20 was worth 0.048 of
+log-loss where four new readings were worth 0.0039.
+
+**So a holdout is an in-distribution reading, and `--model` is the out-of-distribution one.**
+
+```bash
+./gradlew :lab:run --args="train --log .lab/p2b-field-20 --model .lab/shipped-model.txt"
+```
+
+That fits nothing. It scores an existing literal over the **whole** corpus — a model that has never
+seen these games needs nothing held back — and reports log-loss, accuracy, spread, and **mean answer
+against mean label**, which is the pair that separates *this model is mispriced here* from *this board
+is harder to call*. A corpus spanning more than one geometry also reports its holdout **per board**,
+because one pooled number over a mixture is a claim about the mixture and about no board in it.
 
 **`--stride` buys distinct games, not positions.** Rows from one match are correlated; rows from two
 are not. Within a fixed `--positions` ceiling, a larger stride spends the budget on more games.
@@ -344,14 +423,29 @@ wins and losses on each side of that line. Three things about it are load-bearin
 **The split is taken with hindsight, so this is a diagnostic and never a dispatch rule.** A bot
 choosing a move cannot know whether the separation it is looking at will hold.
 
-**The conservative predicate is vacuous at two snakes, and the run prints its count so you can see
+**The conservative predicate is vacuous at two snakes, and the run prints its rate so you can see
 that rather than take it on trust.** Treating every *living* body as ground — the only reading under
 which a separation is provably permanent — leaves the whole playable rectangle connected, because a
-two-snake match ends at the first death and so never has a corpse in it. It becomes a real question
-with a third snake seated.
+two-snake match ends at the first death and so never has a corpse in it.
+
+**A third seat makes it a real predicate and it then fires on about one match in a hundred, flat
+across board size** — 10, 14 and 12 of 1,200 on an 8×8, a 12×12 and a 20×20, which is 0.11%, 0.22%
+and 0.089% of contested positions. A corpse is the only wall there is and one snake rarely
+disconnects a rectangle by itself. So the hindsight split below is what a three-seat analysis is cut
+on too, and the proof of zero has been replaced by a measurement of almost-zero rather than by a
+usable test.
 
 **What stands in for it is measured, not argued:** the run reports how often a board that came apart
 was rejoined by the moves after it, which is the size of the mistake `SpaceOwnership.isolated` makes.
+
+**Read the `lead` column before the score beside it, and the band table before either.** "Ahead on
+room" is a sign, and a one-square lead buckets with a commanding one — so two bots' AHEAD rows can
+differ entirely because one of them arrives further ahead. The band table is the same matches cut by
+*how far* ahead, which is the only form in which one bot's conversion can be read against another's;
+on the log `PhasesCommand`'s KDoc tabulates, more than half the apparent difference in fill quality
+between two leaves was the size of the lead. The `usable` column beside it is the same margin over
+the ground a walk can actually spend rather than the raw flood, and where the two disagree on sign
+the flood called the race the wrong way.
 
 ## Measuring what a change costs
 

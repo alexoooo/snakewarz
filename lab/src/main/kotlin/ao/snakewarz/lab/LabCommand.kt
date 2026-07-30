@@ -78,7 +78,7 @@ internal interface LabCommand {
 
         private val TRAIN_FLAGS = setOf(
             "log", "rows", "cols", "stride", "positions", "hidden", "epochs", "rate", "decay",
-            "batch", "seed", "out",
+            "batch", "seed", "out", "model",
         )
 
         /**
@@ -185,6 +185,7 @@ internal interface LabCommand {
                              [--threads N] [--journal FILE] [--elo1 N] [--max-pairs N]
               train [--log DIR] [--rows N] [--cols N] [--stride N] [--positions N] [--hidden N]
                     [--epochs N] [--rate N] [--decay N] [--batch N] [--seed N] [--out FILE]
+                    [--model FILE]
 
             An entrant is <slug>[:name=value,...], where `budget` is that entrant's own allowance
             and every other name is one of that bot's declared knobs. For example:
@@ -199,6 +200,7 @@ internal interface LabCommand {
               tune puct --knobs cpuct,territoryWeight
               spsa puct:eval=chamber --knobs parityWeight,sealPenalty --budget 1000
               train --rows 12 --cols 12 --hidden 8 --epochs 40
+              train --log .lab/p2b-field-20 --rows 20 --cols 20 --model .lab/shipped-model.txt
 
             `tune` and `spsa` both search a bot's declared knobs and recommend; neither ever edits a
             default. Adopting one moves every golden move-stream hash, and that is a question for a
@@ -241,7 +243,9 @@ internal interface LabCommand {
             `train` plays nothing at all: it replays the move streams already in the log, reads each
             position as a feature vector and fits the value function `puct:eval=learned` uses. It
             prints a literal for `LearnedWeights` and never edits one, for the reason `tune` does
-            not edit a default. Everything it reports is over games it held out whole.
+            not edit a default. Everything it reports is over games it held out whole. With
+            `--model FILE` it fits nothing and scores that literal over the whole corpus instead,
+            which is how a fit taken on one board is read on another.
 
             Every batch is appended to the match log under .lab/, which is what `rate` and `report`
             read. `--log none` runs without recording anything.
@@ -586,6 +590,7 @@ internal interface LabCommand {
                 batch = batch,
                 seed = flags.long("seed", DEFAULT_SEED),
                 out = flags.text("out")?.let { Path.of(it) },
+                model = flags.text("model")?.let { Path.of(it) },
             )
         }
 

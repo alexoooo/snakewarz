@@ -35,8 +35,8 @@ they are what you have to know before you know you need them.
 ## Current state
 
 **The rewrite is complete.** The rules engine, the bot contract, the match driver, the replay codec,
-the canvas renderer, the DOM chrome, a seven-bot ladder topped by an MCTS bot, per-match stats and
-batch tournaments all exist and are verified, and the legacy Java is deleted
+the canvas renderer, the DOM chrome, a nine-bot ladder topped by an alpha-beta search, per-match stats
+and batch tournaments all exist and are verified, and the legacy Java is deleted
 — it lives at the `legacy-java-final` tag and nowhere else. You can play against the shipped bots,
 watch bots fight, scrub a recording, share a match as a URL, and run a win-rate matrix over a few
 hundred matches without the page stopping.

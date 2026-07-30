@@ -15,12 +15,13 @@ class ShippedBotsTest {
         // this assertion is the reminder, and failing it is the point rather than an inconvenience.
         assertEquals(
             listOf(
-                // The ladder.
+                // The ladder. `puct` and `alphabeta` were the experimental section until P3 seated
+                // them, which moved them above `burninhell` -- a reorder, not a rename, and nothing
+                // reads a registry position.
                 "random", "wallhug", "space", "pressure", "chase", "flat-monte-carlo", "uct",
+                "puct", "alphabeta",
                 // Contributed. `tomsnake` was here and was retired; a slug is not reused.
                 "burninhell",
-                // Experimental.
-                "puct", "alphabeta",
             ),
             ShippedBots.entries.map { it.id.slug },
         )
@@ -29,7 +30,7 @@ class ShippedBotsTest {
     @Test
     fun `lookup finds what is registered and admits what is not`() {
         assertEquals(BotId("random"), ShippedBots[BotId("random")]?.id)
-        assertEquals(BotId("uct"), ShippedBots[BotId("uct")]?.id, "the top of the ladder")
+        assertEquals(BotId("alphabeta"), ShippedBots[BotId("alphabeta")]?.id, "the top of the ladder")
         assertEquals(BotId("burninhell"), ShippedBots[BotId("burninhell")]?.id, "a contributed bot")
         assertNull(ShippedBots[BotId("no-such-bot")])
         assertNull(ShippedBots[BotId("tomsnake")], "retired, and a replay naming it still plays back")
@@ -69,7 +70,11 @@ class ShippedBotsTest {
         // The other half of the rule above: hiding a knob must not un-declare it, or `:lab` loses a
         // dimension it measures in and an old replay carrying one stops meaning what it meant.
         val uct = ShippedBots.entryOf(BotId("uct"))
-        assertEquals(listOf("exploration", "maxNodes", "rolloutDepth"), uct.params.map { it.name })
+        assertEquals(
+            // Appended, never inserted, for the reason spelled out under `puct` below.
+            listOf("exploration", "maxNodes", "rolloutDepth", "rolloutPolicy"),
+            uct.params.map { it.name },
+        )
 
         val puct = ShippedBots.entryOf(BotId("puct"))
         assertEquals(
@@ -100,8 +105,8 @@ class ShippedBotsTest {
         assertEquals(
             listOf(
                 "Random", "Wall Hugger", "Space Filler", "Pressure", "Chaser", "Flat Monte Carlo", "UCT",
-                "Burnin Hell",
                 "PUCT", "Alpha-Beta",
+                "Burnin Hell",
             ),
             ShippedBots.entries.map { it.displayName },
         )

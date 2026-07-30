@@ -132,6 +132,13 @@ The engine is called millions of times per turn from inside MCTS. In `:core` and
   `setup.grid.cellCount` and reused forever. A bot instance is created once per slot per match, which
   is exactly what makes that safe.
 
+**And a JVM figure cannot be trusted for its sign.** Folding `SpaceOwnership`'s per-layer word passes
+into one measured **1.10–1.17×** on a `puct` turn on the JVM — four paired rounds, control held at
+0.95–0.99× — and **0.50–0.91× in Chrome** over two, the gap growing with board size. That is a
+disagreement in *direction*, not in degree. `:bots` deploys to wasm and nowhere else, so a hot-path
+rewrite is settled by `./gradlew :bots:wasmJsBrowserTest -PbrowserTests=true` and the JVM run is the
+smoke test that precedes it. `CellBits` carries the case and the numbers.
+
 **Why:** This is the one place in the project where micro-performance is the product: a bot's strength
 is how many rollouts fit in its allowance. An allocation per rollout step is a measurable loss of
 playing strength, not a style preference. `:bots`' `ThroughputTest` prints `[bench]` lines on either

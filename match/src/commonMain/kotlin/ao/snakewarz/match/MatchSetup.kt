@@ -186,17 +186,21 @@ public class MatchSetup(
          *
          * | allowance | uct, Chrome | uct, JVM | flat-mc, JVM | puct territory, JVM |
          * |---|---|---|---|---|
-         * | 250 | 1.1 ms | 0.41 ms | 0.42 ms | 1.8 ms |
-         * | 1,000 | 5.0 ms | 2.0 ms | 1.5 ms | 5.4 ms |
-         * | 2,000 | 9.8 ms | 4.3 ms | 3.4 ms | 12 ms |
-         * | 10,000 | 60 ms | 25 ms | 17 ms | 69 ms |
+         * | 250 | 1.1 ms | 0.41 ms | 0.42 ms | 0.78 ms |
+         * | 1,000 | 5.0 ms | 2.0 ms | 1.5 ms | 2.6 ms |
+         * | 2,000 | 9.8 ms | 4.3 ms | 3.4 ms | 5.5 ms |
+         * | 10,000 | 60 ms | 25 ms | 17 ms | 29 ms |
          *
-         * The `puct` column is that bot at its default appraisal, and it is the row of this table
-         * that has aged: it was taken before the ownership sweep became a bitmap one, which took
-         * `puct`'s turn 2.13x cheaper on a 20x20. `EvaluationCost` carries the current figures and
-         * the control that makes them readable beside each other. The five other appraisals that
-         * bot offers are absent because this table is what sets a *default*, and the default
-         * evaluation is `territory`.
+         * The `puct` column is that bot at its default appraisal. It reads **2.2x below what it read
+         * before the ownership sweep became a bitmap one**, which is the 2.13x that change was
+         * measured at, so what moved is the sweep and not the method. It was re-taken in a later
+         * session on a different machine, so it is quoted with the control that makes the two
+         * comparable: `uct` read 0.52 / 2.5 / 3.9 / 23 ms in that session against this table's own
+         * `uct, JVM` row, which is the same figure to within the width of the instrument. The 1,000
+         * row is six seeds (2.6 ms, sd 0.2); the other three are one seed each, and `time` plays a
+         * different game per entrant, so read them as the shape of a column rather than as four
+         * measurements. The five other appraisals that bot offers are absent because this table is
+         * what sets a *default*, and the default evaluation is `territory`.
          *
          * 1,000 puts `uct` at 5 ms of the 8 ms slice in Chrome. That is inside it with less room
          * than the previous default had, and the trade was made deliberately: the number is now a
@@ -205,26 +209,59 @@ public class MatchSetup(
          * reading it. The knob's ceiling of 10,000 is far past the slice, and that is what a ceiling
          * is for: somewhere to reach deliberately, not somewhere to sit.
          *
-         * **`puct` at `eval=territory` is inside the slice too, at somewhere between 6 and 7 ms of
-         * it.** That is a ratio rather than a measurement, and the band is the honest width of one:
-         * the appraisal is 2.49 ms of JVM on a 20x20 at this allowance, and what carries a JVM
-         * figure into the browser is `uct`'s tax between the two — 2.5x off this table's own row and
-         * 2.75x against the control `EvaluationCost` took its own figures beside, so 6.2 ms and 6.8.
-         * Nobody has timed an appraisal in Chrome. The one thing known about the direction of the
-         * error runs the safe way: the bitmap sweep underneath this leaf gains *more* in the browser
-         * than on the JVM, so the true figure sits at the low end of that band or under it.
+         * **`puct` at `eval=territory` is timed in Chrome, and on a 20x20 it is 6.0 ms of the slice
+         * on the mean turn and 8.7 ms on the dearest.** `ThroughputTest`'s appraisal sweep is the
+         * instrument and `AppraisalTape` is why it can be believed: every entrant is timed over one
+         * fixed line of positions rather than over the game it happens to play. Both figures are
+         * scaled by the control this table carries — `uct` on the whole-match path reads 3.4x to
+         * 5.0x this table's `uct, Chrome` column on the machine the sweep was taken on, so the raw
+         * readings are divided by 4.1 to land beside it.
+         *
+         * Read the *dearest* against the 8 ms, not the mean: this KDoc's own first paragraph says a
+         * frame is overrun by a single turn. At this allowance on the largest board `puct` is at the
+         * edge of the slice rather than comfortably inside it.
+         *
+         * **A JVM appraisal multiplied by `uct`'s browser tax is not a way to reach this figure**,
+         * and the arithmetic that produced 6.2 to 6.8 ms for this row brackets the measurement by
+         * luck rather than by validation. Two things are wrong with the step, and they run opposite
+         * ways.
+         *
+         * *There is no single browser tax.* Timed over identical positions on a 20x20, the ratio
+         * between the two targets runs from 2.4x for `alphabeta:eval=territory` to 3.3x for
+         * `eval=chamber` — so carrying one bot's onto another's is worth up to 40%, and the spread
+         * widens again on a smaller board where the JVM has more of the work in cache.
+         *
+         * *And the figure it multiplies is an opening.* `:lab`'s `time` seats the subject against a
+         * `space` with no allowance, and on a 20x20 that match ends somewhere between turn 28 and
+         * turn 225 depending only on the seed. It reads a `puct` turn at 2.6 ms where the same JVM
+         * reads 10.0 ms over a line played out to a full board — and it is a *turn of a real game*
+         * that has to fit inside a frame, not a turn of an opening.
          *
          * The other five appraisals do not land together. `eval=mobility` reads sixteen squares and
          * is nowhere near the slice; the four that take the board apart are four times `territory`
-         * or more and overrun it outright. That spread is the honest reading of the bot being
-         * registered experimental and of `EvaluationCost` being uncalibrated.
+         * or more and overrun it outright — `eval=chamber` measures 4.6x on a 20x20 in Chrome, which
+         * is 27 ms of an 8 ms slice, so it needs about a fifth of this allowance to fit. That spread
+         * is the honest reading of `EvaluationCost` being uncalibrated, and it is a cost this
+         * constant would have to answer for if a default evaluation ever moved.
          *
-         * **The same arithmetic says the slice now affords about 1,180 evaluations, up from about
-         * 590** — at the dearer end of the band, so it is the conservative figure of the two.
-         * Recorded here rather than taken. Raising this moves what every unconfigured match plays
-         * at, so `BotLadderTest`'s thresholds — measured at 1,000 — and the two test constants that
-         * spell this figure out would all have to move with it. That is a shipping decision somebody
-         * makes, not a consequence of a sweep getting cheaper.
+         * **One since has, and it answered in the good direction.** `alphabeta` defaulted to
+         * `eval=chamber`, so the shipped bot's dearest turn on a 20x20 was ~44 ms — five and a half
+         * times this slice — while nothing here said so, because this constant is one number for
+         * every bot and the ladder was measured on a 12x12. Moving that default to `territory` took
+         * it to ~8.5 ms, where `puct` already sat. The lesson is that a spread this wide means the
+         * frame criterion is a property of the *bot* as much as of this constant, and the only way it
+         * gets checked is somebody timing an appraisal in Chrome.
+         *
+         * **The slice affords `puct` between 920 and 1,350 evaluations on a 20x20** — 920 if the
+         * dearest turn has to fit and 1,330 if the mean does, which is one measurement read against
+         * the two criteria. This constant sits inside that band at either end.
+         *
+         * Raising it moves what every unconfigured match plays at, so `BotLadderTest`'s thresholds —
+         * measured at 1,000 — and `:bots`' own copy of this figure have to move with it. That copy is
+         * typed out rather than read, because `:bots` may not import `:match`, and what makes the
+         * pair go red rather than quietly disagree is the
+         * pin in `MatchSetupTest`. That is a shipping decision somebody makes, not a consequence of
+         * a sweep getting cheaper.
          *
          * The unit changed under this figure and the number changed with it. An allowance used to
          * count *simulated moves*, where 40,000 bought `uct` about 4 ms; counting evaluations makes

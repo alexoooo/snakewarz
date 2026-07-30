@@ -125,19 +125,93 @@ class GoldenMoveStreamTest {
     }
 
     @Test
+    fun `PUCT at territory, named rather than inherited`() {
+        // The same bot as the case above, and the same number, because `territory` is what
+        // `PuctBot.EVAL` defaults to. What this case buys is the day that stops being true: the
+        // bare one pins whatever the default *is*, so moving the default would leave `TerritoryEval`
+        // pinned by nothing on either target. Naming the value is what keeps it pinned through a
+        // release decision it has nothing to do with.
+        //
+        // So this hash is expected to *survive* a default move that moves the bare one, and the two
+        // are worth reading together: parting company is a default moving, and one moving alone is
+        // arithmetic or search order.
+        assertEquals(
+            -900434540592784873L,
+            hashOf(
+                "puct",
+                "random",
+                seed = 2005,
+                rows = 12,
+                cols = 12,
+                budgetPerTurn = SEARCH_BUDGET,
+                params = listOf(BotParams(mapOf("eval" to "territory")), BotParams.EMPTY),
+            ),
+        )
+    }
+
+    @Test
     fun `alpha-beta against random on 12x12`() {
         // The fourth searcher, and the last entry in the registry with no case here. It belongs in
         // the cross-target set on SW-02's own terms rather than by exception: the descent is
         // `advance`/`undo` over the arena, the ordering is `MovePrior` at a temperature of zero so no
-        // exponential is reached, and the leaf is `ChamberEval`, whose only transcendental is `sqrt`.
-        // So a hash that moves here is arithmetic or search order, never a platform's `log`.
+        // exponential is reached, and **the leaf reaches no transcendental at all** -- neither
+        // `TerritoryEval` nor `ChamberEval` imports `kotlin.math`, and across `bots/src/commonMain`
+        // `sqrt` appears in three files (`PressureBot`, `PuctTree`, `UctTree`) and `portableExp` in
+        // two (`MovePrior`, `LearnedNet`), none of which this bot reaches at its defaults. That
+        // sentence used to read "the leaf is `ChamberEval`, whose only transcendental is `sqrt`",
+        // which named a `sqrt` that was never there. So a hash that moves here is arithmetic or
+        // search order, never a platform's `log`.
         //
         // What this pins that the other three do not is the replay: a paid leaf re-applies the whole
         // path onto the arena its own payment reset, so an off-by-one there is a wrong position
         // appraised rather than a crash, and it would show up here and nowhere else.
+        //
+        // Re-pinned from -3589698981299349624 when `AlphaBetaBot.EVAL` moved from `chamber` to
+        // `territory`. The question a golden failure asks, answered: the leaf is read at every paid
+        // node of every pass, so every stream this bot searches at all is expected to move, and it
+        // is the *only* hash in the repository that did -- the `alpha-beta at chamber` case below
+        // holds at the old number, which is what says a leaf changed and not the search. The move
+        // was P2's three twelve-rung equal-clock fields (13,200 matches a board) putting this bot at
+        // `territory` **+108 / +46 / +41** over its own `chamber` rung at 8x8 / 12x12 / 20x20, a
+        // fresh-seed seven-rung field reproducing the 12x12 +46 on disjoint intervals, and three
+        // sequential tests at `elo0=0, elo1=5` -- +33 ±14 over 1,120 boards at 8x8, +21 ±15 over
+        // 1,200 at 12x12, +98 ±26 over 360 at 20x20. `AlphaBetaBot.EVAL` carries the tables and the
+        // one claim in them that does not survive its own residuals.
+        assertEquals(
+            -6565866919283159623L,
+            hashOf("alphabeta", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = SEARCH_BUDGET),
+        )
+    }
+
+    @Test
+    fun `alpha-beta at chamber, named rather than inherited`() {
+        // **This case has now done the job it was added for.** It was written while `chamber` was
+        // still `AlphaBetaBot.EVAL`'s default, carrying the same number as the bare case above
+        // because `BotContractTest`'s "every knob at its declared default plays the match no knobs
+        // at all plays" made those two one match. P3 then moved that default to `territory`: the
+        // bare case moved to -6565866919283159623 and this one did not, which is exactly the
+        // parting-company the pair was built to make legible — and `ChamberEval`'s block
+        // decomposition and parity cap stayed pinned, on either target, through a release decision
+        // they had nothing to do with.
+        //
+        // So the number below is no longer transferred from anywhere. It is the only thing pinning
+        // this leaf, and a move in it is arithmetic or search order in `ChamberEval` alone.
+        //
+        // The note under `PUCT at its fitted leaf` leaves four of the six evaluations unpinned and
+        // used to justify that by saying `territory` is `puct`'s default and `chamber` is
+        // `alphabeta`'s. Half of that is now false — both defaults are `territory` — and it does not
+        // matter, because neither leaf is pinned by a default any more.
         assertEquals(
             -3589698981299349624L,
-            hashOf("alphabeta", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = SEARCH_BUDGET),
+            hashOf(
+                "alphabeta",
+                "random",
+                seed = 2005,
+                rows = 12,
+                cols = 12,
+                budgetPerTurn = SEARCH_BUDGET,
+                params = listOf(BotParams(mapOf("eval" to "chamber")), BotParams.EMPTY),
+            ),
         )
     }
 
@@ -150,16 +224,34 @@ class GoldenMoveStreamTest {
         // to the raw bits in Chrome; what was unpinned is everything downstream of it, including
         // the decode of `LearnedWeights` from a string into fixed point.
         //
-        // The other five values are deliberately not here. `territory` is `puct`'s own default and
-        // `chamber` is `alphabeta`'s, so the two cases above already pin the bitmap sweep, the block
-        // decomposition and the parity cap. `survival` and `horizon` reach those through
+        // The other three values are deliberately not here. `territory` and `chamber` each have a
+        // case of their own above, both naming the value rather than inheriting it from a bot's
+        // default, so between them the bitmap sweep, the block decomposition and the parity cap are
+        // pinned whatever either default does later. `survival` and `horizon` reach those through
         // `FillableSpace` and `SurvivalHorizon`, which hold no floating point at all, and
         // `mobility` is a liberty count over a divide — integer arithmetic is exact on every target
         // and `/` is specified, so a case for any of the three would buy codegen coverage the four
         // searchers already give and nothing else. A browser case is minutes of somebody's CI, so
         // the bar is a divergence it could actually catch.
+        //
+        // Re-pinned from -128377200664409204 when P4 replaced `LearnedWeights.ENCODED`. The question
+        // a golden failure asks, answered: **both halves of this leaf moved and nothing else did.**
+        // `PositionFeatures` went from 25 readings to 29 -- a runner-up chain, a chokepoint count, a
+        // raw colour imbalance and a tempo margin, all four off sweeps the leaf was already paying
+        // for -- and the model was refitted from a 12x12-only corpus onto 39,600 matches across 8x8,
+        // 12x12 and 20x20. Either alone would move this hash; `LearnedNet.decode` refuses a literal
+        // whose shape does not match the `PositionFeatures` beside it, so the two cannot move apart.
+        // This is the **only** hash in the repository that moved: the other fifteen cases, including
+        // both `alphabeta` ones and the bare `puct` one, hold at their recorded numbers, which is
+        // what says a leaf changed and not the search or the arithmetic under it.
+        //
+        // What moved it was **not** the four readings. Scored on 13,200 fresh matches per board, the
+        // fit this replaces reads 0.5475 / 0.5822 / 0.6274 of log-loss at 8x8 / 12x12 / 20x20 where a
+        // refit of its own twenty-five readings on the board in question reads 0.5364 / 0.5685 /
+        // 0.5798 -- so 0.048 of the 20x20 gap was corpus. The four readings are worth 0.0039 ± 0.0017
+        // pooled over three seeds. `LearnedWeights` carries both tables.
         assertEquals(
-            -128377200664409204L,
+            6798631882534688247L,
             hashOf(
                 "puct",
                 "random",

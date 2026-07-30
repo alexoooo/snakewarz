@@ -267,11 +267,18 @@ ablation, rated together.
 was pure drift. A confirming run is necessary and, above one dimension, **not sufficient**: read a
 confirmed multi-weight point as *"this point is better"*, never as *"each of these weights is right"*.
 
-**Intransitivity is real here and is not noise.** `alphabeta` beats `puct:eval=chamber` head-to-head
-108-92 while rating 62 *below* it in a broad field and 48 *above* it in a narrower one — disjoint
-intervals both times, with the pairing itself stable. The company moved, not the match-up. **A single
-Elo fitted over a cycle is field-composition-dependent**, so state the field beside any rating that will
-be quoted later.
+**Intransitivity is real here and is not noise.** `alphabeta:eval=chamber` beats `puct:eval=chamber`
+head-to-head 108-92 while rating 62 *below* it in a broad field and 48 *above* it in a narrower one —
+disjoint intervals both times, with the pairing itself stable. The company moved, not the match-up.
+(Both entrants are spelled at `eval=chamber` because that is what was measured; `alphabeta` has since
+defaulted to `territory`, so a bare `alphabeta` today is a different bot from the one in this
+measurement.) **A single Elo fitted over a cycle is field-composition-dependent**, so state the field
+beside any rating that will be quoted later.
+
+**And it is not only the company — it is the board.** `alphabeta:eval=territory` rates +131 above bare
+`puct` on an 8×8 while losing its head-to-head to it 89-111, and beats it 70.5% on a 12×12. A rating
+is conditioned on the field *and* on the geometry, and cost is not monotone in board size either, so
+an allowance measured on one board does not transfer to another.
 
 ### 5. Diagnose, whichever way it went
 

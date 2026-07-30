@@ -8,20 +8,25 @@ SW-02 portable arithmetic, SW-03 the hot path and SW-05 frozen identifiers.
 
 ## The shipped registry
 
-`ShippedBots` has **three sections, and only the first is a ladder**. The ladder is registered weakest
-first: `random`, `wallhug`, `space`, `pressure`, `chase`, `flat-monte-carlo`, `uct`. Each rung beats
-the one below it over twenty matches — `BotLadderTest` is the gate, and it is the only test in the
-suite a *correct but useless* bot would fail. Then come the bots contributed to the original project,
-ordered by slug and claiming nothing about strength: `burninhell`. Then **experimental**:
-`puct`, which is ahead of `uct` at an equal allowance and level with it per unit of *time*, and the
-gap between those two readings is the reason it makes no claim a rung would make — see `TerritoryEval`
-for both tables; and `alphabeta`, the only exact search here. All three sections are gated by the
-same contract suite.
+`ShippedBots` has **two sections, and only the first is a ladder**. The ladder is registered weakest
+first: `random`, `wallhug`, `space`, `pressure`, `chase`, `flat-monte-carlo`, `uct`, `puct`,
+`alphabeta`. Each rung beats the one below it over twenty matches — `BotLadderTest` is the gate, and
+it is the only test in the suite a *correct but useless* bot would fail. Then come the bots
+contributed to the original project, ordered by slug and claiming nothing about strength:
+`burninhell`. Both sections are gated by the same contract suite.
+
+There used to be a third, **experimental**, holding `puct` and `alphabeta` — registered but asserting
+nothing, because the only readings anybody had were at *equal allowance*, where a dear leaf is handed
+several times the wall clock a cheap one gets. Three equal-clock fields settled it: `puct` clears
+`uct` by +54/+58/+62 Elo on 8×8/12×12/20×20 and `alphabeta` clears `puct` on all three, so both were
+seated and the section is empty. **Read `BotLadderTest`'s KDoc before quoting the top rung** — at 8×8
+`alphabeta` loses its head-to-head to `puct` while rating above it, and the ladder is a 12×12
+instrument.
 
 `:ui` opens slot 2 on the slug `uct` — the page should start on the game somebody came here to play
 — and falls back to `entries.first()` when a registry does not offer it, so registration order still
-shows through. Append new bots; do not prepend. Of the ten, only `flat-monte-carlo`, `uct`, `puct` and
-`alphabeta` touch `Turn.scratch`; the other six consume no budget at all.
+shows through there. Append new bots; do not prepend. Of the ten, only `flat-monte-carlo`, `uct`,
+`puct` and `alphabeta` touch `Turn.scratch`; the other six consume no budget at all.
 
 ### A bot earns its place by what it lets you measure
 
@@ -38,8 +43,8 @@ keeping one:
 | `flat-monte-carlo` | **the ablation control**: `uct`'s rollout policy and allowance with the tree removed |
 | `uct` | the flagship |
 | `burninhell` | the second bot that draws no randomness, which is what `ArenaTest` measures openings with |
-| `puct` | the frontier, and ahead of `uct` at an equal allowance |
-| `alphabeta` | the only **exact** search, over `puct`'s own leaf — what a full-width minimax is worth here |
+| `puct` | the frontier, and ahead of `uct` at an equal allowance *and* at equal clock |
+| `alphabeta` | the only **exact** search, over `puct`'s own default leaf — what a full-width minimax is worth here |
 
 A bot that is merely *weak* is not an instrument: `random` is already the floor, more cleanly, and a
 second one only adds a picker row and a column to every matrix. That is what retired `tomsnake`, an
@@ -80,7 +85,8 @@ The `internal` primitives in `:bots` are there to be used: `FloodFill` for room,
 distances and first steps, `SpaceOwnership` for the board carved up between the snakes — and
 `isolated`, for whether a snake's ground still runs into anybody else's — `nearestOpponent` for
 `PvpAi`'s reduction, `randomPlayout` for a rollout, `truncatedPlayout` for a short one judged by
-ownership, `UctTree` for a flat-array search tree, `PuctTree` for one guided by a prior, and
+ownership, `RolloutPolicy` for what a snake plays inside either of them, `UctTree` for a flat-array
+search tree, `PuctTree` for one guided by a prior, and
 `LeafEval` for a hand-written value at a leaf. Inside `search.puct`, `TempoOwnership` is the sweep
 with turn order and retracting tails in it, `FillableSpace` answers how much of a region a single
 walk can actually spend — which is not how big it is — `ChamberTree` runs that same block
@@ -94,9 +100,11 @@ bounds what it can be worth. `portableExp` is beside it, for
 set, so the exponential is built from `+ - * /` rather than the rule being excepted.
 
 `search.learned` is the one leaf whose weights nobody chose. `PositionFeatures` reads a position as
-twenty-five bounded numbers — the sweep, the chamber decomposition and the readings six phases of
+twenty-nine bounded numbers — the sweep, the chamber decomposition and the readings six phases of
 measurement say carry the signal — and `LearnedNet` turns them into a probability of winning off
-`LearnedWeights`, a fixed-point literal `:lab`'s `train` fitted to half a million logged positions.
+`LearnedWeights`, a fixed-point literal `:lab`'s `train` fitted to a million logged positions **taken
+at three board sizes, which is the part that turned out to matter**: the fit it replaced was taken at
+one, and lost more to that than to any feature anybody has added.
 **`PositionFeatures` is the only public class in `:bots` besides `ShippedBots`, and that is
 deliberate**: `:lab` cannot see this module's internals, so a trainer that could not import the
 extractor would have to reimplement it, and a copy that drifts by one term produces a bot that is
@@ -105,6 +113,13 @@ merely mediocre with nothing failing anywhere. One definition, read by the train
 `truncatedPlayout` and `SpaceOwnership` ship **wired and off**, and the reason is measured rather
 than aesthetic — see `UctBot.ROLLOUT_DEPTH`. Do not turn them on without re-running
 `RolloutTruncationTest`, and do not delete them either: they are the evidence.
+
+`RolloutPolicy`'s two non-uniform settings ship the same way, and for a reason with one extra term in
+it: an allowance is counted in evaluations, `EvaluationCost.ROLLOUT` is a flat `1`, and a dearer
+rollout therefore buys **no fewer iterations** — all of its cost lands on the wall clock. So a matrix
+between two of these at one allowance is not a comparison, it is a handicap, and `RolloutPolicyTest`
+carries both halves of what one has to be read against: how often each would play a different move
+from the default, and what each costs a turn.
 
 Every registry entry is run against the shared contract suite in CI (`bots/src/commonTest/.../BotContractTest`):
 never returns an illegal move when a legal one exists, survives a budget of zero, is deterministic given
@@ -253,8 +268,27 @@ So adopting one is a deliberate act, in this order:
 4. `GoldenMoveStreamTest` fails. **Re-pin it recording the measurement that moved it**: which run,
    what delta, over how many boards, at what bound. That record is the answer to the question a
    golden failure asks.
-5. Re-check `BotLadderTest`'s thresholds and update the measured figures in its comments.
-6. Put the table in the KDoc beside the constant, the way the four below already do.
+
+   **Count the hashes that move, before touching any of them.** Moving a `Choice` default should
+   move exactly the *bare* case for that bot and nothing else, because every leaf worth pinning also
+   has a case naming its value explicitly — `PUCT at territory` and `alpha-beta at chamber` exist for
+   this, and a leaf pinned only by a default goes unpinned the moment the default moves. Two hashes
+   moving together, or the named one moving alone, is arithmetic or search order and is a different
+   question. If the bot is in the cross-target set, **verify in real Chrome**:
+   `./gradlew :bots:wasmJsBrowserTest -PbrowserTests=true --rerun -i`, never with `--tests`, which
+   silently runs one method and reports success.
+5. Re-check `BotLadderTest`'s thresholds and update the measured figures in its comments. **This is
+   a real step for every bot the ladder seats and a no-op for every bot it does not** — it was a
+   no-op for `puct` and `alphabeta` until P3 seated them, and the two phases that read this line
+   before then both had to discover that for themselves. The ladder now seats nine bots and the two
+   at the top are the ones a default move is most likely to reach.
+
+   Re-measure the thresholds; do not adjust them to fit. A rung whose measured figure has fallen to
+   where its threshold no longer asserts a majority is a finding to report, not a number to lower.
+6. Put the table in the KDoc beside the constant, the way the four below already do. **Where a claim
+   is weaker than the headline it came from, say so there** — a fitted rating and its own residual
+   table have disagreed about a pairing three times on this project, twice by more than the margin
+   being adopted, so the KDoc records which comparison the default actually moved on.
 
 A **hardcoded** constant is not searchable, and `PuctBot.FIRST_PLAY`'s KDoc says as much
 ("Promote it if there is"). The route is to declare it as a knob with `tradeoff = false` first —
@@ -268,10 +302,12 @@ here were settled by a batch rather than by an argument. Each of those numbers i
 something is or is not in the code, which is exactly the kind of fact that gets re-proposed every
 year or two. Five live in the KDoc of the constant they set: `UctBot.ROLLOUT_DEPTH` carries the
 rollout-truncation table, `MatchSetup.DEFAULT_BUDGET_PER_TURN` the allowance table and the 8ms frame
-budget that sets it, `TerritoryEval` the two that keep `puct` in the experimental section rather than
-on the ladder, `EvaluationCost` what an evaluation of each kind actually costs — the one that is
-recorded and deliberately *not* acted on — `ChamberEval` the three-weight sweep that made it the
-strongest leaf in the box, including the weight the sweep moved and the ablation refused, and
+budget that sets it, `TerritoryEval` the two readings that kept `puct` out of the ladder until an
+equal-clock field settled them, `EvaluationCost` what an evaluation of each kind actually costs — the
+one that is recorded and deliberately *not* acted on — `ChamberEval` the three-weight sweep that made
+it the strongest leaf in the box **at equal allowance**, including the weight the sweep moved and the
+ablation refused, `AlphaBetaBot.EVAL` why that qualifier is load-bearing: at equal *clock* the same
+leaf costs 2.4–4.6× and finishes below the cheap one it beat, which is what moved a default, and
 `MovePrior` the four-weight sweep over the *prior*, where the ablation and the head-to-head that
 produced it disagreed on the sign of the coordinate that mattered, `AlphaBetaBot` how deep an
 exact search actually gets here and what it is worth once it does, `LearnedEval` what a value

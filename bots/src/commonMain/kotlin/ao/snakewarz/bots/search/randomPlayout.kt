@@ -1,15 +1,14 @@
 package ao.snakewarz.bots.search
 
 import ao.snakewarz.botapi.scratch.Playout
-import ao.snakewarz.core.grid.Direction
 import ao.snakewarz.core.random.Rng
 import ao.snakewarz.core.rules.MatchOutcome
 
 /**
- * Plays [playout] to a conclusion with every snake moving at random, and reports how it ended.
+ * Plays [playout] to a conclusion with every snake moving by [policy], and reports how it ended.
  *
- * This is the rollout policy both simulating bots use — legacy's `RandomAi`, minus the object. It is
- * a function rather than a [ao.snakewarz.botapi.Bot] on purpose: a `Bot` is handed a
+ * This is how both simulating bots simulate — legacy's `RandomAi`, minus the object. It is a function
+ * rather than a [ao.snakewarz.botapi.Bot] on purpose: a `Bot` is handed a
  * [ao.snakewarz.botapi.Turn], `Turn` is a class, and constructing one per simulated move would
  * allocate millions of them per match to carry four fields that are already in reach here.
  *
@@ -18,18 +17,15 @@ import ao.snakewarz.core.rules.MatchOutcome
  * playout. The `outcome` is re-read after **every** advance, never carried over, because advancing on
  * a stale read throws.
  *
- * A trapped snake plays `NORTH` without consuming randomness. Every direction from a trapped
- * position eliminates it and leaves the board in exactly the same state, so there is nothing to
- * choose between them and drawing for it would only shift the stream.
+ * What each snake plays is [RolloutPolicy]'s business, including the `NORTH` a trapped one plays
+ * without drawing.
  */
-internal fun randomPlayout(playout: Playout, rng: Rng): MatchOutcome {
+internal fun randomPlayout(playout: Playout, rng: Rng, policy: RolloutPolicy): MatchOutcome {
     var result = playout.outcome
 
     while (result == null) {
-        val legal = playout.board.legalMoves(playout.toAct)
-        val move = if (legal.isEmpty) Direction.NORTH else legal.nth(rng.nextInt(legal.size))
-
-        playout.advance(move)
+        val mover = playout.toAct
+        playout.advance(policy.pick(playout.board, mover, playout.board.legalMoves(mover), rng))
         result = playout.outcome
     }
 

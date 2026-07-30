@@ -8,6 +8,7 @@ import ao.snakewarz.botapi.knob.BotParams
 import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.botapi.scratch.BoardScratch
 import ao.snakewarz.bots.HeadlessMatch
+import ao.snakewarz.bots.SHIPPED_BUDGET
 import ao.snakewarz.bots.ShippedBots
 import ao.snakewarz.bots.boardOf
 import ao.snakewarz.bots.cornerSpawns
@@ -150,10 +151,7 @@ class AlphaBetaBotTest {
     private fun tenths(depths: List<Int>): Double = (mean(depths) * 10).toInt() / 10.0
 
     private companion object {
-        /** `MatchSetup.DEFAULT_BUDGET_PER_TURN`, spelled out because `:bots` may not see `:match`. */
-        const val SHIPPED_BUDGET = 1000
-
-        /** A tenth of it, which is where the deepening loop should be visibly shallower. */
+        /** A tenth of the shipped allowance, which is where the deepening loop should be visibly shallower. */
         const val SMALL_BUDGET = 100
 
         const val SEATS = 2

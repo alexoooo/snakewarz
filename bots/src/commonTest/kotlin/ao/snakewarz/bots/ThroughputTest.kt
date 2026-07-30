@@ -1,5 +1,6 @@
 package ao.snakewarz.bots
 
+import ao.snakewarz.botapi.knob.BotParams
 import ao.snakewarz.botapi.registry.BotEntry
 import ao.snakewarz.botapi.registry.BotId
 import kotlin.test.Test
@@ -60,6 +61,72 @@ class ThroughputTest {
                 microsPerTurn < CEILING_MICROS,
                 "a turn at budget $budget took $microsPerTurn us, which no board should",
             )
+        }
+    }
+
+    /**
+     * What each **candidate appraisal** costs a turn, on both boards, over a line neither of them
+     * chose — see [AppraisalTape] for why that last clause is the whole instrument.
+     *
+     * This is the figure `MatchSetup.DEFAULT_BUDGET_PER_TURN`'s KDoc has never had. That table's
+     * `puct` column is a JVM measurement multiplied by `uct`'s browser tax, and it says so: *"nobody
+     * has timed an appraisal in Chrome."* Here it is timed in Chrome, because this suite recompiles
+     * to wasm and runs under Karma, and `uct` is carried across every row as the control that joins
+     * these figures to the ones already published.
+     *
+     * Three allowances rather than one, because the deliverable is not a cost — it is the **allowance
+     * that fits the frame slice**, and that is read off the line through these points rather than off
+     * any one of them. In Chrome all forty-two cells sit within 8% of a straight line through the
+     * origin: a turn carries no fixed cost worth the name, so an allowance ratio is a cost ratio.
+     *
+     * ### Read the browser run. **A ratio between two entrants on the JVM run of this sweep is not
+     * a cost ratio.**
+     *
+     * One JVM process times seven bots through one `Bot.chooseMove` call site, and it does not
+     * survive that. On a 12x12 this sweep puts `eval=learned` at **5.1x** `eval=chamber` and
+     * `alphabeta:eval=territory` at **4.7x** `puct` — where Chrome, `:lab time` with a fresh process
+     * per entrant, and `EvaluationCost`'s own published figure all agree on 1.1x and 1.0x
+     * respectively. Every pass of the contaminated cells agrees with the others, so it reads as a
+     * measurement rather than as noise, and the 20x20 half of the same run is clean, which is what
+     * makes it invisible to anyone reading one board.
+     *
+     * Nothing here can fix that from inside one process, so the JVM run is kept for what it is good
+     * for — a regression guard on a single entrant, and an answer in seconds instead of the browser
+     * suite's ten minutes. The cross-entrant table is the browser's.
+     */
+    @Test
+    fun `an appraisal fits inside the frame slice`() {
+        for (board in APPRAISAL_BOARDS) {
+            val tape = AppraisalTape(board, board)
+
+            // Every candidate once before any of them is timed, and the sweep rather than the
+            // cheapest of them: the first pass is interpreted on the JVM and untiered in wasm, and —
+            // the reason this is a loop — one `Bot.chooseMove` call site sees all seven of these, so
+            // whichever ran first would otherwise be measured through a call site the rest had not
+            // yet made polymorphic. That reads as a browser tax on the entrants that happen to be
+            // early in the list, and it is an artefact of the order they are timed in.
+            for ((slug, params) in CANDIDATES) {
+                tape.time(entry(slug.substringBefore(':')), params, APPRAISAL_BUDGETS[0], passes = 1)
+            }
+
+            for ((slug, params) in CANDIDATES) {
+                for (budget in APPRAISAL_BUDGETS) {
+                    val passes = tape.time(entry(slug.substringBefore(':')), params, budget, APPRAISAL_PASSES)
+                    val mean = passes.map { it.mean }.sorted()[APPRAISAL_PASSES / 2]
+                    val worst = passes.map { it.worst }.sorted()[APPRAISAL_PASSES / 2]
+
+                    report(
+                        "$slug ${board}x$board budget $budget",
+                        mean,
+                        "us/turn mean, $worst us worst, over ${tape.appraisals} of ${tape.lineTurns} " +
+                            "turns, passes ${passes.joinToString("/") { it.mean.toString() }}",
+                    )
+                    assertTrue(
+                        mean < APPRAISAL_CEILING_MICROS,
+                        "an appraisal by $slug at budget $budget took $mean us, which no allowance should",
+                    )
+                }
+            }
         }
     }
 
@@ -134,12 +201,100 @@ class ThroughputTest {
         /** The board the ladder and the shipped tournament defaults use. */
         const val LADDER_BOARD = 12
 
+        /**
+         * The board `index.html` opens on, which is the geometry most matches ever played are on.
+         *
+         * The dear end of the range is where the *frame* question lives, and that is
+         * [MEASURED_BOARD]'s job. This is the other end, and it is here for the ratio rather than
+         * for the ceiling: the cost ratio between two appraisals moves with the board — `chamber`
+         * is 3.45x `puct` at [LADDER_BOARD] and 4.58x at [MEASURED_BOARD], and `uct` changes sides
+         * entirely — so an allowance table with two rows in it cannot be interpolated and a field
+         * run at a third size needs a third row measured.
+         */
+        const val OPENING_BOARD = 8
+
         const val SEED = 424_242L
 
-        /** `MatchSetup.DEFAULT_BUDGET_PER_TURN`, which `:bots` may not import. Evaluations a turn. */
-        const val SHIPPED_BUDGET = 1_000
-
         val BUDGETS = intArrayOf(250, 1_000, 2_000, 10_000)
+
+        /**
+         * The board the page opens on, the ladder's, and the one the budget table was taken on.
+         *
+         * Three rather than two because the ratio moves between them and cannot be interpolated —
+         * [OPENING_BOARD] carries the measurement that says so. The small board is nearly free: its
+         * line is a third of the ladder board's, so it adds well under a fifth to a browser sweep.
+         */
+        val APPRAISAL_BOARDS = intArrayOf(OPENING_BOARD, LADDER_BOARD, MEASURED_BOARD)
+
+        /**
+         * Enough points to fit the line a frame slice is solved on, and no dearer than it has to be.
+         *
+         * 10,000 is deliberately absent, where [BUDGETS] carries it: it is six times past the slice
+         * on the cheapest candidate here and forty on the dearest, so it would add minutes of Karma
+         * to establish a point every reader already knows the sign of.
+         */
+        val APPRAISAL_BUDGETS = intArrayOf(250, 1_000, 2_000)
+
+        /**
+         * `LabCommand.DEFAULT_PASSES`, and for its reason — *enough passes for the fastest of them
+         * to be about the code rather than about the machine*.
+         *
+         * Three is not enough here and that was measured rather than assumed: at three, one cell of
+         * the sweep came back with **every** pass five times its neighbours', so the minimum carried
+         * it and the cell read ten times its own line through the other allowances.
+         */
+        const val APPRAISAL_PASSES = 5
+
+        /**
+         * A crash guard on the appraisal sweep, and deliberately **not** the frame criterion.
+         *
+         * [CEILING_MICROS] cannot serve here. The dearest cell of this sweep is a leaf several times
+         * the shipped default's, at twice the shipped allowance, on the largest board offered — a
+         * setting that is *meant* to overrun a frame, since saying by how much is the whole point of
+         * the table. In a browser that cell reads a few hundred milliseconds, so a ceiling written
+         * for `uct` at the shipped allowance fires on a measurement working exactly as intended.
+         *
+         * The frame criterion is the `worst` figure each line prints, read against `:ui`'s 8 ms
+         * slice; this is an order of magnitude above the dearest cell measured and catches only a
+         * regression nobody could argue with.
+         */
+        const val APPRAISAL_CEILING_MICROS = 2_000_000L
+
+        /** Carried across every row of the appraisal table, and the one figure already published. */
+        const val CONTROL = "uct"
+
+        /**
+         * The appraisals a field is choosing between, named exactly as `:lab` spells an entrant so a
+         * `[bench]` line can be pasted back into a batch.
+         *
+         * `alphabeta` appears three times because which leaf it should be seated at is a costing
+         * question and not a preference — it borrows `puct`'s leaves wholesale, and since P3 moved
+         * its default the two bots default to the same one.
+         *
+         * **The order is the leaf-pair gate, and it is load-bearing.** [AppraisalTape] documents the
+         * free consistency check this sweep carries: two entrants on one leaf must cost the same per
+         * turn, so `puct` against `alphabeta:eval=territory`, `puct:eval=chamber` against
+         * `alphabeta:eval=chamber` and `puct:eval=learned` against `alphabeta:eval=learned` are three
+         * ratios that read ~1 on a usable run. This list is **interleaved so that the two halves of
+         * every pair are adjacent**. They used to sit four entrants apart — three `puct` rows then
+         * three `alphabeta` rows — which is precisely the arrangement in which a clock step *between*
+         * entrant blocks lands entirely inside the ratio the gate exists to protect, and P3a
+         * diagnosed two browser runs failing that way. Adjacency costs nothing and is the fix.
+         *
+         * The second pair is spelled `alphabeta:eval=chamber` rather than `alphabeta`, and that is
+         * not cosmetic: at the old default the bare row *was* the chamber row, and after the move it
+         * would have paired territory against chamber — a "gate" that can never pass and so is no
+         * gate at all, silently disabling the one check that says whether a sweep is usable.
+         */
+        val CANDIDATES: List<Pair<String, BotParams>> = listOf(
+            CONTROL to BotParams.EMPTY,
+            "puct" to BotParams.EMPTY,
+            "alphabeta:eval=territory" to BotParams(mapOf("eval" to "territory")),
+            "puct:eval=chamber" to BotParams(mapOf("eval" to "chamber")),
+            "alphabeta:eval=chamber" to BotParams(mapOf("eval" to "chamber")),
+            "puct:eval=learned" to BotParams(mapOf("eval" to "learned")),
+            "alphabeta:eval=learned" to BotParams(mapOf("eval" to "learned")),
+        )
 
         const val WARMUP_MATCHES = 200
         const val ENGINE_MATCHES = 2_000

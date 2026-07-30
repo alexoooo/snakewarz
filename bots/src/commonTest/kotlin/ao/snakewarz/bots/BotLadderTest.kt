@@ -15,29 +15,65 @@ import kotlin.test.assertTrue
  * and it is what gives the registration order — which the sidebar shows in — its meaning.
  *
  * Twenty matches a pairing, each seed played from both seats so that moving first is not a free
- * point, at [BUDGET], the allowance a real match is played under. The thresholds are the measured
- * results with a little slack, not aspirations: a failure is a question about what changed, exactly
- * like a golden hash.
+ * point, at [SHIPPED_BUDGET], the allowance a real match is played under. The thresholds are the
+ * measured results with a little slack, not aspirations: a failure is a question about what changed,
+ * exactly like a golden hash.
  *
- * Every rung is asserted, the first included. Six bots above `random` means six comparisons, and a
- * missing one is invisible — the list reads as complete whether or not it is.
+ * Every rung is asserted, the first included. Eight bots above `random` means eight comparisons, and
+ * a missing one is invisible — the list reads as complete whether or not it is.
+ *
+ * ### This is a 12x12 instrument, and the top rung is only true on a 12x12
+ *
+ * `puct` and `alphabeta` were seated here by P3 on P2's three equal-clock fields, and the ordering
+ * they assert — `alphabeta` over `puct` over `uct` — is the *field rating* ordering on all three
+ * board sizes measured. **It is not the head-to-head ordering on all three.** At 8x8,
+ * `alphabeta:eval=territory` rates +131 above bare `puct` and **loses its own head-to-head to it,
+ * 89-111**; `rate` prints that pairing as the largest residual in its field. At 12x12 the same
+ * pairing is 70.5% the other way, and at 20x20 65%.
+ *
+ * That is a genuine board-size intransitivity and not an artefact of one batch: P2 found the same
+ * shape in three other places (`eval=learned` swings +40 / −7 / −316 across the three boards, `uct`
+ * climbs monotonically with board size, and the cost of a leaf is not monotone in board size
+ * either). **Do not read the top rung as "`alphabeta` is stronger than `puct`."** Read it as what
+ * this file measures: on the board this file plays, over these twenty seeds, at this allowance.
+ *
+ * The rung stands because the ladder is a 12x12 instrument and 12x12 is where the ordering is
+ * strongest. Seating it was a decision taken knowing the 8x8 reversal, not in ignorance of it — and
+ * anybody who reruns these thresholds on another board should expect the top of the ladder to come
+ * apart there, and should not treat that as a regression.
  */
 class BotLadderTest {
     @Test
     fun `each rung beats the one below it`() {
-        // Measured at the shipped allowance, 12x12 over twenty matches: 16, 17, 18, 14, 18, 18.
+        // Re-measured at the shipped allowance, 12x12, over the same twenty matches, when `puct` and
+        // `alphabeta` were seated: 16, 17, 18, 14, 18, 18, **12, 20**.
         //
-        // The last two moved after the figures above were first taken. `uct` over `flat-monte-carlo`
-        // is `UctBot.EXPLORATION` going from 5.0 to 3.0, which is what this sweep was for.
-        // `flat-monte-carlo` over `chase` reads 18 where it was recorded as 16, and neither of those
-        // bots can see that knob -- it drifted under an earlier change and went unrecorded. Its
-        // threshold is deliberately left where it was: tightening a gate on a pairing nobody has
-        // investigated buys brittleness rather than coverage.
+        // The six existing rungs came back on their recorded figures to the match, which is the
+        // answer to whether seating two bots above them changed what they are asked to beat: it did
+        // not, because a rung is a pairing and none of these six can see either new bot.
+        //
+        // `uct` over `flat-monte-carlo` moved when `UctBot.EXPLORATION` went from 5.0 to 3.0, which
+        // is what that sweep was for. `flat-monte-carlo` over `chase` reads 18 where it was first
+        // recorded as 16, and neither of those bots can see that knob -- it drifted under an earlier
+        // change and went unrecorded. Its threshold is deliberately left where it was: tightening a
+        // gate on a pairing nobody has investigated buys brittleness rather than coverage.
+        //
+        // **`puct` over `uct` at 12 of 20 is the narrowest rung here and its threshold has the least
+        // slack of any**, so read that one first if this fails. Twenty matches is a coarse
+        // instrument for a 60% pairing; the evidence the rung was seated on is not these twenty. A
+        // fresh 100-match head-to-head on this board at this allowance, 100 of 100 distinct games,
+        // scores **59%**; P2's three equal-clock fields put `puct` over `uct` by **+54 / +58 / +62**
+        // Elo at 8x8 / 12x12 / 20x20 with disjoint intervals on all three. 59% is about +63 Elo, so
+        // the three readings agree. A threshold of 11 still asserts a majority and is one match from
+        // firing, which is the honest state of this rung rather than a number to loosen.
+        //
+        // `alphabeta` over `puct` is 20 of 20 here and 75% over 100 fresh matches (72 of 100
+        // distinct). See the class KDoc for the board size where that ordering reverses.
         //
         // The first rung is the one that says `random` is the weakest thing here, which is what
         // makes it the right bot to seat by default -- the opening screen of a game nobody has
-        // configured yet should be the easiest opponent there is -- and `ShippedBots` requires the
-        // registration order to say so. It is also the only rung whose loser plays no search, so it
+        // configured yet should be the easiest opponent there is -- and `ShippedBots` keeps the
+        // registration order saying so. It is also the only rung whose loser plays no search, so it
         // costs almost nothing to check.
         assertBeats("wallhug", "random", atLeast = 13)
         assertBeats("space", "wallhug", atLeast = 14)
@@ -45,6 +81,8 @@ class BotLadderTest {
         assertBeats("chase", "pressure", atLeast = 11)
         assertBeats("flat-monte-carlo", "chase", atLeast = 12)
         assertBeats("uct", "flat-monte-carlo", atLeast = 15)
+        assertBeats("puct", "uct", atLeast = 11)
+        assertBeats("alphabeta", "puct", atLeast = 17)
     }
 
     @Test
@@ -82,7 +120,7 @@ class BotLadderTest {
         // Measured: 16 of 20. Which is also the honest ceiling on the argument for raising it
         // further: ten times the budget still leaves a tenth of it four wins in twenty, so the curve
         // is flat enough that the frame budget, not strength, is the thing to set this by.
-        val wins = winsFor("uct", "uct", BUDGET, CRAMPED_BUDGET)
+        val wins = winsFor("uct", "uct", SHIPPED_BUDGET, CRAMPED_BUDGET)
         assertTrue(wins >= 14, "the full allowance beat a tenth of it in only $wins of $ROUNDS")
     }
 
@@ -92,7 +130,7 @@ class BotLadderTest {
         assertTrue(wins >= atLeast, "$challenger beat $defender in only $wins of $ROUNDS")
     }
 
-    private fun winsFor(challenger: String, defender: String, budget: Int = BUDGET): Int =
+    private fun winsFor(challenger: String, defender: String, budget: Int = SHIPPED_BUDGET): Int =
         winsFor(challenger, defender, budget, budget)
 
     private fun winsFor(challenger: String, defender: String, challengerBudget: Int, defenderBudget: Int): Int {
@@ -129,10 +167,7 @@ class BotLadderTest {
         const val ROWS = 12
         const val COLS = 12
 
-        /** `MatchSetup.DEFAULT_BUDGET_PER_TURN`, which `:bots` may not import. Evaluations a turn. */
-        const val BUDGET = 1_000
-
         /** A tenth of the shipped allowance, which is what the raise to it has to be worth beating. */
-        const val CRAMPED_BUDGET = BUDGET / 10
+        const val CRAMPED_BUDGET = SHIPPED_BUDGET / 10
     }
 }

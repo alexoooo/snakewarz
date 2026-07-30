@@ -43,7 +43,7 @@ import ao.snakewarz.core.grid.Direction
  * An allowance is counted in evaluations, and this is the bot where that matters: `eval=survival`
  * takes a whole board apart and `eval=mobility` reads sixteen squares, and both are one iteration of
  * the same search. So the charge is [LeafEval.cost], paid by asking for the iteration's playout
- * before descending, and the three settings differ in what they buy per unit rather than in how many
+ * before descending, and the six settings differ in what they buy per unit rather than in how many
  * units they can smuggle. What the units are *worth* against each other is [EvaluationCost], where
  * the calibration is openly still to do.
  *
@@ -782,8 +782,19 @@ public class PuctBot(setup: BotSetup) : Bot {
          * **Not yet a default, and what is missing is named.** All of the above is at `eval=chamber`,
          * which is not what this bot ships at — `ab puct puct:priorTail=0.8` measured `+158 ±51` over
          * 120 boards, which says it survives `eval=territory` and no more than that. Moving this
-         * default moves `GoldenMoveStreamTest`'s `puct` hash and `BotLadderTest`'s thresholds, so it
-         * needs the sequence in `docs/Bots.md` run at the shipped evaluation.
+         * default moves `GoldenMoveStreamTest`'s `puct` hashes **and its `alphabeta` one**, because
+         * `AlphaBetaBot` orders its moves with [MovePrior] at these same declared defaults. **And it
+         * now moves ladder thresholds**: `BotLadderTest` seated both bots when they graduated, so
+         * `puct` over `uct` and `alphabeta` over `puct` are pairings this knob reaches. That sentence
+         * used to read "it moves no ladder threshold: `BotLadderTest` seats neither bot", which was
+         * true when it was written and stopped being true the day the two were seated. So it needs
+         * the sequence in `docs/Bots.md` run at the shipped evaluation, and a real-Chrome
+         * re-verification, both goldens being in the cross-target set.
+         *
+         * One more thing this knob is now known not to be: **a property of `puct`.** It is a property
+         * of `puct:eval=chamber`. At equal clock the tuned prior is worth +24/+13/+19 on the leaf it
+         * was fitted against and **−94/−87/−92** on `eval=learned`, over three board sizes. Nothing
+         * has measured it on `eval=territory`, which is what both bots ship at.
          */
         val PRIOR_TAIL = BotKnob.Decimal(
             name = "priorTail",

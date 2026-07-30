@@ -150,6 +150,16 @@ internal class ValueFit(
     /** Log-loss over the held-out games, which is the number the run is judged on. */
     fun holdoutLoss(): Double = lossOver(holdout, holdoutSize)
 
+    /**
+     * The held-out games split by the board they were played on, for [model] or another.
+     *
+     * A pooled holdout over a corpus spanning several geometries is the reading that hid the shipped
+     * fit's board dependence: it says the model serves the *mixture*, which is not a claim about any
+     * board in it. [Corpus] carries why.
+     */
+    fun holdoutByBoard(other: LearnedNet = net): List<Pair<String, ModelScore>> =
+        scoreByBoard(corpus, other, holdout, holdoutSize)
+
     /** The same, for a model that is not this one — what the quantised literal is checked with. */
     fun holdoutLossOf(other: LearnedNet): Double {
         val buffer = DoubleArray(other.outputSources)

@@ -8,6 +8,8 @@ import ao.snakewarz.lab.log.LoggedMatch
 import ao.snakewarz.match.tournament.Contestant
 import ao.snakewarz.match.tournament.TournamentConfig
 import ao.snakewarz.match.tournament.TournamentFormat
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -109,6 +111,56 @@ class LadderTest {
     }
 
     @Test
+    fun `at three seats the rating's own scoring rule is not the win rate beside it`() {
+        // The reason `rate` prints both columns for a free-for-all. `pairwiseOutcomes` scores three
+        // seats by *outlasting*, so a matrix score is a survival order; `winShare` counts the snake
+        // that was actually last moving. They are different questions and this is the fixture that
+        // says so rather than a claim in a KDoc.
+        val matches = batchOf(
+            listOf("space", "wallhug", "random"),
+            rounds = 30,
+            format = TournamentFormat.FREE_FOR_ALL,
+        ).matches
+        val ladder = Ladder.of(matches, ShippedBots, TournamentFormat.FREE_FOR_ALL)
+
+        var wins = 0
+        for (entrant in 0 until ladder.size) {
+            val share = assertNotNull(ladder.winShare(entrant))
+            assertTrue(share in 0.0..1.0, "${ladder.label(entrant)} won $share of its matches")
+            assertEquals(matches.size, ladder.seated(entrant), "every seat is filled in every match")
+            wins += (share * ladder.seated(entrant)).roundToInt()
+        }
+        // A match has at most one winner, so the shares sum to one less whatever was drawn.
+        assertTrue(wins <= matches.size, "$wins winners across ${matches.size} matches")
+
+        val differs = (0 until ladder.size).any {
+            abs(ladder.table.scoreRate(it) - ladder.winShare(it)!!) > 0.01
+        }
+        assertTrue(differs, "outlasting and winning agreed exactly, which at three seats is suspicious")
+    }
+
+    @Test
+    fun `a win-share bar brackets the share it belongs to`() {
+        val ladder = Ladder.of(
+            batchOf(
+                listOf("space", "wallhug", "random"),
+                rounds = 30,
+                format = TournamentFormat.FREE_FOR_ALL,
+            ).matches,
+            ShippedBots,
+            TournamentFormat.FREE_FOR_ALL,
+        )
+
+        val intervals = winShareIntervals(ladder, draws = 80)
+
+        for (entrant in 0 until ladder.size) {
+            val share = assertNotNull(ladder.winShare(entrant))
+            assertTrue(intervals[entrant].low <= share, "${ladder.label(entrant)}: $share below its own bar")
+            assertTrue(intervals[entrant].high >= share, "${ladder.label(entrant)}: $share above its own bar")
+        }
+    }
+
+    @Test
     fun `a residual says where the single ordering does not hold`() {
         val ladder = ladderOf(batchOf(listOf("space", "wallhug", "pressure"), rounds = 8).matches)
 
@@ -164,12 +216,18 @@ class LadderTest {
 
     private class Batch(val result: ao.snakewarz.lab.arena.BatchResult, val matches: List<LoggedMatch>)
 
-    private fun batchOf(slugs: List<String>, rounds: Int, budget: Int = 0): Batch {
+    private fun batchOf(
+        slugs: List<String>,
+        rounds: Int,
+        budget: Int = 0,
+        format: TournamentFormat = TournamentFormat.HEAD_TO_HEAD,
+    ): Batch {
         val config = TournamentConfig(
             contestants = slugs.map { Contestant(BotId(it)) },
             rows = 9,
             cols = 9,
             rounds = rounds,
+            format = format,
             budgetPerTurn = budget,
         )
         val result = Arena(config, ShippedBots, Openings.MIRRORED, threads = 2).run()

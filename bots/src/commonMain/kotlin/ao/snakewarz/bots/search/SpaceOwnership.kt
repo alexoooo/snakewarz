@@ -41,6 +41,24 @@ import ao.snakewarz.core.snake.SnakeId
  * claimed — the sweep would have taken it otherwise — so that is the same test as "one frontier ran
  * into another", without having to catch the moment it happened.
  *
+ * **The single-frontier path is not the separated case**, and reading it as one is the mistake to
+ * avoid here. A slot leaves [spread]'s active set when its frontier lands nowhere, which says whose
+ * room runs out first and nothing about whether the rooms connect: two separated snakes with
+ * comparable room advance together for the whole sweep, and one snake sealed into a corner of a
+ * board it still shares leaves the other alone within a few layers. Layers per sweep, measured over
+ * a `puct` line at the shipped allowance:
+ *
+ * | | sweeps a turn | multi-frontier layers | single-frontier layers |
+ * |---|---|---|---|
+ * | 8x8 | 738 | 6.1 | 2.7 |
+ * | 12x12 | 784 | 9.9 | 3.7 |
+ * | 20x20 | 904 | 15.9 | 5.4 |
+ * | 20x20, once the board has come apart | **487** | 5.1 | 2.2 |
+ *
+ * The split is about 70/30 in both phases. What separation moves is the *size* of a sweep and how
+ * many of them a turn runs, and it moves both **down** — so anything that makes a sweep cheaper is
+ * worth less after the board comes apart, not more.
+ *
  * The one simplification worth naming: it ignores whose turn it is. A snake about to move reaches an
  * equidistant square first in reality, and here the square is contested. That is a half-step of
  * accuracy, uniformly applied, in a heuristic that is already an approximation of the game.

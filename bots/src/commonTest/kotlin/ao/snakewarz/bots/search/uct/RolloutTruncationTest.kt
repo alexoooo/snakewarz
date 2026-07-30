@@ -3,12 +3,15 @@ package ao.snakewarz.bots.search.uct
 import ao.snakewarz.botapi.knob.BotParams
 import ao.snakewarz.botapi.registry.BotEntry
 import ao.snakewarz.botapi.registry.BotId
+import ao.snakewarz.bots.AppraisalTape
 import ao.snakewarz.bots.HeadlessMatch
+import ao.snakewarz.bots.SHIPPED_BUDGET
 import ao.snakewarz.bots.ShippedBots
 import ao.snakewarz.bots.ThroughputTest
 import ao.snakewarz.bots.at
 import ao.snakewarz.bots.boardOf
 import ao.snakewarz.bots.reactive.space.FloodFill
+import ao.snakewarz.bots.search.RolloutPolicy
 import ao.snakewarz.bots.search.SpaceOwnership
 import ao.snakewarz.bots.setupFor
 import ao.snakewarz.bots.turnOn
@@ -83,6 +86,53 @@ class RolloutTruncationTest {
     }
 
     @Test
+    fun `what truncating costs at the shipped allowance is the half the lead has never had`() {
+        val depth = BotParams(mapOf(UctBot.ROLLOUT_DEPTH.name to HEADLINE_DEPTH.toString()))
+
+        for (side in SHIPPED_SIDES) {
+            val tape = AppraisalTape(side, side)
+
+            // Both settings several times before either is timed: the first passes are interpreted,
+            // and the tiering finishing inside the block reads exactly like the machine drifting.
+            repeat(WARMUPS) {
+                tape.time(uct, BotParams.EMPTY, SHIPPED_BUDGET, passes = 1)
+                tape.time(uct, depth, SHIPPED_BUDGET, passes = 1)
+            }
+
+            val allowance = EQUAL_CLOCK[side] ?: error("no equal-clock allowance for ${side}x$side")
+
+            val opening = median(tape, BotParams.EMPTY, SHIPPED_BUDGET)
+            val truncated = median(tape, depth, SHIPPED_BUDGET)
+            val matched = median(tape, depth, allowance)
+            val closing = median(tape, BotParams.EMPTY, SHIPPED_BUDGET)
+            val control = (opening + closing) / 2
+
+            println(
+                "[bench] rolloutDepth $HEADLINE_DEPTH ${side}x$side: $truncated us/turn at " +
+                    "$SHIPPED_BUDGET (${truncated * 100 / control}% of the undepthed bot's $control), " +
+                    "$matched us/turn at $allowance (${matched * 100 / control}%), " +
+                    "over ${tape.appraisals} of ${tape.lineTurns} turns",
+            )
+            println(
+                "[bench] rolloutDepth control ${side}x$side budget $SHIPPED_BUDGET: " +
+                    "$opening then $closing us/turn",
+            )
+
+            assertTrue(
+                closing * LOADED_MACHINE > opening && opening * LOADED_MACHINE > closing,
+                "the undepthed bot read $opening us/turn before the block and $closing after, so " +
+                    "nothing in this block is a measurement of anything",
+            )
+            assertTrue(
+                matched * LOADED_MACHINE > control && control * LOADED_MACHINE > matched,
+                "truncating at $HEADLINE_DEPTH costs $matched us/turn at its $allowance allowance " +
+                    "against the undepthed bot's $control on ${side}x$side, which no equal-clock " +
+                    "field could be behind",
+            )
+        }
+    }
+
+    @Test
     fun `a snake walled off from the board owns none of it`() {
         // Classic Tron growth, so a body can be drawn as a wall. Both snakes run down their own
         // column; slot 0 ends up holding the west half and slot 1 ends up holding nothing, because
@@ -132,7 +182,13 @@ class RolloutTruncationTest {
         val space = SpaceOwnership(board.grid, board.snakeCount)
         val scratch = turnOn(board, board.toAct, ao.snakewarz.core.Budget(1_000))
 
-        val result = truncatedPlayout(scratch.scratch.playout(), setupFor(board, board.toAct).rng, 50, space)
+        val result = truncatedPlayout(
+            scratch.scratch.playout(),
+            setupFor(board, board.toAct).rng,
+            50,
+            space,
+            RolloutPolicy(RolloutPolicy.UNIFORM, board.grid),
+        )
 
         assertTrue(!result.isDraw, "a two-square board resolves, it does not tie")
     }
@@ -211,6 +267,10 @@ class RolloutTruncationTest {
         return best
     }
 
+    /** The median pass, for [AppraisalTape]'s reason — a fast pass is not noise and a minimum keeps it. */
+    private fun median(tape: AppraisalTape, params: BotParams, budget: Int): Long =
+        tape.time(uct, params, budget, APPRAISAL_PASSES).map { it.mean }.sorted()[APPRAISAL_PASSES / 2]
+
     private companion object {
         /** The shipped entry, configured per slot rather than fabricated per variant. */
         val uct: BotEntry = ShippedBots.entryOf(BotId("uct"))
@@ -226,11 +286,30 @@ class RolloutTruncationTest {
         const val ROUNDS = 40
 
         /**
-         * A tenth of the shipped allowance, deliberately.
+         * A tenth of the shipped allowance, deliberately — and **the sentence that used to justify
+         * that has been measured false.**
          *
-         * What is being compared is a ratio — strength per unit of budget against wall-clock per
-         * unit of budget — and that ratio does not turn on the allowance. Running it at the shipped
-         * 1,000 would multiply the time this test takes by ten and change none of its conclusions.
+         * It said the thing being compared is a ratio, strength per unit of budget against
+         * wall-clock per unit of budget, and that the ratio does not turn on the allowance. The
+         * strength half of it does. `rolloutDepth=25` against the undepthed bot, mirrored openings,
+         * 200 distinct games a cell: **51.7% of a thousand rounds at this 100 on a 12x12** — the row
+         * in [UctBot.ROLLOUT_DEPTH]'s table — against **58.5% at the shipped 1,000 on the same
+         * board, and 67% at 1,000 on a 20x20**, which no allowance had been measured at when that
+         * was written. Both have since been re-measured on fresh seeds, priced against a paired
+         * clock, and rated in an equal-clock field, and an **8x8** has since had all three for the
+         * first time and come back a null; [UctBot.ROLLOUT_DEPTH] carries all of it, and the cost
+         * half of it is the block above.
+         *
+         * **The cost ratio turns on the allowance too, and in the same direction**: 1.0-1.1x here at
+         * 100 evaluations against 1.05x, 1.12x and 1.32x at 1,000. So this constant is not neutral
+         * with respect to *either* half of the trade, and a figure taken at it is a figure about a
+         * hundred-evaluation search.
+         *
+         * This constant is **not** raised on the strength of it. Ten times the allowance is ten
+         * times the runtime of a suite that already plays forty matches, and what the assertion here
+         * guards — that the edge is small enough to be swamped by the clock the loop above prints —
+         * is a property of this fixture at this allowance. What has to change is the claim, which is
+         * now stated where a reader meets it rather than left as a reason nobody re-checked.
          */
         const val BUDGET = 100
 
@@ -239,6 +318,44 @@ class RolloutTruncationTest {
 
         /** Which of [DEPTHS] the strength comparison is actually played out at. */
         const val HEADLINE = 1
+
+        /** [DEPTHS]`[`[HEADLINE]`]`, spelled as a constant because the block below is not a loop. */
+        const val HEADLINE_DEPTH = 25
+
+        /**
+         * The three boards the shipped-allowance block is timed on.
+         *
+         * 8x8 was left out of the first two and has since been measured, because it is the board
+         * `index.html` opens on and therefore the one a player meets. Read its row knowing what it
+         * is: [AppraisalTape]'s line there is 47 turns against a 20x20's 210, so a reading is over a
+         * fifth of the samples, and `RolloutPolicyTest` records that as the wobbliest row of its own
+         * table.
+         */
+        val SHIPPED_SIDES = listOf(8, 12, 20)
+
+        /** `ThroughputTest.APPRAISAL_PASSES`, for its reason. */
+        const val APPRAISAL_PASSES = 5
+
+        /** `RolloutPolicyTest.WARMUPS`, measured there rather than guessed here. */
+        const val WARMUPS = 4
+
+        /** `RolloutPolicyTest.LOADED_MACHINE`, and for its reason: this runs inside `./gradlew build`. */
+        const val LOADED_MACHINE = 1.8
+
+        /**
+         * The allowance `rolloutDepth=25` buys the undepthed bot's [SHIPPED_BUDGET] of wall clock at.
+         *
+         * **This is the table the field in [UctBot.ROLLOUT_DEPTH] was played at**, and it is asserted
+         * against the control above rather than left as arithmetic off the ratio, for
+         * `RolloutPolicyTest.EQUAL_CLOCK`'s reason: an allowance that has drifted turns an
+         * equal-clock field back into an equal-allowance one and nothing in the field says so. The
+         * ratio is a derived number with real spread; what is verified is this.
+         *
+         * From 1.05x at 8x8, 1.12x at 12x12 and 1.32x at 20x20 — median of three runs on the two
+         * larger boards and of eight on the 8x8, which spread 1.04-1.08x. The 8x8 entry verifies at
+         * 96-99% of the control's clock over three runs of the block above.
+         */
+        val EQUAL_CLOCK = mapOf(8 to 950, 12 to 890, 20 to 760)
 
         /**
          * Wide enough to hold what has actually been measured, and no wider.

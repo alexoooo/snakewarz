@@ -25,16 +25,46 @@ import ao.snakewarz.core.snake.SnakeId
  *
  * The conservative one is a strictly weaker claim, so `permanent` implies `naive`.
  *
- * **And at two snakes on a rectangle it can never be true**, which is worth knowing before anybody
+ * **At two snakes on a rectangle it can never be true**, which is worth knowing before anybody
  * builds a bot that dispatches on it. Its passable set is every playable square minus the *dead*
  * bodies; a rectangle minus its wall ring is connected; and a two-snake match ends at the first
  * death, so there are never any dead bodies while it is running. `PhasesCommand` measures it anyway
  * and reports the count, because a structural argument that agrees with a measurement is worth more
- * than either alone — and it becomes a real question the moment a third snake is seated.
+ * than either alone.
  *
- * What that leaves is a *graded* reading rather than a predicate, and [PhasesCommand] takes it from
- * the match instead of from the position: a separation that held to the end of the game was
- * permanent, and one the next few moves undid was not.
+ * ### At three snakes it is a real predicate, and it fires
+ *
+ * The structural argument stops the moment a third snake is seated: the first death leaves a corpse
+ * on the board and the match runs on, so the passable set really can be disconnected.
+ * `SeparationTest` pins the smallest case — a 1x5 corridor where the outer two close in and the
+ * middle one is walled up between them.
+ *
+ * **And then it almost never happens.** Three-seat free-for-alls of `puct:eval=territory`,
+ * `alphabeta:eval=territory` and `uct` at the shipped allowance, 1,200 matches a board, mirrored
+ * openings, every match distinct:
+ *
+ * | board | matches it fired in | positions it fired on | matches [naive] called apart |
+ * |---|---|---|---|
+ * | 8x8 | 10 of 1,200 (0.8%) | 129 of 119,608 (0.11%) | 88% |
+ * | 12x12 | 14 of 1,200 (1.2%) | 555 of 256,580 (0.22%) | 92% |
+ * | 20x20 | 12 of 1,200 (1.0%) | 559 of 626,877 (0.089%) | 96% |
+ *
+ * **About one match in a hundred, and flat across a sixfold range of board area** while the naive
+ * rate climbs with it. The mechanism is geometric rather than structural, which is the whole change:
+ * only a *corpse* is wall, so one dead snake has to disconnect the rectangle on its own. One that
+ * dies early is short and blocks nothing; one that dies late is long and has usually died folded
+ * into a corner rather than laid across the board. Neither depends much on how big the board is,
+ * which is why there is no size at which this becomes a usable signal.
+ *
+ * So the third seat replaces a proof of zero with a measurement of almost-zero, and what it buys is
+ * narrower than it looks. The predicate is *sound* — once it holds, nothing joins the regions again
+ * — and it is *late*: it cannot fire before the first death, which at three seats is most of the way
+ * through the contact game. It answers "is this settled" and never "will this settle", so it is
+ * still not a dispatch rule, and at one match in a hundred it is not an evaluation term either.
+ *
+ * So a graded reading remains what [PhasesCommand] splits a *match* on, taken from the match instead
+ * of from the position: a separation that held to the end of the game was permanent, and one the next
+ * few moves undid was not.
  *
  * Buffers are fields and the visited marks are generation-stamped, so a walk of fifty thousand
  * replays costs one allocation per board geometry.

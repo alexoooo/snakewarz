@@ -86,6 +86,72 @@ internal fun bootstrapIntervals(
     }
 }
 
+/**
+ * The same bars for [Ladder.winShare], in points of percent rather than of Elo.
+ *
+ * A separate function rather than a column of the one above because it resamples the same groups and
+ * then *counts* instead of refitting: a win share is an average over matches, so nothing has to be
+ * solved and four hundred draws are microseconds. Reported on the same seed-group unit for the
+ * reason that function gives — the three comparisons a free-for-all writes out of one game are not
+ * independent, and neither are the matches of one seed group, which is exactly what a group is.
+ *
+ * Returned as a fraction in `0.0..1.0`, `NaN..NaN` where the entrant never played or there is only
+ * one group to resample.
+ */
+internal fun winShareIntervals(
+    ladder: Ladder,
+    draws: Int = Bootstrap.DRAWS,
+    seed: Long = Bootstrap.SEED,
+): List<Interval> {
+    require(draws > 1) { "an interval needs more than one resampling, was $draws" }
+
+    val groups = ladder.matches.groupBy { it.run to it.pairKey }.values.toList()
+    if (groups.size < 2) {
+        return List(ladder.size) { Interval(Double.NaN, Double.NaN) }
+    }
+
+    val index = ladder.specs.withIndex().associate { (at, spec) -> spec to at }
+    val samples = List(ladder.size) { DoubleArray(draws) }
+    val rng = SplitMix64(seed)
+
+    val seats = IntArray(ladder.size)
+    val wins = IntArray(ladder.size)
+    for (draw in 0 until draws) {
+        seats.fill(0)
+        wins.fill(0)
+        repeat(groups.size) {
+            for (match in groups[rng.nextInt(groups.size)]) {
+                for (slot in match.slots) {
+                    val entrant = index.getValue(slot.spec)
+                    seats[entrant]++
+                    if (slot.winner) {
+                        wins[entrant]++
+                    }
+                }
+            }
+        }
+        for (entrant in 0 until ladder.size) {
+            // A draw that seated this entrant nowhere says nothing about it; its own figure neither
+            // widens nor narrows what the rest said, the same stand-in the rating bars use.
+            samples[entrant][draw] =
+                if (seats[entrant] == 0) {
+                    ladder.winShare(entrant) ?: Double.NaN
+                } else {
+                    wins[entrant].toDouble() / seats[entrant]
+                }
+        }
+    }
+
+    return List(ladder.size) { entrant ->
+        if (ladder.winShare(entrant) == null) {
+            return@List Interval(Double.NaN, Double.NaN)
+        }
+
+        val sorted = samples[entrant].sortedArray()
+        Interval(sorted[percentile(draws, Bootstrap.LOW)], sorted[percentile(draws, Bootstrap.HIGH)])
+    }
+}
+
 private fun percentile(draws: Int, fraction: Double): Int =
     ((draws - 1) * fraction).toInt().coerceIn(0, draws - 1)
 

@@ -68,6 +68,33 @@ import ao.snakewarz.core.rules.BoardView
  * candidate here is playing a bigger search on a constant tuned for a smaller one. Re-tuning it is a
  * separate experiment and a separate number; it is not a correction to apply to these.
  *
+ * ### Fusing the per-layer passes was tried, and it loses on the target this ships to
+ *
+ * The nine short passes one multi-frontier layer takes — a [copyFrom], a [clear], an [addShared] and
+ * an [addAll] per frontier past the first, one more [addAll], and a [settleInto] per frontier — fold
+ * into a single word loop, with the two that always follow a lone [spreadFrom] folding in the same
+ * way. On the JVM that is worth **1.20-1.29x** on a [SpaceOwnership] sweep and **1.10-1.17x** on a
+ * whole `puct` turn — four paired rounds against the passes as they stand, control held at 0.95-0.99x.
+ *
+ * **In Chrome the same code is half the speed**, and the regression grows with the words a board
+ * takes — two paired browser runs, `puct` a turn at the shipped allowance:
+ *
+ * | | 8x8 | 12x12 | 20x20 |
+ * |---|---|---|---|
+ * | the fused form against these passes | 0.91x | 0.66x | **0.50x** |
+ * | `uct`, which reads no sweep — the control | 1.01x | 0.96x | 1.01x |
+ *
+ * `alphabeta:eval=territory` reproduced `puct` to within 3% in both builds, so the leaf-pair gate
+ * `AppraisalTape` describes passed on every run. `eval=chamber` and `eval=learned` read 0.93-0.98x:
+ * they reach `TempoOwnership`, which at two snakes never takes a multi-frontier layer at all, so the
+ * *single*-frontier half of the fusion on its own is a wash there rather than a win.
+ *
+ * The shape of it, since the numbers do not say it: a fused loop keeps six `LongArray`s live where
+ * five short loops keep two each, and what fusing buys on the JVM — one loop instead of five, and no
+ * reload of what the previous pass just wrote — is not a cost a Kotlin/Wasm loop was paying in the
+ * first place. **So the passes stay separate.** Anyone rewriting them measures in the browser first
+ * and on the JVM second; here the two disagreed in direction and not in degree.
+ *
  * One instance per role per bot per match, sized once from [Grid.cellCount] and reused forever, so
  * nothing here allocates after the constructor. The margin words at each end are permanently zero
  * and exist so that a neighbour step can index off either end of the board without a bounds test.

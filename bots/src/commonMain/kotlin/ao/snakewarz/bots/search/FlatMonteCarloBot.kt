@@ -40,14 +40,24 @@ import ao.snakewarz.core.rules.MatchOutcome
  *   rollouts, so the number it called an average was wrong by a factor of the branching — harmless
  *   to an argmax, and not worth carrying forward.
  *
- * The rollout policy is a private loop rather than a [RandomBot]: a `Bot` needs a [Turn] per call,
- * and `Turn` is a class, so using one would allocate an object per simulated move across millions of
- * them.
+ * The rollout is a loop over a [RolloutPolicy] rather than a [RandomBot]: a `Bot` needs a [Turn] per
+ * call, and `Turn` is a class, so using one would allocate an object per simulated move across
+ * millions of them.
  */
 public class FlatMonteCarloBot(setup: BotSetup) : Bot {
     private val self = setup.self
     private val rng = setup.rng
     private val unbudgeted = SpaceBot(setup)
+
+    /**
+     * Uniform, and not a setting.
+     *
+     * This bot is [UctBot]'s ablation control — the same rollout at the same allowance with the tree
+     * removed — so its rollout is whatever `uct` ships with rather than whatever `uct` can be asked
+     * for. [UctBot.ROLLOUT_POLICY] is where the alternatives are reached, and a control that moved
+     * with the subject would stop being one.
+     */
+    private val policy = RolloutPolicy(RolloutPolicy.UNIFORM, setup.grid)
     private val total = DoubleArray(Direction.entries.size)
     private val rollouts = IntArray(Direction.entries.size)
 
@@ -76,7 +86,7 @@ public class FlatMonteCarloBot(setup: BotSetup) : Bot {
             next++
 
             playout.advance(opening)
-            val result = randomPlayout(playout, rng)
+            val result = randomPlayout(playout, rng, policy)
 
             total[opening.ordinal] += rewardFor(result, playout)
             rollouts[opening.ordinal]++

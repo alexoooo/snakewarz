@@ -18,6 +18,22 @@ import ao.snakewarz.match.MatchSetup
  * much as the bots. And every pairing draws from the *same* seeds, so contestants are compared on
  * the same set of games rather than on independent samples of them — a paired comparison, which is
  * a great deal tighter for the same amount of compute.
+ *
+ * ### How much acting first is worth, and that it stops being worth anything at three seats
+ *
+ * Measured rather than assumed, on the nine shipped bots at a 12x12, mirrored openings, the shipped
+ * allowance, one seat count against the other and nothing else moved:
+ *
+ * | seats | matches | the first mover won | even is | z |
+ * |---|---|---|---|---|
+ * | 2 | 14,400 | **54.3%** | 50% | +10.2 |
+ * | 3 | 39,600 | **32.5%** | 33.3% | −3.4 |
+ *
+ * So at two seats the advantage is real and large, which is the whole reason for the even [rounds]
+ * above. **At three it is gone and slightly reversed** — moving first commits against *two* unknown
+ * replies instead of one, and the tempo does not pay for it. The rule stands anyway: the schedule
+ * still has to move everybody, because [TournamentSchedule.seatInto] rotates the *seats* and the
+ * corner a snake starts in is a separate question from the order it acts in.
  */
 public class TournamentConfig(
     /**

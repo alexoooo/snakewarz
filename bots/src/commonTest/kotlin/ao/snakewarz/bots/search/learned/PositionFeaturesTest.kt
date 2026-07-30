@@ -45,7 +45,8 @@ class PositionFeaturesTest {
             PositionFeatures.LENGTH_VS_ROOM, PositionFeatures.LENGTH_MARGIN, PositionFeatures.ISOLATED,
             PositionFeatures.HEAD_WALLS, PositionFeatures.TAIL_DISTANCE, PositionFeatures.RIVAL_DISTANCE,
             PositionFeatures.BOARD_FILL, PositionFeatures.TURN_PROGRESS, PositionFeatures.ISOLATED_MARGIN,
-            PositionFeatures.CONTESTED_SHARE,
+            PositionFeatures.CONTESTED_SHARE, PositionFeatures.FALLBACK_CHAIN, PositionFeatures.CHOKEPOINTS,
+            PositionFeatures.COLOUR_IMBALANCE, PositionFeatures.TEMPO_MARGIN,
         )
         assertEquals((0 until PositionFeatures.LENGTH).toList(), indices.sorted())
     }
@@ -91,6 +92,10 @@ class PositionFeaturesTest {
         var seen = 0
         var sealedFired = 0
         var isolatedFired = 0
+        var fallbackFired = 0
+        var chokeFired = 0
+        var imbalanceFired = 0
+        var tempoFired = 0
 
         for (seed in 1L..4L) {
             walk(12, 12, seed) { features, board ->
@@ -109,6 +114,10 @@ class PositionFeaturesTest {
                     }
                     if (row[PositionFeatures.SEALED] > 0.0) sealedFired++
                     if (row[PositionFeatures.ISOLATED] > 0.0) isolatedFired++
+                    if (row[PositionFeatures.FALLBACK_CHAIN] > 0.0) fallbackFired++
+                    if (row[PositionFeatures.CHOKEPOINTS] > 0.0) chokeFired++
+                    if (row[PositionFeatures.COLOUR_IMBALANCE] > 0.0) imbalanceFired++
+                    if (row[PositionFeatures.TEMPO_MARGIN] != 0.0) tempoFired++
                 }
             }
         }
@@ -116,6 +125,28 @@ class PositionFeaturesTest {
         assertTrue(seen > 400, "only $seen positions -- the fixture stopped being a game")
         assertTrue(sealedFired > 0, "no position in four games cut a snake off from its own ground")
         assertTrue(isolatedFired > 0, "no position in four games separated the snakes")
+
+        // A firing rate for the four readings P4 added, in the test rather than in a transcript. A
+        // reading that is zero everywhere costs a column of every baked weight and buys nothing, and
+        // this is the cheapest place that fact can be asserted. Measured over these four games, of
+        // 1,194 slot-positions:
+        //
+        // | reading | fires on |
+        // |---|---|
+        // | `fallbackChain` | 87, **7.3%** |
+        // | `chokepoints` | 626, 52.4% |
+        // | `colourImbalance` | 988, 82.7% |
+        // | `tempoMargin` | 894, 74.9% |
+        //
+        // **The runner-up chain is the sparse one and that is what it is measuring**: it is non-zero
+        // only where the head has a second branch worth anything, which is rarer than the region
+        // merely coming apart -- `ChamberTree`'s own KDoc puts multi-chamber regions at 52% of
+        // positions on the same fixture, which is where `chokepoints` lands. The thresholds below are
+        // floors well under each figure; they assert a reading is alive, not that it is at 7.3%.
+        assertTrue(fallbackFired > seen / 25, "the runner-up chain read zero in all but $fallbackFired of $seen")
+        assertTrue(chokeFired > seen / 3, "the region held a chokepoint in only $chokeFired of $seen")
+        assertTrue(imbalanceFired > seen / 2, "the colouring balanced exactly in all but $imbalanceFired of $seen")
+        assertTrue(tempoFired > seen / 2, "the tempo margin was flat in all but $tempoFired of $seen")
     }
 
     @Test

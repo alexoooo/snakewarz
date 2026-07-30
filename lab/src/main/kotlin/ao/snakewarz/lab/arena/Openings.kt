@@ -23,6 +23,14 @@ internal enum class Openings {
      * Kept because the shipped ladder was measured under it, so it is what a result has to be
      * compared against, and because the contrast with [MIRRORED] is the evidence for the paragraph
      * above.
+     *
+     * **Past two snakes it is not merely undiversified, it is unfair, and by a lot.**
+     * `mostDistantSpawns` puts the third snake in a *third corner*, so on a square board two seats
+     * are a diagonal apart and the third is an edge away from both of them — a geometry no seating
+     * rotation makes even within one board. Three byte-identical `chase` entrants over 2,000 seed
+     * groups on a 12x12 won **83.4% / 0.05% / 16.6%** by seat, against 32.3% / 34.3% / 33.4% under
+     * [MIRRORED] on the same entrants and the same seeds. A seat there is worth more than any bot in
+     * this repository, so a free-for-all measured under this is measuring the corner.
      */
     FIXED,
 
@@ -38,6 +46,16 @@ internal enum class Openings {
      * With more than two snakes there is no placement that is fair to everybody, so this spreads
      * them at random subject to a minimum separation and leaves the fairness to the seating
      * rotation, which is what a free-for-all seed group already does.
+     *
+     * **That delegation is measured rather than argued, and it holds.** The draw is a rejection
+     * sample whose acceptance test is symmetric in the squares, so the accepted triple is
+     * exchangeable across seats — and `MatchSetup.create` shuffles the turn order uniformly, so the
+     * other per-seat asymmetry is exchangeable too. Three byte-identical entrants on a 12x12 win by
+     * seat: `chase` **32.3 / 34.3 / 33.4%** over 2,000 seed groups, `puct:eval=territory@1000`
+     * **32.8 / 31.6 / 35.6%** over 1,600 across two blocks on disjoint seeds — chi-square 1.2 and
+     * 3.9 on two degrees of freedom, neither near significant. So a three-seat rating taken under
+     * this is not confounded by the seating, to within about **2.3 points of win share** at that
+     * sample size. Under [FIXED] the same probe reads 83 / 0 / 17.
      */
     MIRRORED,
 }

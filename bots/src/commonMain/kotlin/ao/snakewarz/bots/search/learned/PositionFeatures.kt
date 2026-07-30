@@ -62,6 +62,48 @@ import kotlin.math.abs
  * - **[TAIL_DISTANCE] is `MovePrior`'s strongest single reading** promoted from a fact about a move to
  *   a fact about a position.
  *
+ * ### The last four came from the fit's residual, and they are worth almost nothing
+ *
+ * [FALLBACK_CHAIN], [CHOKEPOINTS], [COLOUR_IMBALANCE] and [TEMPO_MARGIN] were added because the fit's
+ * train and holdout losses agreed to five places, which says the model is short of *readings* rather
+ * than of capacity or data. They are: what the second best chain is worth, how many cut vertices the
+ * region has, the colour imbalance before the parity cap spends it, and whose ground is nearer to its
+ * owner. Each is free — the [TempoOwnership] sweep and the [ChamberTree] decomposition were running
+ * already, and three of the four are counters in a pop.
+ *
+ * **Measured, over 965,878 rows off 39,600 logged matches at three board sizes, three fits of each
+ * shape on the same corpus and the same seeds: they buy `0.0039 ± 0.0017` of held-out log-loss and
+ * 0.26 points of accuracy.** Paired per seed, twenty-five readings against twenty-nine: 0.57819 →
+ * 0.57370, 0.57526 → 0.57211, 0.57514 → 0.57102, against 0.69315 for a model that answers even. Per
+ * board the four are worth 0.0054 at 8x8, 0.0059 at 12x12 and **0.0024** at 20x20 — least where the
+ * leaf was worst.
+ *
+ * Set that beside the two things already measured on the same scale: **the hidden layer is worth
+ * 0.023**, and **refitting the identical twenty-five readings on the board being played is worth
+ * 0.048 at 20x20**. So the residual did name four real readings, and the diagnosis it was read as —
+ * *"bounded by its features"* — was wrong by an order of magnitude. That equality was measured on a
+ * holdout drawn from a **one-board** corpus, where the only thing it can be is a statement about
+ * capacity; it says nothing at all about whether the fit transfers. `LearnedWeights` carries both
+ * tables.
+ *
+ * They are kept, at four columns of a 497-weight literal, because the sign is negative on every board
+ * at every seed and the cost is work the leaf was already doing. They are **not** the reason the
+ * shipped fit moved.
+ *
+ * ### A fifth was measured and declined: how big the board is
+ *
+ * Step 0 showed one model over three boards losing 0.0015 / 0.0096 / 0.0092 to three models fitted one
+ * per board, which is a **mixture tax** and exactly what a reading a hidden unit could gate on would
+ * recover. Tried, as `playable / (playable + 144)`: worth `0.0017` pooled over the same three seeds,
+ * 95% CI **[−0.0037, +0.0003]** — it does recover the 12x12 tax outright and it does not clear zero.
+ *
+ * Declined, for two reasons that outweigh a marginal number. It is the **only** reading here that is
+ * not a ratio, a share or a flag, so it retires the property this whole vector is built on and the
+ * test that pins it — *"the same opening reads the same on a small board and a large one"*. And a
+ * fitted corpus spans `0.31..0.74` of that reading where `MatchSetup.MAX_SIDE` of 256 reaches `0.999`,
+ * so any board outside the corpus hands the softsign units an input past everything anybody measured.
+ * A reading that is safe only on the boards it was fitted on is the failure this phase was sent to fix.
+ *
  * ### How to read it
  *
  * [measure] once per position, then [into] per slot. Both are allocation-free after the constructor,
@@ -72,7 +114,7 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
     private val space = TempoOwnership(grid, slotCount)
 
     /** The cap on and the discount off, so the chain is a square count and the contested share is free. */
-    private val chambers = ChamberTree(grid, parityWeight = 1.0, frontierPenalty = 0.0)
+    private val chambers = ChamberTree(grid, parityWeight = 1.0, frontierPenalty = 0.0, allReadings = true)
 
     private val alive = BooleanArray(slotCount)
     private val usable = DoubleArray(slotCount)
@@ -87,6 +129,10 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
     private val headRow = IntArray(slotCount)
     private val headCol = IntArray(slotCount)
     private val tailReach = IntArray(slotCount)
+    private val fallback = DoubleArray(slotCount)
+    private val chokepoints = DoubleArray(slotCount)
+    private val imbalance = DoubleArray(slotCount)
+    private val reach = DoubleArray(slotCount)
 
     private var live = 0
     private var totalUsable = 0.0
@@ -121,6 +167,10 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
                 liberties[slot] = 0
                 length[slot] = 0
                 growing[slot] = false
+                fallback[slot] = 0.0
+                chokepoints[slot] = 0.0
+                imbalance[slot] = 0.0
+                reach[slot] = 0.0
                 continue
             }
             live++
@@ -135,6 +185,10 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
             sealedShare[slot] = chambers.sealed
             contestedShare[slot] = if (area == 0) 0.0 else chambers.exposedArea.toDouble() / area
             chamberSplit[slot] = splitOf(chambers.chamberCount)
+            fallback[slot] = if (chambers.chainWorth <= 0.0) 0.0 else (chambers.secondWorth / chambers.chainWorth)
+            chokepoints[slot] = if (area == 0) 0.0 else chambers.articulations.toDouble() / area
+            imbalance[slot] = if (area == 0) 0.0 else chambers.colourImbalance.toDouble() / area
+            reach[slot] = if (area == 0) 0.0 else chambers.distanceSum.toDouble() / area
             liberties[slot] = board.legalMoves(SnakeId(slot)).size
             length[slot] = snake.length
             growing[slot] = snake.growsOnNextMove
@@ -172,6 +226,7 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
         var rivalLiberties = Direction.entries.size
         var rivalLength = 0
         var rivalReach = Int.MAX_VALUE
+        var rivalTempo = Double.MAX_VALUE
 
         for (other in 0 until slotCount) {
             if (other == slot || !alive[other]) {
@@ -183,8 +238,12 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
             if (liberties[other] < rivalLiberties) rivalLiberties = liberties[other]
             if (length[other] > rivalLength) rivalLength = length[other]
 
-            val reach = abs(headRow[other] - headRow[slot]) + abs(headCol[other] - headCol[slot])
-            if (reach < rivalReach) rivalReach = reach
+            // The nearest ground is the strongest challenge here, the way the most usable ground and
+            // the fewest liberties are above: a rival who has to walk furthest is the least dangerous.
+            if (reach[other] < rivalTempo) rivalTempo = reach[other]
+
+            val apart = abs(headRow[other] - headRow[slot]) + abs(headCol[other] - headCol[slot])
+            if (apart < rivalReach) rivalReach = apart
         }
 
         val fair = if (live == 0) 1.0 else 1.0 / live
@@ -220,6 +279,10 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
         into[TURN_PROGRESS] = progress
         into[ISOLATED_MARGIN] = isolated * usableMargin
         into[CONTESTED_SHARE] = (1.0 - isolated) * usableShare
+        into[FALLBACK_CHAIN] = fallback[slot]
+        into[CHOKEPOINTS] = chokepoints[slot].coerceAtMost(1.0)
+        into[COLOUR_IMBALANCE] = imbalance[slot].coerceAtMost(1.0)
+        into[TEMPO_MARGIN] = if (rivalTempo == Double.MAX_VALUE) 0.0 else margin(rivalTempo, reach[slot])
     }
 
     override fun toString(): String = "PositionFeatures($LENGTH)"
@@ -316,8 +379,48 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
         /** [USABLE_SHARE] while the board is still contested, and zero once it is not. */
         public const val CONTESTED_SHARE: Int = 24
 
+        /**
+         * What the runner-up chain is worth against the best one — how much is left if the best is wrong.
+         *
+         * [USABLE_SHARE] is a max over the branches out of the head and a max carries nothing about
+         * what is behind it: one good way out and one good way out beside a dead end read identically.
+         * Zero where the region is a single chamber, which is the honest answer rather than a missing
+         * one — there is no second branch to take.
+         */
+        public const val FALLBACK_CHAIN: Int = 25
+
+        /**
+         * Cut vertices per square of the region — how choked the ground is, rather than how split.
+         *
+         * [CHAMBERS] counts the pieces; this counts the squares that make them pieces, and the two
+         * come apart exactly where it matters: five chambers in a line is four chokepoints and five
+         * chambers around one square is one. Free at the leaf — Hopcroft-Tarjan is already running
+         * and the count falls out of the pop it is already doing.
+         */
+        public const val CHOKEPOINTS: Int = 26
+
+        /**
+         * The share of the region the chessboard colouring cannot pair off, **before** any cap.
+         *
+         * [USABLE_SHARE] is measured through `FillableSpace`'s cap, which is this reading already
+         * spent. Carried raw for the same reason [CONTESTED] is: a weight already applied is a weight
+         * that cannot be learned, and the parity relaxation has now lost twice as a hand-set weight
+         * (`HorizonEval` by argument, SPSA by search) without ever being offered as a *reading*.
+         */
+        public const val COLOUR_IMBALANCE: Int = 27
+
+        /**
+         * Whether this snake's ground is nearer to it than the strongest rival's is to that one.
+         *
+         * Every other reading of space here is an amount; this is the *tempo* of it, off the arrival
+         * times `TempoOwnership` already computed and which nothing else in the box reads at all. Two
+         * snakes holding the same count of squares are not in the same position when one of them has
+         * to walk twice as far to start spending them.
+         */
+        public const val TEMPO_MARGIN: Int = 28
+
         /** How many readings a row holds. Adding one changes every baked weight, so it is a decision. */
-        public const val LENGTH: Int = 25
+        public const val LENGTH: Int = 29
 
         /**
          * What each reading is called, for a trainer that wants to print a weight beside its feature.
@@ -331,6 +434,7 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
             "liberties", "trapped", "rivalLiberties", "rivalTrapped", "growsNext",
             "lengthVsRoom", "lengthMargin", "isolated", "headWalls", "tailDistance",
             "rivalDistance", "boardFill", "turnProgress", "isolatedMargin", "contestedShare",
+            "fallbackChain", "chokepoints", "colourImbalance", "tempoMargin",
         )
 
         /** Sides a square has, which is both the ways out of it and the walls it can sit against. */

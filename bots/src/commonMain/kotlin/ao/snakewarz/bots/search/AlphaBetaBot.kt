@@ -97,28 +97,41 @@ import ao.snakewarz.core.rules.MatchOutcome
  * ### How deep it gets, which is the number that decides whether any of this can work
  *
  * `AlphaBetaBotTest` plays this bot against itself at the shipped allowance and reports the plies
- * each pass completed:
+ * each pass completed. Re-measured at the shipped `territory` leaf when [EVAL]'s default moved, with
+ * the `chamber` figures the table used to carry kept beside them:
  *
- * | board | searched turns | mean | min | max |
- * |---|---|---|---|---|
- * | 12x12 | 138 | **11.2 plies** | 8 | 16 |
- * | 20x20 | 362 | **11.6 plies** | 8 | 27 |
+ * | board | searched turns | mean | min | max | at `chamber` |
+ * |---|---|---|---|---|---|
+ * | 12x12 | 231 | **12.6 plies** | 2 | 23 | 138 turns, 11.2, 8..16 |
+ * | 20x20 | 362 | **14.3 plies** | 2 | 48 | 362 turns, 11.6, 8..27 |
  *
- * At a tenth of the allowance the 12x12 mean is 6.0, so the depth is roughly logarithmic in the
- * budget as a branching factor near three demands: **ten times the evaluations buy five more plies.**
+ * At a tenth of the allowance the 12x12 mean is 6.6 where it was 6.0, so the depth is still roughly
+ * logarithmic in the budget as a branching factor near three demands: **ten times the evaluations buy
+ * six more plies.**
  *
- * Eleven plies is five and a half moves each. What decides a filling endgame here is whether a region
- * can be spent, and that is a hundred moves out — so this search is exact about a horizon that is not
- * where the game is decided, and everything past it is [ChamberEval]'s guess, the same guess `puct`
- * makes. That is the honest statement of what an exact search can be in this game, and it is the
- * finding rather than a caveat: depth is not the scarce resource a chess intuition expects it to be.
+ * **The two figures that moved most are not depth, and they are worth reading before the mean.** The
+ * 12x12 self-play game went from 138 searched turns to 231 — a cheaper leaf per node does not buy
+ * plies, since an allowance is counted in evaluations, but it does buy a bot that survives half again
+ * as long against itself. And the **minimum fell from 8 plies to 2 on both boards**: somewhere in the
+ * longer game there is a turn whose tree is wide enough that the allowance buys only one full pass.
+ * `AlphaBetaBotTest`'s assertion is `min >= 2`, so it holds with nothing to spare, and it holds
+ * because a partial pass is never adopted as a depth. That is the assertion to read if it ever fires.
+ *
+ * Twelve plies is six moves each. What decides a filling endgame here is whether a region can be
+ * spent, and that is a hundred moves out — so this search is exact about a horizon that is not where
+ * the game is decided, and everything past it is [LeafEval]'s guess, the same guess `puct` makes. That
+ * is the honest statement of what an exact search can be in this game, and it is the finding rather
+ * than a caveat: depth is not the scarce resource a chess intuition expects it to be. Two more plies
+ * off a cheaper leaf is the same lesson from the other side.
  *
  * ### What the replay costs, which is the design's own bill
  *
  * `lab time`, best of three, six seeds a figure, entrants interleaved within a seed so a drift would
- * move all three together, with `uct` carried as a control neither entrant can touch:
+ * move all three together, with `uct` carried as a control neither entrant can touch. **Taken at
+ * `eval=chamber`, which this bot no longer ships at** — kept because the quantity it isolates is the
+ * *replay*, and the only way to isolate it is against the `puct` on the identical leaf:
  *
- * | board | `uct`, control | `puct:eval=chamber` | this | ratio |
+ * | board | `uct`, control | `puct:eval=chamber` | this, at `eval=chamber` | ratio |
  * |---|---|---|---|---|
  * | 12x12 | 1.61 ms | 3.85 ms | **4.19 ms** | **1.09x** |
  * | 20x20 | 1.85 ms | 10.05 ms | **10.33 ms** | **1.03x** |
@@ -135,7 +148,22 @@ import ao.snakewarz.core.rules.MatchOutcome
  * `time` plays a different game per entrant, so a seed pairs the board and not the position; the
  * ratio is what to quote and the control is what makes the session readable at all.
  *
+ * **At the leaf this bot now ships at, the replay does not resolve above the instrument's noise.**
+ * P1's Chrome `AppraisalTape` sweep — a line neither entrant chooses, so a ratio there is about the
+ * two turns and nothing else — puts this bot at `territory` at **1.13x / 0.95x / 1.02x** bare `puct`
+ * on 8x8 / 12x12 / 20x20, and P3a's four further browser runs pool the 12x12 figure to **0.993x**
+ * over seven runs. A replay overhead that reads *below* one on two boards of three is an overhead the
+ * sweep cannot see: [TerritoryEval] is a cheaper leaf than [ChamberEval], so the same absolute replay
+ * is a larger share of a smaller turn, and it is still under the spread between two runs of the same
+ * cell. That is the stronger form of the paragraph above, arrived at from the other direction.
+ *
  * ### What it is worth, and the intransitivity is the finding
+ *
+ * **Both fields below seat this bot at `eval=chamber`, which is what it defaulted to when they were
+ * run and is not what it ships at now.** They are kept rather than restated because what they are
+ * evidence *for* is not this bot's placement — it is the instrument lesson underneath, that a
+ * head-to-head and a field disagree here by more than either one's interval, and neither of them is
+ * wrong. [EVAL] carries the measurement that moved the default and the field it was taken in.
  *
  * 200 rounds over seven entrants at the shipped allowance on a 12x12 — 4,200 matches, **3,219 of them
  * distinct games**, worst pairing 120 of 200 distinct, and no forfeits:
@@ -176,9 +204,9 @@ import ao.snakewarz.core.rules.MatchOutcome
  *
  * | entrant | rating | 95% |
  * |---|---|---|
- * | this at an allowance of 3,000 | **105** | +81..+131 |
+ * | this at `eval=chamber`, allowance 3,000 | **105** | +81..+131 |
  * | `puct:eval=chamber` at 3,000 | 48 | +25..+72 |
- * | this at 1,000 | 4 | −19..+29 |
+ * | this at `eval=chamber`, allowance 1,000 | 4 | −19..+29 |
  * | `puct:eval=chamber` at 1,000 | −44 | −66..−21 |
  * | `uct` at 1,000 | −114 | −140..−92 |
  *
@@ -194,13 +222,19 @@ import ao.snakewarz.core.rules.MatchOutcome
  * rating is a single ordering fitted over one. Neither number is the bot's strength; the pair of them
  * is what this bot is.
  *
- * ### Registered experimental, and what it is for
+ * ### The top ladder rung, which it was not when the two fields above were run
+ *
+ * P2 and P3a moved this bot's leaf and P3 seated it, so it is no longer registered experimental: it
+ * is the last rung of `ShippedBots`' ladder, above `puct`, and `BotLadderTest` asserts it beats that
+ * bot. The evidence and the one board-size reversal inside it are in [EVAL] and in that test's KDoc.
  *
  * `PuctBot.SEARCH`'s range and this one's are the same numbers so the two are comparable at an equal
  * allowance, and the leaf weights are read off `puct`'s own knob declarations rather than
- * re-declared, so `alphabeta` against `puct:eval=chamber` is a batch about the *search*. Whether an
- * exact search is worth its depth here is a measurement; [MAX_PLY] and [depthReached] are how it is
- * taken.
+ * re-declared. **Both bots now default to `territory`, so bare `alphabeta` against bare `puct` is the
+ * batch about the *search*** — which is simpler and truer than the `alphabeta` against
+ * `puct:eval=chamber` this sentence used to name, and it is the pairing `BotLadderTest`'s top rung
+ * plays. Whether an exact search is worth its depth here is a measurement; [MAX_PLY] and
+ * [depthReached] are how it is taken.
  */
 public class AlphaBetaBot(setup: BotSetup) : Bot {
     private val unbudgeted = SpaceBot(setup)
@@ -556,9 +590,78 @@ public class AlphaBetaBot(setup: BotSetup) : Bot {
          * Which [LeafEval] the search bottoms out in — five of the six `puct` offers, at its
          * weights, and spelled with that bot's own constants so the two can never drift apart.
          *
-         * Defaulting to `chamber` rather than to `territory`: nothing is pinned to this bot's
-         * defaults yet, and the strongest hand-written leaf in the box is the one that makes the
-         * search the variable.
+         * ### Moved from `chamber` to `territory`, and the reason is cost rather than the leaf
+         *
+         * The old default's justification was that *"nothing is pinned to this bot's defaults yet,
+         * and the strongest hand-written leaf in the box is the one that makes the search the
+         * variable."* **Both halves were false by the time it moved**: `GoldenMoveStreamTest`'s
+         * `alpha-beta against random on 12x12` is pinned to exactly these defaults, and "strongest
+         * leaf" was a ranking taken at equal *allowance*, where [ChamberEval] is handed 2.4x to 4.6x
+         * the wall clock [TerritoryEval] gets for the same number.
+         *
+         * At equal clock that reverses, and it is not close. P2's three twelve-rung fields —
+         * 13,200 matches a board, one `rate` fit each, every rung at the allowance P1's Chrome
+         * `AppraisalTape` sweep assigned it:
+         *
+         * | board | this at `territory` | this at `chamber`, equal clock | gap |
+         * |---|---|---|---|
+         * | 8x8 | 177 (+161..+193) @1000 | 69 (+55..+86) @420 | **+108** |
+         * | 12x12 | 101 (+88..+118) @1000 | 55 (+41..+69) @285 | **+46** |
+         * | 20x20 | 240 (+224..+257) @1000 | 199 (+185..+216) @225 | **+41** |
+         *
+         * **This comparison is the one the default moved on, and it is the one that survives every
+         * cut.** A fresh-seed seven-rung 12x12 field on a disjoint seed base (4,200 matches, 2,900
+         * distinct) reproduces the +46 exactly, with the candidate's `+20..+54` disjoint from the
+         * incumbent's `−28..+8`; and three sequential tests at `elo0=0, elo1=5` agree in sign on all
+         * three boards — **+33 ±14** over 1,120 boards at 8x8 (BETTER), **+21 ±15** over 1,200 at
+         * 12x12 (UNDECIDED at `--max-pairs`, LLR 2 of 3), **+98 ±26** over 360 at 20x20 (BETTER).
+         * They agree in sign on three boards and in magnitude on none, which is this bot's own
+         * documented lesson arriving a third time.
+         *
+         * ### The claim that does **not** hold, and it is the one a reader will reach for first
+         *
+         * P2's headline was that this rung is *first in the field at equal clock on every board*.
+         * That is what the fitted ratings say and it does not survive its own residual table:
+         *
+         * - **At 12x12 it is a dead heat with bare `puct`.** Both rungs play the identical other ten
+         *   entrants; `rate` prints their mutual pairing as a residual on every board. Scored over
+         *   the common ten only, it is **60.45% against 59.00%**, 2,000 games each, **z = 0.72**
+         *   against the distinct-game count. The fitted +36 is the direct 70.5% pairing folded into
+         *   one ordering.
+         * - **At 8x8 it rates +131 above bare `puct` while losing its head-to-head to it, 89-111.**
+         *   `rate` says so outright. Its +177 is bought off the middle of the field, and 8x8 is also
+         *   the board with the worst opening coverage and the one allowance P3a could not pin in
+         *   seven browser runs (0.63x to 1.44x).
+         *
+         * So: adopted **against its own incumbent**, not on a ranking. The two claims want different
+         * amounts of trust and the KDoc is where the difference has to be written down.
+         *
+         * ### The benefit nobody costed, which is the one a player feels
+         *
+         * `AppraisalTape` in Chrome at 20x20 and the shipped 1,000, divided by P1's 4.1x machine
+         * factor. The frame criterion is the **dearest** turn, because `:ui` stops between turns and
+         * not inside one:
+         *
+         * | | mean turn | dearest turn | against `:ui`'s 8 ms slice |
+         * |---|---|---|---|
+         * | this, at `chamber` | ~25 ms | **~44 ms** | **5.5x over** |
+         * | this, at `territory` | ~5.9 ms | **~8.5 ms** | at the edge |
+         * | `puct`, for scale | ~5.8 ms | ~8.7 ms | at the edge |
+         *
+         * `MatchSetup.DEFAULT_BUDGET_PER_TURN`'s KDoc calls the eval spread *"a cost this constant
+         * would have to answer for if the default evaluation ever moved."* Moving this one answers
+         * it in the good direction: the shipped `alphabeta` went from overrunning a frame by five
+         * and a half times on a large board to sitting where `puct` already sat.
+         *
+         * ### What moved with it
+         *
+         * `GoldenMoveStreamTest`'s bare `alpha-beta` hash, and nothing else in the repository. A
+         * shared replay link for a match played at `chamber` encodes no `eval` — `SlotForm.valueOf`
+         * omits a knob at its default — so `:ui` will label it *"Alpha-Beta - territory"*. Playback
+         * is unaffected; `:ui` plays the recorded move stream and never calls `MatchRecord.verify`.
+         * Exposure is bounded: `:ui` seats `uct` by default, so this bot appears only where somebody
+         * chose it. That is the standing decision on breaking changes being spent, and it is spent
+         * knowingly.
          *
          * **`learned` is offered on easier terms than the rest**, which is worth saying because
          * [paranoidMargin]'s subtraction is what makes an evaluation mean something different here.
@@ -576,7 +679,7 @@ public class AlphaBetaBot(setup: BotSetup) : Bot {
             name = "eval",
             label = "Evaluation",
             help = "How a leaf is judged: liberties, a share of the board, or how long each snake can last.",
-            default = PuctBot.CHAMBER,
+            default = PuctBot.TERRITORY,
             values = listOf(PuctBot.CHAMBER, PuctBot.LEARNED, PuctBot.TERRITORY, PuctBot.SURVIVAL, PuctBot.MOBILITY),
             tradeoff = true,
         )

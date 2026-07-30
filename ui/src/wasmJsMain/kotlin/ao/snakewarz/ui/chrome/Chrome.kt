@@ -329,8 +329,13 @@ internal class Chrome(
             }
         }
 
-        // You against the best bot there is, with the rest of the board empty: the page opens on the
-        // game somebody came here to play, not on the weakest rung of the ladder.
+        // You against a strong bot, with the rest of the board empty: the page opens on the game
+        // somebody came here to play, not on the weakest rung of the ladder.
+        //
+        // It used to say "the best bot there is", and that stopped being true when `puct` and
+        // `alphabeta` graduated above `DEFAULT_OPPONENT` into the ladder. Which of the three a page
+        // nobody has configured should open on is a design decision and not a consequence of a
+        // ranking, so the slug below is unchanged and this comment no longer claims a superlative.
         selectIfOffered(botSelects[0], PlayableRegistry.HUMAN_ID.slug)
         val opponent = bots.firstOrNull { it.id.slug == DEFAULT_OPPONENT } ?: bots.firstOrNull()
         opponent?.let { selectIfOffered(botSelects[1], it.id.slug) }
