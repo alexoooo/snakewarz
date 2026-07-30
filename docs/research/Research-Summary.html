@@ -1,0 +1,816 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>snakewarz — research summary</title>
+
+<style>
+  :root {
+    --bg: #fbfaf8;
+    --panel: #ffffff;
+    --ink: #1b1d21;
+    --ink-soft: #55595f;
+    --ink-faint: #8b9097;
+    --rule: #e3e0da;
+    --ship: #2f7d6f;
+    --exp: #b8792a;
+    --base: #9aa0a6;
+    --bad: #b04a3f;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171b;
+      --panel: #1c1f24;
+      --ink: #e7e5e1;
+      --ink-soft: #a8adb4;
+      --ink-faint: #767c84;
+      --rule: #2c3037;
+      --ship: #57b3a1;
+      --exp: #d69a4e;
+      --base: #6f767e;
+      --bad: #d47264;
+    }
+  }
+
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.62 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; padding: 3.5rem 1.5rem 6rem; }
+
+  h1 { font-size: 2.1rem; line-height: 1.2; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  h2 {
+    font-size: 1.3rem; margin: 3.6rem 0 .2rem; letter-spacing: -.01em;
+    padding-top: 1.4rem; border-top: 1px solid var(--rule);
+  }
+  h3 { font-size: 1.02rem; margin: 2.1rem 0 .3rem; }
+  h2 + .sub, h1 + .sub { color: var(--ink-soft); margin: 0 0 1.4rem; }
+  p { margin: .85rem 0; }
+  a { color: inherit; text-decoration-color: var(--ink-faint); text-underline-offset: 2px; }
+  code, .m { font-family: var(--mono); font-size: .88em; }
+  strong { font-weight: 650; }
+  .lede { font-size: 1.08rem; color: var(--ink-soft); max-width: 46rem; }
+  .note { color: var(--ink-soft); font-size: .92rem; }
+
+  figure { margin: 1.6rem 0 0; }
+  figcaption { color: var(--ink-soft); font-size: .88rem; margin-top: .7rem; }
+  .chart { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 1.1rem 1rem .7rem; }
+  .chart svg { display: block; width: 100%; height: auto; }
+  .chart .lab { font: 12.5px var(--mono); fill: var(--ink); }
+  .chart .val { font: 12px var(--mono); fill: var(--ink-soft); }
+  .chart .ax  { font: 11px var(--mono); fill: var(--ink-faint); }
+  .chart .tick { stroke: var(--rule); }
+  .chart .zero { stroke: var(--ink-faint); stroke-dasharray: 3 3; }
+  .chart .whisk { stroke: var(--ink-faint); }
+  .s-ship rect, .s-ship circle, .s-ship path { fill: var(--ship); }
+  .s-exp  rect, .s-exp  circle, .s-exp  path { fill: var(--exp); }
+  .s-base rect, .s-base circle, .s-base path { fill: var(--base); }
+
+  .key { display: flex; flex-wrap: wrap; gap: 1.1rem; margin: .9rem 0 0; font-size: .85rem; color: var(--ink-soft); }
+  .key span { display: inline-flex; align-items: center; gap: .4rem; }
+  .key i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+
+  .scroll { overflow-x: auto; margin: 1.3rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+  th, td { text-align: left; vertical-align: top; padding: .55rem .75rem; border-bottom: 1px solid var(--rule); }
+  th { font-weight: 620; color: var(--ink-soft); font-size: .84rem; letter-spacing: .02em; text-transform: uppercase; }
+  td.n, th.n { text-align: right; font-family: var(--mono); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .pill {
+    display: inline-block; padding: .08rem .5rem; border-radius: 999px;
+    font-size: .74rem; font-weight: 650; letter-spacing: .02em; white-space: nowrap;
+    border: 1px solid currentColor;
+  }
+  .p-ship { color: var(--ship); }
+  .p-keep { color: var(--exp); }
+  .p-null { color: var(--ink-faint); }
+  .p-neg  { color: var(--bad); }
+
+  blockquote {
+    margin: 1.4rem 0; padding: .1rem 0 .1rem 1.1rem;
+    border-left: 3px solid var(--rule); color: var(--ink-soft);
+  }
+  ul { padding-left: 1.15rem; }
+  li { margin: .45rem 0; }
+  footer { margin-top: 4rem; padding-top: 1.4rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .86rem; }
+  noscript p { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: .8rem 1rem; }
+</style>
+
+<div class="wrap">
+
+<h1>Research summary</h1>
+<p class="sub m">snakewarz · two agendas · sixteen phases · 2026-07-28 → 2026-07-30</p>
+
+<p class="lede">
+  Both research agendas are closed. The first built a frontier of experimental bots and shipped
+  none of them; the second measured that frontier at an equal wall clock and shipped the one thing
+  nobody had proposed. This page is the account: what each phase attempted, what it found, and where
+  the ladder stands now.
+</p>
+
+<p class="note">
+  Every Elo figure here is quoted <em>beside the field it was fitted in</em>. Ratings from different
+  fields are not comparable — these match-ups are intransitive, and a single Elo fitted over a cycle
+  is field-composition-dependent. Where this page draws a line across time, it does so inside one
+  field, and says so.
+</p>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>The ladder today</h2>
+<p class="sub">Nine shipped rungs, one field, one fit.</p>
+
+<p>
+  The span from <code>random</code> to <code>alphabeta</code> is <strong>1,242 Elo</strong>, and the
+  two rungs at the top are new. Both were registered experimental from the day each arrived and
+  graduated together on 2026-07-29 — one decision, not two, because the evidence that admits
+  <code>puct</code> admits <code>alphabeta</code> above it on stronger evidence.
+</p>
+
+<figure>
+  <div class="chart" id="c-ladder"></div>
+  <div class="key">
+    <span><i style="background:var(--ship)"></i> graduated 2026-07-29</span>
+    <span><i style="background:var(--base)"></i> shipped before the research began</span>
+    <span><i style="background:var(--exp)"></i> retired default, kept as a knob value</span>
+  </div>
+  <figcaption>
+    Ten entrants, 18,000 matches, 15,143 of them distinct games, 12×12 at budget 1000, mirrored
+    openings, head to head, no forfeits. Bars are the fitted rating, whiskers the 95% bootstrap
+    interval. <code>alphabeta:eval=chamber</code> is not a shipped rung — it is the default retired on
+    2026-07-29, seated here so both agendas’ endpoints sit on one scale instead of being differenced
+    across two fields.
+  </figcaption>
+</figure>
+
+<noscript><p>Charts need JavaScript. Every number in them also appears in a table or in the prose.</p></noscript>
+
+<p>
+  The retired rung is worth reading. <code>alphabeta:eval=chamber</code> rates <span class="m">497</span>
+  against the shipped <code>territory</code> leaf’s <span class="m">527</span> — and it
+  <em>wins the direct head-to-head 225–175</em>, which <code>rate</code> flags in its own output rather
+  than smoothing away. That is this repository’s sharpest standing rule firing on cue: <strong>a
+  head-to-head between two settings of one bot measures a style match-up, and only a common field
+  converts it into strength.</strong> Both rungs ran here at budget 1000, so the <code>chamber</code>
+  leaf — 3.48× <code>puct</code>’s wall clock against <code>territory</code>’s 0.95× — was handed
+  roughly three and a half times the milliseconds and still rates below. The independent equal-clock
+  measurement that authorised the change put the same gap at <span class="m">+46</span>.
+</p>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>The frontier over time</h2>
+<p class="sub">What was certified, against what had been measured.</p>
+
+<p>
+  The interesting thing about the two agendas is the gap between these two lines. The 2026-07-28
+  agenda produced eight landed phases and moved <strong>no default and no ladder rung</strong> —
+  deliberately, because moving one moves a golden hash and a ladder threshold, which is a release
+  decision rather than a measurement. So for a full agenda the strongest bot in the tree sat above the
+  strongest bot a player could pick, and the whole of that gap was banked at once by the second
+  agenda's third phase.
+</p>
+
+<figure>
+  <div class="chart" id="c-frontier"></div>
+  <div class="key">
+    <span><i style="background:var(--ship)"></i> top of the certified ladder</span>
+    <span><i style="background:var(--exp)"></i> <code>alphabeta</code>, measured but not shipped</span>
+  </div>
+  <figcaption>
+    Both series are seated in the single field above, so the three points are one fit and not three.
+    The dashed series starts at the first agenda’s close because the rungs above <code>uct</code>
+    before it did not yet have the bitboard sweep, and a bot that no longer exists cannot be seated —
+    the pre-agenda point is deliberately absent rather than estimated. <code>alphabeta</code> at the
+    2026-07-28 close is its then-default <code>eval=chamber</code>; the 2026-07-30 point is the same
+    bot after its leaf moved to <code>territory</code>.
+  </figcaption>
+</figure>
+
+<p>
+  One caveat the chart cannot carry: <em>strongest in the tree</em> was not a settled question at the
+  first agenda’s close. Its alpha-beta phase found a genuine intransitive cycle —
+  <code>alphabeta</code> beat <code>puct:eval=chamber</code> head-to-head 108–92 while rating 62 below
+  it in a broad field and 48 above it in a narrow one, on disjoint intervals both times, with the
+  pairing itself stable. The company moved, not the match-up. So the dashed line is
+  <code>alphabeta</code> specifically — the bot that went on to ship — and not a claim about a
+  maximum.
+</p>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>Agenda 2026-07-28 — building the frontier</h2>
+<p class="sub">Ten workstreams, ranked into eight phases. Closed 2026-07-28.</p>
+
+<p>
+  The question it opened on: the ladder was settled, so <em>does search beat reaction</em> was no
+  longer open. What kind of search, what kind of evaluation, and whether learned models, exact search
+  or bitboards buy anything — those were.
+</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Phase</th><th>Attempted</th><th>What came back</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="m">P1</td>
+      <td><strong>Retraction-aware survival horizon</strong> — “moves until trapped, given my length
+        and growth phase” in place of “cells a self-avoiding walk can take”</td>
+      <td>Oracle-verified against brute force on 3×3–4×5 regions, and four of its own design bullets
+        were wrong. The corrected leaf <strong>loses to <code>survival</code> by 185 Elo</strong> at
+        equal clock. It dies <em>earlier</em> and in a <em>more open</em> board — the predicted
+        signature, inverted.</td>
+      <td><span class="pill p-neg">negative</span></td>
+    </tr>
+    <tr>
+      <td class="m">P2</td>
+      <td><strong>MCTS-Solver</strong> — propagate proven win/loss up the tree as exact rather than
+        averaging it into a mean</td>
+      <td>Correct, and <strong>free</strong> (2166 vs 2181 µs/turn). Its premise was false —
+        <code>puct</code> has no rollouts, so only the tree reaches a terminal and the solver fires on
+        <strong>0.19% of iterations</strong>. It flips sign with the board: <span class="m">+33 ±19</span>
+        on 12×12, <span class="m">−41 ±25</span> on 20×20.</td>
+      <td><span class="pill p-keep">kept, off</span></td>
+    </tr>
+    <tr>
+      <td class="m">P3</td>
+      <td><strong>Bitboard space primitives</strong> — one bit per padded cell, flood fill as
+        shift-and-mask</td>
+      <td>Byte-for-byte identical, all 13 goldens unedited, green in Chrome. <strong>1.59× / 2.13× on
+        <code>puct</code>’s turn</strong> — not the estimated 10–30×, which was structurally wrong
+        (a bitboard flood is <span class="m">O(words × layers)</span>). Worth
+        <strong>+105 ±38 / +205 ±65 Elo</strong> at an unchanged frame budget.</td>
+      <td><span class="pill p-ship">shipped</span></td>
+    </tr>
+    <tr>
+      <td class="m">P4</td>
+      <td><strong>SPSA tuning in <code>:lab</code></strong> — a gradient over every numeric knob at
+        once, since coordinate descent scales badly past ~3</td>
+      <td>Two measurements per iteration at any dimension; common random numbers worth ~7.5× the
+        games. The finding that mattered: <strong>both search shapes manufacture a confident-looking
+        wrong point on a flat knob</strong>, and only a confirming run on fresh boards catches it. So
+        the tool performs it, with no flag to skip.</td>
+      <td><span class="pill p-ship">shipped</span></td>
+    </tr>
+    <tr>
+      <td class="m">P5</td>
+      <td><strong>Chamber-tree evaluation</strong> and a <strong>richer PUCT prior</strong> with a
+        temperature</td>
+      <td><code>eval=chamber</code> is <strong>+85 ±32 Elo over <code>survival</code></strong> for
+        +9% cost, and the <code>seal</code> term is the entire gain — the one question no other leaf
+        in the box could ask. The tuned prior rates <strong>+103</strong> on top of it for 1–2% cost.
+        Neither adopted.</td>
+      <td><span class="pill p-keep">measured, not shipped</span></td>
+    </tr>
+    <tr>
+      <td class="m">P6</td>
+      <td><strong>Iterative-deepening alpha-beta</strong> — the canonical strong Tron bot, and the
+        first exact search in the tree</td>
+      <td><strong>11.2 plies at budget 1000</strong> for a 1.03–1.09× replay tax; the doctrinally
+        clean option turned out to be the cheap one. It <em>beats</em> <code>puct:eval=chamber</code>
+        head-to-head 108–92 while rating 62 <em>below</em> it in a broad field and 48 above it in a
+        narrow one — <strong>a genuine intransitive cycle</strong>.</td>
+      <td><span class="pill p-keep">viable, not shipped</span></td>
+    </tr>
+    <tr>
+      <td class="m">P7</td>
+      <td><strong>Learned evaluation</strong> — 25 hand-crafted features → 16 softsign → logistic,
+        433 weights, fitted from logged replays</td>
+      <td><strong>+29 Elo over <code>eval=chamber</code></strong> on disjoint intervals over 10,500
+        matches, for +11–16% clock — level to slightly ahead per millisecond. Train loss equalled
+        holdout loss to five places, read at the time as <em>the ceiling is the features</em>.</td>
+      <td><span class="pill p-keep">measured, not shipped</span></td>
+    </tr>
+    <tr>
+      <td class="m">P8</td>
+      <td><strong>RAVE / AMAF</strong>, and a <strong>phase-dispatch portfolio</strong></td>
+      <td>RAVE <strong>cannot fire here, structurally</strong>: 89.6% of scored edges carry AMAF but
+        <strong>0.0% of unvisited children do</strong>, which is the entire mechanism. The field is
+        monotone in how much AMAF is believed and the best of it is the control. The portfolio shipped
+        as <code>:lab phases</code>, a diagnostic, and bounds itself at <strong>~25 Elo</strong>.</td>
+      <td><span class="pill p-null">null</span></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h3>What it discovered that outlived its own phases</h3>
+<ul>
+  <li><strong>A truer number is not a better ranking function.</strong> P1’s estimator was right about
+    one region’s physics and wrong about the ordering of two. The same bet — that
+    <code>FillableSpace</code>’s parity premise being false under the shipped rules must be worth
+    something — was then lost a <em>second</em> time by SPSA search in P5, which found relaxing the
+    parity cap worth nothing.</li>
+  <li><strong>A head-to-head between two settings of one bot measures a style match-up.</strong> Only
+    a common field converts that into strength. P5’s ablation run as <code>ab</code> came back
+    intransitive and put the wrong sign on the coordinate carrying the point.</li>
+  <li><strong>Divergence measures whether a test can see a change, never whether the change is
+    good.</strong> P2’s divergence table predicted where the knob changed more decisions and got the
+    sign exactly backwards.</li>
+  <li><strong>Absolute microseconds from a single timing block are worthless.</strong> The conversion
+    agent’s first unpaired run put a <em>control</em> at 0.82×; the machine had degraded ~50% across
+    the session. Only paired ratios with a control survive.</li>
+  <li><strong>Build the new thing so its defaults reproduce the old thing exactly.</strong>
+    <code>ChamberEval</code> at neutral weights is bit-identical to <code>SurvivalEval</code>, so
+    every later batch between them is a batch about three weights and nothing else.</li>
+</ul>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>Agenda 2026-07-29 — measuring it, and shipping</h2>
+<p class="sub">Eight workstreams over eight phases. Closed 2026-07-30.</p>
+
+<p>
+  Its stated goal was to establish the defaults the repository ships, measure the configuration nobody
+  had measured, and turn the previous agenda’s findings into something a player actually gets. It did
+  all three, and the answer to the second was not the one the agenda was written expecting.
+</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Phase</th><th>Attempted</th><th>What came back</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="m">P1</td>
+      <td><strong>Instrument integrity and the cost floor</strong> — make the budget literals fail
+        loudly, and time an appraisal in Chrome rather than deriving it from a JVM ratio</td>
+      <td><strong>Equal allowance is off from equal clock by up to 4.7×, and every knob table in the
+        repository was measured across that gap.</strong> Four instrument defects, three in
+        instruments the repo trusted; the phase then falsified its own first instrument, because JIT
+        state carried between entrants in one process is not a cost instrument.</td>
+      <td><span class="pill p-ship">shipped</span></td>
+    </tr>
+    <tr>
+      <td class="m">P2</td>
+      <td><strong>The composed field</strong> — every combination of the previous agenda’s
+        candidates, at per-entrant equal-clock allowances, on three board sizes</td>
+      <td>13,200 matches a board, twelve rungs, one fit each. <strong>Nothing in <code>puct</code>’s
+        configuration should be adopted, and the strongest entrant in the repository is an
+        <code>alphabeta</code> default nobody proposed.</strong> And
+        <strong><code>eval=learned</code> is a 12×12 leaf</strong> — −167 at equal clock on a 20×20 —
+        <em>which was in no risk column on either agenda</em>.</td>
+      <td><span class="pill p-ship">decisive</span></td>
+    </tr>
+    <tr>
+      <td class="m">P3</td>
+      <td><strong>Adopt</strong> — execute whatever P2 authorised</td>
+      <td><code>AlphaBetaBot</code>’s default eval <code>chamber</code> → <code>territory</code>, and
+        <strong><code>puct</code> and <code>alphabeta</code> graduated into the ladder with
+        <code>alphabeta</code> on top</strong>. Exactly one golden hash moved, verified in real
+        Chrome; every existing rung came back on its recorded figure to the match.</td>
+      <td><span class="pill p-ship">shipped</span></td>
+    </tr>
+    <tr>
+      <td class="m">P4</td>
+      <td><strong>Four residual features</strong> for <code>learned</code>, on the previous agenda’s
+        “the ceiling is the features” diagnosis</td>
+      <td><strong>The premise was false, and a twenty-minute probe falsified it before a feature was
+        written.</strong> Equal train and holdout loss says the fit is not short of capacity <em>on
+        the population it was fitted to</em> — nothing about whether it transfers. The ceiling was the
+        corpus. Refitted across three board sizes.</td>
+      <td><span class="pill p-ship">shipped</span></td>
+    </tr>
+    <tr>
+      <td class="m">P5</td>
+      <td><strong>A rollout policy for <code>uct</code></strong> — uniform-random is the least
+        considered part of the only two bots that roll out</td>
+      <td>Built, priced and measured; <strong>neither policy adopted, both wired and off</strong>. At
+        equal clock <code>liberty</code> rates <span class="m">−25 / −17 / +17</span> and
+        <code>prior</code> <span class="m">−33 / −38 / −34</span>. The reusable output is larger than
+        the verdict: <strong>an e-fold of allowance is worth 80–137 Elo to <code>uct</code></strong>.</td>
+      <td><span class="pill p-keep">wired, off</span></td>
+    </tr>
+    <tr>
+      <td class="m">P6</td>
+      <td><strong>A policy-rollout leaf</strong>, as its own bot</td>
+      <td>Closed in an hour on its own kill criterion: the swept prior prices at <strong>3.25× against
+        a 2.2× break-even</strong>, so it would have to return 97–110 Elo per iteration where the best
+        any policy has posted is +75. No bot added, no identifier frozen.</td>
+      <td><span class="pill p-null">priced out</span></td>
+    </tr>
+    <tr>
+      <td class="m">P7</td>
+      <td><strong>The third seat</strong> — every measurement in the repository had been two-player</td>
+      <td><strong>The ladder survives</strong>: all nine bots in two-seat order, on 25,200 matches all
+        distinct, under both scoring rules. The third seat <em>compresses and does not reorder</em> —
+        the Elo span falls 1,215 → 663. Methodologically: <strong>a Steiner triple system is the wrong
+        covering design</strong>, because an outright win is a three-way event, and a pairwise cell
+        moves up to 33.7 points on the third snake’s identity alone.</td>
+      <td><span class="pill p-null">map, no move</span></td>
+    </tr>
+    <tr>
+      <td class="m">P8</td>
+      <td><strong>Fused bitboard passes</strong> — the further 1.3–1.6× the bitboard phase quantified
+        and did not take</td>
+      <td>Built and proven <strong>byte-identical</strong>, then declined: <strong>1.10–1.17× on the
+        JVM, 0.50–0.91× in Chrome</strong>. The two targets disagree in <em>sign</em>, by 2.3× at
+        20×20, on code proven to compute the same thing.</td>
+      <td><span class="pill p-neg">declined</span></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h3>What it discovered that outlived its own phases</h3>
+<ul>
+  <li><strong>Equal allowance is not equal milliseconds, and the gap is 4.7×.</strong> Because a
+    rollout costs a flat 1 against the budget, a dearer policy buys no fewer iterations and its whole
+    cost lands on the wall clock — so an equal-allowance batch <em>flatters</em> the candidate. Every
+    published comparison between leaves had given the dearer one several times the clock.</li>
+  <li><strong>Equal train and holdout loss is not a statement about transfer.</strong> Six phases read
+    one number as “the ceiling is the features”. It says the fit is not short of capacity on the
+    population it was fitted to, and nothing whatever about another one.</li>
+  <li><strong>A hot-path rewrite is settled in the browser.</strong> <code>:bots</code> deploys to wasm
+    and nowhere else, and P8 showed the JVM cannot be trusted for the <em>sign</em>. Now part of
+    SW-03.</li>
+  <li><strong>Multiply by steps per rollout before comparing a rate to a threshold.</strong> P5’s
+    step-0 kill criterion used the per-step denominator and would have killed the one candidate worth
+    keeping.</li>
+  <li><strong>Two phases in a row found that a mechanism named in the agenda was not the mechanism in
+    the code.</strong> Both were caught by instrumenting the claim before building on it.</li>
+</ul>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>The equal-clock reckoning</h2>
+<p class="sub">The composed field: twelve rungs, 13,200 matches, one fit. 12×12, build <span class="m">ea069e8</span>.</p>
+
+<p>
+  This is the instrument the first agenda’s three shipping decisions were waiting on, and the reason
+  none of them was taken. Every candidate had been measured <em>alone</em>, against a different
+  baseline, in a different field, at an allowance that gave the dearer leaf several times the clock.
+  Seated together and handed matched wall clocks, the picture inverts.
+</p>
+
+<figure>
+  <div class="chart" id="c-composed"></div>
+  <div class="key">
+    <span><i style="background:var(--ship)"></i> equal clock — the shipping question</span>
+    <span><i style="background:var(--exp)"></i> equal allowance — subsidised 2.5–4.6× on the clock</span>
+    <span><i style="background:var(--base)"></i> the shipped baseline</span>
+  </div>
+  <figcaption>
+    The 2026-07-29 P2 field: twelve rungs, 13,200 matches, 8,538 of them distinct games, one
+    <code>rate</code> fit. Allowances after the <span class="m">@</span> are the per-entrant budgets
+    that equalise wall clock, taken in Chrome with <code>AppraisalTape</code> and anchored at
+    <code>puct:budget=1000</code>. <code>chase@1k</code> anchored the field at
+    <span class="m">−565</span> and is omitted here so the contested band stays legible. Ratings from
+    this field are quotable only beside this field.
+  </figcaption>
+</figure>
+
+<h3>What the headline numbers were worth once composed</h3>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr>
+      <th>Candidate</th>
+      <th>As published, 2026-07-28</th>
+      <th>At equal clock in the composed field, 12×12</th>
+      <th>Outcome</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>eval=chamber</code></td>
+      <td class="n">+85 ±32 over <code>survival</code></td>
+      <td class="n">−63 vs the bare baseline</td>
+      <td><span class="pill p-null">not adopted</span></td>
+    </tr>
+    <tr>
+      <td><code>eval=learned</code></td>
+      <td class="n">+29 over <code>chamber</code></td>
+      <td class="n">−7 vs the bare baseline<br><span class="note">−316 at 20×20</span></td>
+      <td><span class="pill p-null">not adopted</span></td>
+    </tr>
+    <tr>
+      <td>the tuned <code>MovePrior</code></td>
+      <td class="n">+103 over <code>chamber</code></td>
+      <td class="n">+13 on <code>chamber</code><br>−87 on <code>learned</code></td>
+      <td><span class="pill p-null">ships as no-ops</span></td>
+    </tr>
+    <tr>
+      <td><code>alphabeta:eval=territory</code></td>
+      <td class="n">never proposed</td>
+      <td class="n">+46 over its own shipped leaf<br>+108 / +41 on 8×8 / 20×20</td>
+      <td><span class="pill p-ship">shipped</span></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  Three of the four rows are the same finding twice over. The dearer leaves were not measured wrong;
+  they were measured against a question a shipping decision does not ask. <code>eval=chamber</code>
+  costs <strong>3.45×</strong> <code>puct</code>’s wall clock at the shipped allowance, so at equal
+  clock it gets roughly a quarter of the evaluations — and a quarter of the evaluations is worth more
+  than a better leaf. The fourth row is what the field found by carrying a rung nobody had a thesis
+  about: <code>alphabeta</code>’s costing favours <code>territory</code> decisively (0.95× against
+  <code>chamber</code>’s 3.48×), and it wins <em>while being cheaper</em>.
+</p>
+
+<blockquote>
+  <code>alphabeta:eval=territory</code> is first outright on 8×8 and 20×20 — ahead even of the
+  equal-<em>allowance</em> rungs, which were handed 2.5× to 4.6× its wall clock and still lost.
+</blockquote>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>What the two agendas produced besides bots</h2>
+
+<p>
+  Across sixteen phases, <strong>one added a bot</strong> and <strong>one moved a shipped
+  default</strong>. What the other fourteen shipped is measurement apparatus, evaluation values, and
+  knobs that are off until somebody types them — and on the evidence of the second agenda correcting
+  the first at four separate points, that is where most of the value went.
+</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Instrument</th><th>What it exists to stop</th></tr></thead>
+  <tbody>
+    <tr><td><code>:lab spsa</code> with a mandatory confirming run</td>
+      <td>A search shape manufacturing a confident wrong point on a flat knob. Both descent and SPSA do
+        it; only fresh boards catch it, so there is no flag to skip the confirmation.</td></tr>
+    <tr><td><code>:lab phases</code> and <code>report/Separation.kt</code></td>
+      <td>Not knowing where a bot’s Elo goes. It splits a replayed match at the move the board came
+        apart, and produced the first map: 67% of the strongest leaf’s losses were already behind on
+        room when the board split.</td></tr>
+    <tr><td><code>AppraisalTape</code></td>
+      <td>A cost instrument whose reading depends on the bot being timed. The subject is seated at
+        <em>no</em> slot, over a line another bot plays, with a median rather than a minimum over
+        passes.</td></tr>
+    <tr><td>The distinct-games line, printed by every batch</td>
+      <td>A hundred matches that are four games played twenty-five times. Nothing in a win matrix says
+        so.</td></tr>
+    <tr><td>Per-entrant <code>budget=</code> and the measured allowance table</td>
+      <td>Comparing two leaves at an allowance that hands the dearer one four times the clock.</td></tr>
+    <tr><td>The cross-target golden set, re-run in real Chrome</td>
+      <td>A bot whose move stream diverges between the JVM test target and the browser that ships.
+        Every registry entry now has a case.</td></tr>
+    <tr><td>A contract suite sweeping 1–4 seats and every <code>Choice</code> value</td>
+      <td>A bot written as a duel. A 2,160-match probe found none — every search here was already
+        seat-count general — but nothing had pinned it.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>Open</h2>
+
+<p>The largest items either agenda left for a person, in the order someone would pick them up.</p>
+
+<ul>
+  <li><strong><code>freeSquaresOf</code> is 13–14% of every ownership sweep</strong> and is a
+    per-<em>cell</em> loop, so nothing above it can reach it. It wants a word-level free mask in
+    <code>:core</code>’s <code>Occupancy</code>. That is not a fusion, so P8’s negative says nothing
+    about it — and it is the largest speed item anybody has a number for.</li>
+  <li><strong>Board-size-conditioned defaults.</strong> Two independent arguments now, the second with
+    a number: <code>uct:rolloutDepth=25</code> is worth <span class="m">+78</span> at 20×20,
+    <span class="m">+13</span> at 12×12 and <strong>nothing at all</strong> at 8×8 — level with the
+    baseline at equal allowance, so there is nothing there for a cheaper allowance to rescue. A single
+    default cannot be right, and the contract has no way to express two.</li>
+  <li><strong><code>SequentialTest</code> is two-seat only</strong>, which is what keeps three-seat
+    work from deciding anything: <code>ab</code>, <code>tune</code> and <code>spsa</code> were all
+    unavailable for the whole of P7, so every number it produced is a field rating. Making it
+    seat-count aware turns three-seat measurement from mapping into deciding.</li>
+  <li><strong>Whether Kotlin/Wasm’s array bounds handling is what reversed P8’s sign is
+    unverified.</strong> The evidence is a scaling law plus a control that moved as predicted, not a
+    disassembly. Somebody who wants to write fast wasm here would learn more from settling that than
+    from anything else on this list.</li>
+  <li><strong>The reference machine.</strong> Absolute Chrome milliseconds carry a 4.1× scaling factor
+    (range 3.4–5.0) between the measuring box and the machine the published tables were taken on. One
+    browser run there replaces the scaling with a measurement. Ratios and the allowance table are
+    unaffected.</li>
+</ul>
+
+<footer>
+  <p>
+    Generated 2026-07-30 at <span class="m">ef41d27</span>. Sources:
+    <a href="2026-07-28_Research-Agenda.md">2026-07-28_Research-Agenda.md</a>,
+    <a href="2026-07-29_Research-Agenda.md">2026-07-29_Research-Agenda.md</a>.
+    Method and vocabulary: <a href="../Research-Process.md">Research-Process.md</a>,
+    <a href="../Workflow.md#deciding-whether-a-change-helped">Workflow.md</a>.
+  </p>
+  <p>
+    The ladder field was run for this page; the two commands that reproduce it are in a comment beside
+    its data in this file’s <code>&lt;script&gt;</code> block. Every other figure is carried from the
+    agenda that measured it, and each is quoted beside its field. Match logs
+    live under a gitignored <code>.lab/</code>, so the numbers travel in this file rather than being
+    read from disk at open time.
+  </p>
+</footer>
+
+</div>
+
+<script>
+/* ────────────────────────────────────────────────────────────────────────
+   Data. Every rating below is a `:lab rate` fit, quoted only beside the
+   field it was fitted in — see the caption under each chart. Match logs
+   live under a gitignored `.lab/`, so the numbers are carried here rather
+   than read from disk; the command that reproduces each field is in its
+   caption.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* Charts 1 and 2 — ONE field, ten entrants, 12x12, budget 1000, head to head,
+   400 rounds a pairing. 18,000 matches, 15,143 of them distinct games, no
+   forfeits, build ef41d27. Reproduce with:
+
+     ./gradlew :lab:run --args="play random wallhug space pressure chase \
+        flat-monte-carlo uct puct alphabeta alphabeta:eval=chamber \
+        --rounds 400 --rows 12 --cols 12 --openings mirrored --replays none \
+        --seed 990012 --log .lab/summary-frontier-12"
+     ./gradlew :lab:run --args="rate --log .lab/summary-frontier-12"
+
+   `alphabeta:eval=chamber` is the retired default, seated here so the two
+   agendas' endpoints sit on one scale rather than being differenced across
+   fields. Both alphabeta rungs run at budget 1000, which subsidises the
+   `chamber` leaf by ~3.5x on the wall clock. */
+const LADDER = [
+  { label: 'alphabeta',              r:  527, lo:  505, hi:  549, kind: 'ship' },
+  { label: 'puct',                   r:  511, lo:  492, hi:  535, kind: 'ship' },
+  { label: 'alphabeta:eval=chamber', r:  497, lo:  480, hi:  517, kind: 'exp'  },
+  { label: 'uct',                    r:  373, lo:  355, hi:  394, kind: 'base' },
+  { label: 'flat-monte-carlo',       r:  150, lo:  132, hi:  169, kind: 'base' },
+  { label: 'chase',                  r: -128, lo: -145, hi: -112, kind: 'base' },
+  { label: 'pressure',               r: -169, lo: -189, hi: -152, kind: 'base' },
+  { label: 'space',                  r: -394, lo: -414, hi: -375, kind: 'base' },
+  { label: 'wallhug',                r: -653, lo: -679, hi: -634, kind: 'base' },
+  { label: 'random',                 r: -715, lo: -751, hi: -686, kind: 'base' }
+];
+
+/* Chart 2 — the same fit, read as a timeline. The dashed series begins at the
+   first agenda's close because the bots above `uct` before it did not yet have
+   the bitboard sweep, and a rung that no longer exists cannot be seated. */
+const FRONTIER = {
+  marks: [
+    'Release 1|before the agendas',
+    '2026-07-28|first agenda closes',
+    '2026-07-30|second agenda closes'
+  ],
+  series: [
+    { kind: 'ship', name: 'top of the certified ladder',
+      pts: [{ i: 0, v: 373, who: 'uct' }, { i: 1, v: 373, who: 'uct' },
+            { i: 2, v: 527, who: 'alphabeta' }] },
+    { kind: 'exp', name: 'alphabeta, measured but not shipped',
+      pts: [{ i: 1, v: 497, who: 'alphabeta · chamber' }, { i: 2, v: 527, mute: true }] }
+  ]
+};
+
+/* Chart 3 — the composed field of 2026-07-29 P2. 12x12, per-entrant
+   equal-clock allowances from P1's Chrome cost table. `chase@1k` anchored
+   the field at -565 and is omitted here so the contested band stays legible. */
+const COMPOSED = [
+  { label: 'puct@1k · learned',            r: 146, lo: 132, hi: 160, kind: 'exp'  },
+  { label: 'puct@1k · chamber',            r: 143, lo: 130, hi: 158, kind: 'exp'  },
+  { label: 'alphabeta@1k · territory',     r: 101, lo:  88, hi: 118, kind: 'ship' },
+  { label: 'puct@1k — shipped baseline',   r:  65, lo:  49, hi:  80, kind: 'base' },
+  { label: 'puct@260 · learned',           r:  58, lo:  43, hi:  73, kind: 'ship' },
+  { label: 'alphabeta@285 · chamber',      r:  55, lo:  41, hi:  69, kind: 'ship' },
+  { label: 'puct@290 · chamber + prior',   r:  15, lo:   1, hi:  30, kind: 'ship' },
+  { label: 'uct@880',                      r:   7, lo:  -8, hi:  21, kind: 'ship' },
+  { label: 'puct@290 · chamber',           r:   2, lo: -11, hi:  17, kind: 'ship' },
+  { label: 'puct@260 · learned + prior + wall', r: 0, lo: -15, hi: 15, kind: 'ship' },
+  { label: 'puct@260 · learned + prior',   r: -29, lo: -43, hi: -15, kind: 'ship' }
+];
+
+/* ──────────────────────────────────────────────────────────────────────── */
+
+const NS = 'http://www.w3.org/2000/svg';
+const el = (n, a = {}) => {
+  const e = document.createElementNS(NS, n);
+  for (const k in a) e.setAttribute(k, a[k]);
+  return e;
+};
+const KIND = { ship: 's-ship', exp: 's-exp', base: 's-base' };
+
+function barChart(host, rows, opts) {
+  if (!host || !rows.length) return;
+  const gutter = opts.gutter || 210, right = 62, rowH = 30, top = 26, bot = 30;
+  const W = 900, H = top + rows.length * rowH + bot;
+
+  const lo = Math.min(0, ...rows.map(d => d.lo));
+  const hi = Math.max(0, ...rows.map(d => d.hi));
+  const pad = (hi - lo) * 0.06;
+  const d0 = lo - pad, d1 = hi + pad;
+  const x = v => gutter + (v - d0) / (d1 - d0) * (W - gutter - right);
+
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': opts.aria || '' });
+
+  // axis ticks on a round step
+  const span = d1 - d0;
+  const mag = Math.pow(10, Math.floor(Math.log10(span / 4)));
+  const step = mag * [1, 2, 5, 10].find(m => span / (mag * m) <= 8);
+  for (let t = Math.ceil(d0 / step) * step; t <= d1; t += step) {
+    svg.appendChild(el('line', { class: 'tick', x1: x(t), x2: x(t), y1: top - 8, y2: H - bot + 4 }));
+    const lbl = el('text', { class: 'ax', x: x(t), y: H - bot + 18, 'text-anchor': 'middle' });
+    lbl.textContent = Math.round(t);
+    svg.appendChild(lbl);
+  }
+  svg.appendChild(el('line', { class: 'zero', x1: x(0), x2: x(0), y1: top - 8, y2: H - bot + 4 }));
+
+  rows.forEach((d, i) => {
+    const y = top + i * rowH + rowH / 2;
+    const g = el('g', { class: KIND[d.kind] || 's-base' });
+
+    const a = Math.min(x(0), x(d.r)), b = Math.max(x(0), x(d.r));
+    g.appendChild(el('rect', { x: a, y: y - 7, width: Math.max(b - a, 1.5), height: 14, rx: 2 }));
+
+    svg.appendChild(g);
+    svg.appendChild(el('line', { class: 'whisk', x1: x(d.lo), x2: x(d.hi), y1: y, y2: y }));
+    [d.lo, d.hi].forEach(v =>
+      svg.appendChild(el('line', { class: 'whisk', x1: x(v), x2: x(v), y1: y - 4, y2: y + 4 })));
+
+    const name = el('text', { class: 'lab', x: gutter - 12, y: y + 4, 'text-anchor': 'end' });
+    name.textContent = d.label;
+    svg.appendChild(name);
+
+    const val = el('text', { class: 'val', x: W - right + 8, y: y + 4 });
+    val.textContent = (d.r > 0 ? '+' : '') + d.r;
+    svg.appendChild(val);
+  });
+
+  host.textContent = '';
+  host.appendChild(svg);
+}
+
+function frontierChart(host, spec) {
+  if (!host) return;
+  const L = 108, R = 152, T = 44, B = 56, W = 900, H = 330;
+  const vals = spec.series.flatMap(s => s.pts.map(p => p.v));
+  const d0 = Math.min(...vals) - 70, d1 = Math.max(...vals) + 70;
+  const x = i => L + i * (W - L - R) / (spec.marks.length - 1);
+  const y = v => T + (d1 - v) / (d1 - d0) * (H - T - B);
+
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img',
+                          'aria-label': 'the top of the ladder over time' });
+
+  for (let t = Math.ceil(d0 / 50) * 50; t <= d1; t += 50) {
+    svg.appendChild(el('line', { class: 'tick', x1: L - 10, x2: W - R + 20, y1: y(t), y2: y(t) }));
+    const lb = el('text', { class: 'ax', x: L - 16, y: y(t) + 4, 'text-anchor': 'end' });
+    lb.textContent = t;
+    svg.appendChild(lb);
+  }
+
+  spec.marks.forEach((m, i) => {
+    svg.appendChild(el('line', { class: 'tick', x1: x(i), x2: x(i), y1: T - 14, y2: H - B + 6 }));
+    m.split('|').forEach((line, k) => {
+      const t = el('text', { class: k ? 'ax' : 'lab', x: x(i),
+                             y: H - B + 24 + k * 15, 'text-anchor': 'middle' });
+      t.textContent = line;
+      svg.appendChild(t);
+    });
+  });
+
+  // the gap the second agenda closed
+  const gapAt = 1, top = 497, bottom = 373, gx = x(gapAt) - 30;
+  svg.appendChild(el('line', { class: 'whisk', x1: gx, x2: gx,
+                               y1: y(top), y2: y(bottom), 'stroke-dasharray': '2 3' }));
+  [top, bottom].forEach(v =>
+    svg.appendChild(el('line', { class: 'whisk', x1: gx - 4, x2: gx + 4, y1: y(v), y2: y(v) })));
+  const gap = el('text', { class: 'val', x: gx - 10, y: (y(top) + y(bottom)) / 2 + 4,
+                           'text-anchor': 'end' });
+  gap.textContent = '124 Elo above the top rung';
+  svg.appendChild(gap);
+
+  spec.series.forEach(s => {
+    const stroke = s.kind === 'ship' ? 'var(--ship)' : 'var(--exp)';
+    const d = s.pts.map((p, k) => `${k ? 'L' : 'M'}${x(p.i)} ${y(p.v)}`).join(' ');
+    svg.appendChild(el('path', {
+      d, fill: 'none', stroke, 'stroke-width': 2.5, 'stroke-linejoin': 'round',
+      'stroke-dasharray': s.kind === 'ship' ? '' : '7 5'
+    }));
+    s.pts.forEach((p, k) => {
+      const last = k === s.pts.length - 1;
+      svg.appendChild(el('circle', { cx: x(p.i), cy: y(p.v), r: 5.5, fill: stroke }));
+      if (p.mute) return;
+      const v = el('text', { class: 'val', x: x(p.i) + (last ? 13 : 0),
+                             y: y(p.v) + (last ? 4 : (s.kind === 'ship' ? 22 : -13)),
+                             'text-anchor': last ? 'start' : 'middle' });
+      v.textContent = p.v;
+      svg.appendChild(v);
+      if (p.who && !last) {
+        const w = el('text', { class: 'lab', x: x(p.i),
+                               y: y(p.v) + (s.kind === 'ship' ? 38 : -29),
+                               'text-anchor': 'middle', fill: stroke });
+        w.textContent = p.who;
+        svg.appendChild(w);
+      }
+      if (p.who && last) {
+        const w = el('text', { class: 'lab', x: x(p.i) + 13, y: y(p.v) - 13, fill: stroke });
+        w.textContent = p.who;
+        svg.appendChild(w);
+      }
+    });
+  });
+
+  host.textContent = '';
+  host.appendChild(svg);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  barChart(document.getElementById('c-ladder'), LADDER,
+           { aria: 'Elo ratings of the shipped ladder' });
+  barChart(document.getElementById('c-composed'), COMPOSED,
+           { gutter: 300, aria: 'the composed equal-clock field' });
+  frontierChart(document.getElementById('c-frontier'), FRONTIER);
+});
+</script>

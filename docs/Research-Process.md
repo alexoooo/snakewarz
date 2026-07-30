@@ -17,6 +17,7 @@ without losing it.
 | Artefact | Where | Lifetime |
 |---|---|---|
 | The agenda | `docs/research/YYYY-MM-DD_Research-Agenda.md` | forever, as a record |
+| The summary across agendas | [`research/Research-Summary.html`](research/Research-Summary.html) — every closed agenda in a page, with the ladder charted | rewritten when an agenda closes |
 | Work in progress | `docs/research/wip/` — see its [README](research/wip/README.md) | one session, or one phase |
 | A finding | written **into the agenda**, and into the KDoc beside the constant it set | forever |
 | A measurement | `.lab/<experiment>` — gitignored, regenerable from the command | until somebody deletes it |
