@@ -18,13 +18,16 @@ internal class TournamentOptions(
     val rows: Int,
     val cols: Int,
     val seed: Long,
+    /** The one map every match of the batch is played on — see `TournamentConfig.walls`. */
+    val walls: IntArray,
     val contestants: List<Contestant>,
     val rounds: Int,
     val format: TournamentFormat,
 ) {
     val ready: Boolean get() = contestants.size >= MINIMUM_CONTESTANTS
 
-    override fun toString(): String = "TournamentOptions(${rows}x$cols, $rounds rounds, $contestants)"
+    override fun toString(): String =
+        "TournamentOptions(${rows}x$cols, ${walls.size} walls, $rounds rounds, $contestants)"
 
     companion object {
         /** A win-rate matrix is a statement about pairs, and one bot makes no pairs. */

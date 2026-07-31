@@ -23,7 +23,12 @@
            a fixed pool would silently drop the fifth knob of a bot that declares five.
 
       The containers around both are still static, which is the part that matters -- #knobs-N below
-      is written once and Kotlin only ever fills it.
+      is written once and Kotlin only ever fills it. Screens and panels are not a third exception:
+      there are three of one and four of the other, they are written out here, and Kotlin only ever
+      sets `hidden` on them.
+
+      A screen that is not showing is `hidden`, never merely moved off-screen. An off-screen but
+      focusable section means Tab walks into controls nobody can see.
     -->
 </head>
 <body>
@@ -41,40 +46,234 @@
     <p class="detail">Reason: <span id="unsupported-reason">unknown</span></p>
 </div>
 
+<!--
+  Three screens, one showing at a time. #app is the whole of what a panel or the result dialog
+  covers, which is why both of those live outside it: opening one marks this `inert`, and an
+  attribute on the thing behind is the whole of the focus trap.
+-->
 <main id="app">
-    <header>
-        <h1>Snake Warz</h1>
-        <p class="tagline">Tron-style snakes as an AI testbed</p>
-    </header>
+    <section id="screen-home" class="screen" tabindex="-1">
+        <div class="home">
+            <h1>Snake Warz</h1>
+            <p class="tagline">Tron-style snakes as an AI testbed</p>
 
-    <!--
-      One page, no document scroll: #app is a viewport-height column, the board column shrinks its
-      board to whatever is left, and the sidebar is the one thing here that scrolls. That is why the
-      tournament below is a <details> rather than a section -- closed it costs a line, and open it
-      takes the room out of the board rather than off the bottom of the page.
-    -->
-
-    <div class="arena">
-        <section class="board-panel">
-            <div class="board-wrap" id="board-wrap">
-                <canvas id="board" aria-label="Game board"></canvas>
-                <canvas id="board-overlay" aria-hidden="true"></canvas>
-                <div id="board-tip" hidden>
-                    <span class="tip-who">&mdash;</span>
-                    <span class="tip-detail"></span>
-                </div>
+            <!--
+              Continue is the button somebody came back for, so it is first and takes the primary
+              fill off Ladder while it is showing. Kotlin writes its text, both `hidden` flags and
+              that one class, and nothing else here.
+            -->
+            <div class="home-actions">
+                <button id="home-continue" type="button" class="primary wide" hidden>Continue</button>
+                <button id="home-ladder" type="button" class="wide primary">Ladder</button>
+                <button id="home-custom" type="button" class="wide">Custom</button>
+                <button id="home-replay" type="button" class="wide" hidden>Watch replay</button>
             </div>
 
+            <p class="note">
+                Last snake moving wins. Walls and every trail &mdash; including your own &mdash; are
+                lethal, and there is nothing to eat.
+            </p>
+        </div>
+    </section>
+
+    <!--
+      Ten tiles, one per rung, and static like the four scoreboard cards: the ladder is a fixed
+      table, so Kotlin only ever writes each tile's text, its state and its picture. Not a third
+      exception to "Kotlin never constructs structure".
+
+      A locked tile is a `disabled` <button> rather than a <div>: it announces itself as
+      unavailable, it cannot be clicked, and it leaves the tab order. They start locked because
+      that is what a browser with nothing stored is looking at, and the first frame corrects it.
+    -->
+    <section id="screen-ladder" class="screen" tabindex="-1" hidden>
+        <div class="bar">
+            <button id="ladder-back" type="button">&larr; Home</button>
+            <h1>Ladder</h1>
+        </div>
+        <p class="note">
+            Ten levels, ten different opponents, and as many attempts as you like. Beat one and the
+            next unlocks.
+        </p>
+
+        <ol class="levels">
+            <li>
+                <button id="level-1" type="button" class="level locked" disabled>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="level-no">&mdash;</span>
+                    <span class="level-title">&mdash;</span>
+                    <span class="level-blurb"></span>
+                    <span class="level-meta"></span>
+                    <span class="level-state"></span>
+                </button>
+            </li>
+            <li>
+                <button id="level-2" type="button" class="level locked" disabled>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="level-no">&mdash;</span>
+                    <span class="level-title">&mdash;</span>
+                    <span class="level-blurb"></span>
+                    <span class="level-meta"></span>
+                    <span class="level-state"></span>
+                </button>
+            </li>
+            <li>
+                <button id="level-3" type="button" class="level locked" disabled>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="level-no">&mdash;</span>
+                    <span class="level-title">&mdash;</span>
+                    <span class="level-blurb"></span>
+                    <span class="level-meta"></span>
+                    <span class="level-state"></span>
+                </button>
+            </li>
+            <li>
+                <button id="level-4" type="button" class="level locked" disabled>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="level-no">&mdash;</span>
+                    <span class="level-title">&mdash;</span>
+                    <span class="level-blurb"></span>
+                    <span class="level-meta"></span>
+                    <span class="level-state"></span>
+                </button>
+            </li>
+            <li>
+                <button id="level-5" type="button" class="level locked" disabled>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="level-no">&mdash;</span>
+                    <span class="level-title">&mdash;</span>
+                    <span class="level-blurb"></span>
+                    <span class="level-meta"></span>
+                    <span class="level-state"></span>
+                </button>
+            </li>
+            <li>
+                <button id="level-6" type="button" class="level locked" disabled>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="level-no">&mdash;</span>
+                    <span class="level-title">&mdash;</span>
+                    <span class="level-blurb"></span>
+                    <span class="level-meta"></span>
+                    <span class="level-state"></span>
+                </button>
+            </li>
+            <li>
+                <button id="level-7" type="button" class="level locked" disabled>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="level-no">&mdash;</span>
+                    <span class="level-title">&mdash;</span>
+                    <span class="level-blurb"></span>
+                    <span class="level-meta"></span>
+                    <span class="level-state"></span>
+                </button>
+            </li>
+            <li>
+                <button id="level-8" type="button" class="level locked" disabled>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="level-no">&mdash;</span>
+                    <span class="level-title">&mdash;</span>
+                    <span class="level-blurb"></span>
+                    <span class="level-meta"></span>
+                    <span class="level-state"></span>
+                </button>
+            </li>
+            <li>
+                <button id="level-9" type="button" class="level locked" disabled>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="level-no">&mdash;</span>
+                    <span class="level-title">&mdash;</span>
+                    <span class="level-blurb"></span>
+                    <span class="level-meta"></span>
+                    <span class="level-state"></span>
+                </button>
+            </li>
+            <li>
+                <button id="level-10" type="button" class="level locked" disabled>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="level-no">&mdash;</span>
+                    <span class="level-title">&mdash;</span>
+                    <span class="level-blurb"></span>
+                    <span class="level-meta"></span>
+                    <span class="level-state"></span>
+                </button>
+            </li>
+        </ol>
+    </section>
+
+    <!--
+      Two thin bars around a board that takes everything between them. The bars are `auto` rows and
+      the board's is `minmax(0, 1fr)`, so whatever the bars need the board gets the rest -- which is
+      also why nothing in either bar may change height while a match runs: the board is measured when
+      the chrome changes and not when a word in it does.
+    -->
+    <section id="screen-game" class="screen" tabindex="-1" hidden>
+        <div class="bar top">
+            <button id="game-back" type="button">&larr; Home</button>
+            <!-- The game's name, or the level's when the board is a rung of the ladder. -->
+            <span class="wordmark" id="wordmark">Snake Warz</span>
+            <span class="bar-gap"></span>
+            <button id="open-setup" type="button">Setup</button>
+            <button id="open-tournament" type="button">Tournament</button>
+            <button id="open-share" type="button">Share</button>
+            <button id="open-settings" type="button">Settings</button>
+        </div>
+
+        <div class="board-wrap" id="board-wrap">
+            <canvas id="board" aria-label="Game board"></canvas>
+            <canvas id="board-overlay" aria-hidden="true"></canvas>
+            <div id="board-tip" hidden>
+                <span class="tip-who">&mdash;</span>
+                <span class="tip-detail"></span>
+            </div>
+        </div>
+
+        <div class="bar bottom">
+            <!--
+                 Each card's portrait is decoration and says so: empty alt and aria-hidden, with the
+                 seat's name in text right beside it. A reader hears "PUCT - 1k/territory", not
+                 "image". Kotlin writes nothing here but the `src`, which is a file for a bot the
+                 page ships art for and a drawn mark for one it does not.
+            -->
+            <ol id="scoreboard">
+                <li class="slot" id="slot-0" hidden>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="swatch"></span>
+                    <span class="who">&mdash;</span>
+                    <span class="length">0</span>
+                    <span class="fate"></span>
+                </li>
+                <li class="slot" id="slot-1" hidden>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="swatch"></span>
+                    <span class="who">&mdash;</span>
+                    <span class="length">0</span>
+                    <span class="fate"></span>
+                </li>
+                <li class="slot" id="slot-2" hidden>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="swatch"></span>
+                    <span class="who">&mdash;</span>
+                    <span class="length">0</span>
+                    <span class="fate"></span>
+                </li>
+                <li class="slot" id="slot-3" hidden>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="swatch"></span>
+                    <span class="who">&mdash;</span>
+                    <span class="length">0</span>
+                    <span class="fate"></span>
+                </li>
+            </ol>
+
+            <!-- Speed is a preference rather than a transport control, so it lives under
+                 Settings; what is left here is pressed every few seconds. -->
             <div class="transport">
                 <button id="play" type="button" class="primary">Play</button>
                 <button id="step" type="button">Step</button>
                 <button id="restart" type="button">Restart</button>
-                <label for="speed">Speed</label>
-                <input id="speed" type="range" min="0" max="7" step="1" value="4"
-                       aria-label="Turns per second">
-                <output id="speed-value" for="speed">&mdash;</output>
             </div>
 
+            <!-- Replay only, and revealing it moves the board -- so GameSession.begin renders the
+                 chrome before it measures. -->
             <div class="transport scrub" id="scrub" hidden>
                 <label for="seek">Turn</label>
                 <input id="seek" type="range" min="0" max="0" step="1" value="0"
@@ -83,146 +282,244 @@
             </div>
 
             <p id="status" role="status">Starting&hellip;</p>
-
-            <details class="tournament" id="tournament">
-                <summary>Tournament</summary>
-                <div class="transport">
-                    <button id="run-tournament" type="button">Run tournament</button>
-                    <label for="format">Format</label>
-                    <select id="format">
-                        <option value="head-to-head" selected>Head-to-head</option>
-                        <option value="free-for-all">Free-for-all</option>
-                    </select>
-                    <label for="rounds">Rounds</label>
-                    <select id="rounds">
-                        <option value="10">10</option>
-                        <option value="20" selected>20</option>
-                        <option value="40">40</option>
-                        <option value="100">100</option>
-                    </select>
-                    <output id="tournament-progress" for="run-tournament"></output>
-                </div>
-                <pre id="tournament-table" hidden></pre>
-                <p class="note">
-                    The bots in the slots opposite, on that board and from that seed. Head-to-head
-                    plays every pair that many times, each seed from both seats &mdash; rows beat
-                    columns. Free-for-all seats all of them in every match &mdash; rows outlasted
-                    columns.
-                </p>
-            </details>
-        </section>
-
-        <aside class="sidebar">
-            <section>
-                <h2>Players</h2>
-                <ol id="scoreboard">
-                    <li class="slot" id="slot-0" hidden>
-                        <span class="swatch"></span>
-                        <span class="who">&mdash;</span>
-                        <span class="length">0</span>
-                        <span class="fate"></span>
-                    </li>
-                    <li class="slot" id="slot-1" hidden>
-                        <span class="swatch"></span>
-                        <span class="who">&mdash;</span>
-                        <span class="length">0</span>
-                        <span class="fate"></span>
-                    </li>
-                    <li class="slot" id="slot-2" hidden>
-                        <span class="swatch"></span>
-                        <span class="who">&mdash;</span>
-                        <span class="length">0</span>
-                        <span class="fate"></span>
-                    </li>
-                    <li class="slot" id="slot-3" hidden>
-                        <span class="swatch"></span>
-                        <span class="who">&mdash;</span>
-                        <span class="length">0</span>
-                        <span class="fate"></span>
-                    </li>
-                </ol>
-            </section>
-
-            <section>
-                <h2>New match</h2>
-                <div class="setup">
-                    <label for="size">Board</label>
-                    <select id="size">
-                        <option value="8" selected>8 &times; 8</option>
-                        <option value="10">10 &times; 10</option>
-                        <option value="12">12 &times; 12</option>
-                        <option value="16">16 &times; 16</option>
-                        <option value="20">20 &times; 20</option>
-                        <option value="28">28 &times; 28</option>
-                        <option value="40">40 &times; 40</option>
-                    </select>
-
-                    <label for="bot-0">Slot 1</label>
-                    <select id="bot-0"></select>
-                    <details class="knobs" id="knobs-0" hidden>
-                        <summary>Settings</summary>
-                        <div class="knob-grid"></div>
-                        <button type="button" class="reset">Reset to defaults</button>
-                    </details>
-
-                    <label for="bot-1">Slot 2</label>
-                    <select id="bot-1"></select>
-                    <details class="knobs" id="knobs-1" hidden>
-                        <summary>Settings</summary>
-                        <div class="knob-grid"></div>
-                        <button type="button" class="reset">Reset to defaults</button>
-                    </details>
-
-                    <label for="bot-2">Slot 3</label>
-                    <select id="bot-2"></select>
-                    <details class="knobs" id="knobs-2" hidden>
-                        <summary>Settings</summary>
-                        <div class="knob-grid"></div>
-                        <button type="button" class="reset">Reset to defaults</button>
-                    </details>
-
-                    <label for="bot-3">Slot 4</label>
-                    <select id="bot-3"></select>
-                    <details class="knobs" id="knobs-3" hidden>
-                        <summary>Settings</summary>
-                        <div class="knob-grid"></div>
-                        <button type="button" class="reset">Reset to defaults</button>
-                    </details>
-
-                    <label for="seed">Seed</label>
-                    <span class="seed-row">
-                        <input id="seed" type="text" inputmode="numeric" autocomplete="off"
-                               spellcheck="false">
-                        <button id="reseed" type="button" title="New random seed"
-                                aria-label="New random seed">&#8635;</button>
-                    </span>
-                </div>
-                <button id="new-match" type="button" class="primary wide">Start match</button>
-            </section>
-
-            <section>
-                <h2>Replay</h2>
-                <button id="watch-replay" type="button" class="wide" disabled>Watch replay</button>
-                <button id="share" type="button" class="wide">Copy replay link</button>
-                <input id="share-url" type="text" readonly hidden aria-label="Replay link">
-                <p class="note">
-                    Watch replay winds a finished match back and plays it again right here &mdash;
-                    Start match returns to live play. The link carries the whole match, move by
-                    move, no server involved; open one and it plays back here too.
-                </p>
-            </section>
-
-            <section>
-                <h2>Keys</h2>
-                <p class="note">
-                    Arrow keys or WASD to move &mdash; with you in the match nothing happens until
-                    you press one, and holding a key keeps going that way. Space plays and pauses a
-                    match between bots, <kbd>.</kbd> steps it one turn.
-                </p>
-            </section>
-        </aside>
-    </div>
+        </div>
+    </section>
 </main>
+
+<!-- Dims the board a panel is covering, and closes it when clicked. -->
+<div id="panel-scrim" hidden></div>
+
+<aside id="panel-setup" class="panel" role="dialog" aria-modal="true" aria-label="New match"
+       tabindex="-1" hidden>
+    <div class="panel-head">
+        <h2>New match</h2>
+        <button id="close-setup" class="panel-close" type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="panel-body">
+        <div class="setup">
+            <label for="size">Board</label>
+            <select id="size">
+                <option value="8" selected>8 &times; 8</option>
+                <option value="10">10 &times; 10</option>
+                <option value="12">12 &times; 12</option>
+                <option value="16">16 &times; 16</option>
+                <option value="20">20 &times; 20</option>
+                <option value="28">28 &times; 28</option>
+                <option value="40">40 &times; 40</option>
+            </select>
+
+            <!--
+              Static like every other option list on the page. A map shape is not a registry
+              entry -- there is no "fork, add a file, register it" workflow behind these, and
+              the value is the shape's frozen slug, the same one :lab's --map flag takes.
+
+              Kotlin only ever writes `disabled` here, from MapShape.minimumSide, so a shape
+              the chosen board is too small to draw cannot be picked. The last option is the
+              map a replay arrived with when no shape draws it: hidden until one does.
+            -->
+            <label for="map">Map</label>
+            <select id="map">
+                <option value="empty" selected>Empty</option>
+                <option value="pillars">Pillars</option>
+                <option value="ring">Ring</option>
+                <option value="cross">Cross</option>
+                <option value="diagonals">Diagonals</option>
+                <option value="rooms">Rooms</option>
+                <option value="double-spiral">Double spiral</option>
+                <option value="scatter">Scatter</option>
+                <option id="map-from-replay" value="from-replay" hidden>&mdash; from replay &mdash;</option>
+            </select>
+
+            <label for="bot-0">Slot 1</label>
+            <select id="bot-0"></select>
+            <details class="knobs" id="knobs-0" hidden>
+                <summary>Settings</summary>
+                <div class="knob-grid"></div>
+                <button type="button" class="reset">Reset to defaults</button>
+            </details>
+
+            <label for="bot-1">Slot 2</label>
+            <select id="bot-1"></select>
+            <details class="knobs" id="knobs-1" hidden>
+                <summary>Settings</summary>
+                <div class="knob-grid"></div>
+                <button type="button" class="reset">Reset to defaults</button>
+            </details>
+
+            <label for="bot-2">Slot 3</label>
+            <select id="bot-2"></select>
+            <details class="knobs" id="knobs-2" hidden>
+                <summary>Settings</summary>
+                <div class="knob-grid"></div>
+                <button type="button" class="reset">Reset to defaults</button>
+            </details>
+
+            <label for="bot-3">Slot 4</label>
+            <select id="bot-3"></select>
+            <details class="knobs" id="knobs-3" hidden>
+                <summary>Settings</summary>
+                <div class="knob-grid"></div>
+                <button type="button" class="reset">Reset to defaults</button>
+            </details>
+
+            <label for="seed">Seed</label>
+            <span class="seed-row">
+                <input id="seed" type="text" inputmode="numeric" autocomplete="off"
+                       spellcheck="false">
+                <button id="reseed" type="button" title="New random seed"
+                        aria-label="New random seed">&#8635;</button>
+            </span>
+        </div>
+        <button id="new-match" type="button" class="primary wide">Start match</button>
+    </div>
+</aside>
+
+<aside id="panel-tournament" class="panel" role="dialog" aria-modal="true" aria-label="Tournament"
+       tabindex="-1" hidden>
+    <div class="panel-head">
+        <h2>Tournament</h2>
+        <button id="close-tournament" class="panel-close" type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="panel-body">
+        <div class="transport">
+            <button id="run-tournament" type="button">Run tournament</button>
+            <label for="format">Format</label>
+            <select id="format">
+                <option value="head-to-head" selected>Head-to-head</option>
+                <option value="free-for-all">Free-for-all</option>
+            </select>
+            <label for="rounds">Rounds</label>
+            <select id="rounds">
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+                <option value="40">40</option>
+                <option value="100">100</option>
+            </select>
+            <output id="tournament-progress" for="run-tournament"></output>
+        </div>
+        <!--
+          The one region on the page that scrolls and holds no control, so it is the one that has
+          to ask for a tab stop: a free-for-all matrix is wider and taller than the box, and
+          without `tabindex` there is no way to reach the rest of it except by dragging. `group`
+          so the label is announced -- a bare <pre> has no role for a name to attach to.
+        -->
+        <pre id="tournament-table" tabindex="0" role="group" aria-label="Win-rate matrix" hidden></pre>
+        <p class="note">
+            The bots in the slots under Setup, on that board and from that seed. Head-to-head
+            plays every pair that many times, each seed from both seats &mdash; rows beat
+            columns. Free-for-all seats all of them in every match &mdash; rows outlasted
+            columns.
+        </p>
+    </div>
+</aside>
+
+<aside id="panel-share" class="panel" role="dialog" aria-modal="true" aria-label="Replay"
+       tabindex="-1" hidden>
+    <div class="panel-head">
+        <h2>Replay</h2>
+        <button id="close-share" class="panel-close" type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="panel-body">
+        <button id="watch-replay" type="button" class="wide" disabled>Watch replay</button>
+        <button id="share" type="button" class="wide">Copy replay link</button>
+        <input id="share-url" type="text" readonly hidden aria-label="Replay link">
+        <p class="note">
+            Watch replay winds a finished match back and plays it again on the board behind this
+            panel &mdash; Start match returns to live play. The link carries the whole match, move
+            by move, no server involved; open one and it plays back here too.
+        </p>
+    </div>
+</aside>
+
+<aside id="panel-settings" class="panel" role="dialog" aria-modal="true" aria-label="Settings"
+       tabindex="-1" hidden>
+    <div class="panel-head">
+        <h2>Settings</h2>
+        <button id="close-settings" class="panel-close" type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="panel-body">
+        <!--
+          Static like the map picker above, and for the same reason: a theme is not a registry
+          entry, there is no "fork, add a file, register it" workflow behind one, and the value is
+          the theme's frozen id -- the very string that goes into localStorage.
+
+          Kotlin writes nothing here but the selected value. It fails at boot on a theme the markup
+          forgot, so a picker cannot quietly offer two of three.
+        -->
+        <h3>Theme</h3>
+        <div class="transport">
+            <select id="theme" aria-label="Theme">
+                <option value="classic" selected>Classic</option>
+                <option value="neon">Neon</option>
+                <option value="dusk">Dusk</option>
+            </select>
+        </div>
+        <p class="note">
+            How the board and the page are coloured. Light or dark follows your system &mdash; every
+            theme has both, so going dark keeps the one you picked.
+        </p>
+
+        <h3 class="spaced">Speed</h3>
+        <div class="transport">
+            <input id="speed" type="range" min="0" max="7" step="1" value="4"
+                   aria-label="Turns per second">
+            <output id="speed-value" for="speed">&mdash;</output>
+        </div>
+        <p class="note">
+            How fast a match between bots plays. A match with you in it moves when you press a key
+            instead, so this changes nothing until you are out of it.
+        </p>
+
+        <!--
+          Every key the page answers to, in the player's words. It is written down in exactly two
+          places -- here, and the table in docs/UI.md -- over Chrome.onKeyDown, which is what the
+          keys actually do. A list that has stopped matching that is worse than no list, so all
+          three change together.
+        -->
+        <h3 class="spaced">Keys</h3>
+        <p class="note">
+            Arrow keys or WASD to move &mdash; with you in the match nothing happens until you press
+            one, and holding a key keeps going that way. <kbd>Space</kbd> plays and pauses a match
+            between bots and <kbd>.</kbd> steps it one turn; on the board those two belong to the
+            match, so <kbd>Enter</kbd> is what presses a button there.
+        </p>
+        <p class="note">
+            <kbd>Tab</kbd> moves between the controls and <kbd>Enter</kbd> presses the one you are
+            on &mdash; including Play again, so a lost match costs one key. <kbd>Esc</kbd> closes
+            whatever is in front of you, and closes the board back to the menu.
+        </p>
+    </div>
+</aside>
+
+<!--
+  The result of the match you just played. A modal: it marks #app inert, takes the focus to its
+  default action, and hands the focus back to whatever opened it when it closes.
+
+  Taking the focus is also how the verdict is announced, which is why there is no live region on
+  it: a reader arriving here is told the title, then the detail named below, then the button it
+  landed on. A polite live region inside a modal that has just been focused says all of that a
+  second time. #status carries role="status" for the outcome line behind this card.
+-->
+<div id="dialog-result" role="dialog" aria-modal="true" aria-labelledby="result-title"
+     aria-describedby="result-detail" hidden>
+    <div class="result-card">
+        <!-- Whoever won: yours on a win, theirs on a loss, and absent on a draw. -->
+        <img id="result-portrait" alt="" aria-hidden="true" hidden>
+        <h2 id="result-title">&mdash;</h2>
+        <p id="result-detail"></p>
+        <!--
+          Three actions, of which one or two are ever showing: another attempt at what was just
+          played, the rung above it, and the way out. All three are marked `data-focus` and Shell
+          takes the focus to the first one a person could actually press, so a lost level costs one
+          Enter and a beaten one costs the same key to move on.
+        -->
+        <div class="result-actions">
+            <button id="result-again" type="button" class="primary" data-focus>Play again</button>
+            <button id="result-next" type="button" class="primary" data-focus hidden>Next level</button>
+            <button id="result-home" type="button" data-focus>Home</button>
+        </div>
+    </div>
+</div>
 
 <script>
     // Failure detection rather than feature probing. A byte-level WasmGC probe is easy to get

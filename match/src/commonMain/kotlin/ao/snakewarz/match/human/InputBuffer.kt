@@ -4,25 +4,34 @@ import ao.snakewarz.core.grid.Direction
 import ao.snakewarz.core.grid.DirectionSet
 
 /**
- * The queue between a keyboard and a snake.
+ * The queue between what a player asked for and what a snake does next.
  *
- * A human presses keys on the browser's schedule and the match consumes them on the engine's, so
- * something has to sit between the two. This is that thing, and it is deliberately platform-free:
- * `:ui` calls [push] from a `keydown` listener, [InteractiveBot] calls [take] from inside its turn,
- * and neither the buffer nor the bot has any idea a DOM exists.
+ * A human works the keyboard or the pointer on the browser's schedule and the match consumes what
+ * they meant on the engine's, so something has to sit between the two. This is that thing, and it is
+ * deliberately platform-free: `:ui` calls [push] from a `keydown` listener and [replace] from a drag,
+ * [InteractiveBot] calls [take] from inside its turn, and neither the buffer nor the bot has any idea
+ * a DOM exists.
  *
- * Two behaviours here are UX decisions rather than plumbing, and both are load-bearing:
+ * Three behaviours here are UX decisions rather than plumbing, and all three are load-bearing:
  *
  * - **[take] drops illegal inputs rather than playing them.** A human who taps left half a square
  *   too late would otherwise drive into their own neck and die to a mistimed keypress. Filtering
- *   means humans die by being trapped, which is the game, instead of by input lag, which is not.
+ *   means humans die by being trapped, which is the game, instead of by input lag, which is not. It
+ *   is also what lets a drawn route be a *plan* rather than a promise: a square that has been taken
+ *   by the time the snake gets there costs the rest of the route, not the player's life.
  * - **[push] collapses a repeat of the direction already queued last.** Holding an arrow key fires
  *   `keydown` at the operating system's auto-repeat rate, and without this a single held key would
  *   fill the queue and eat the next several turns the player actually meant. `:ui` also ignores
  *   `KeyboardEvent.repeat`; this is the belt to that pair of braces.
+ * - **[replace] swaps the whole queue, and neither collapses nor drops.** A drawn route is one
+ *   intent rather than a run of key presses, and swapping it in whole is what makes letting go of a
+ *   drag mean *stop*.
  *
- * The buffer is small on purpose. It exists to absorb a turn or two of anticipation, not to let a
- * player type a route in advance and walk away.
+ * The two capacities are those two intents. [DEFAULT_CAPACITY] holds a turn or two of anticipation,
+ * because a deep keyboard queue reads as input lag — every key waits behind the ones before it, so
+ * the snake stops answering the one just pressed. [PATH_CAPACITY] holds a route drawn in a single
+ * gesture, which is deep without being a backlog: the player takes all of it back by lifting a
+ * finger.
  */
 public class InputBuffer(capacity: Int = DEFAULT_CAPACITY) {
     private val queued = IntArray(capacity)
@@ -59,6 +68,35 @@ public class InputBuffer(capacity: Int = DEFAULT_CAPACITY) {
         queued[slotAt(size)] = direction.ordinal
         size++
         return true
+    }
+
+    /**
+     * Replaces everything queued with [count] directions from [directions], as one swap.
+     *
+     * A drawn path is a single intent, not a run of key presses — so it neither collapses its repeats
+     * (five squares east is five moves, not one) nor drops its newest end when it outgrows what was
+     * queued before it. Replacing rather than appending is what makes redrawing mid-drag cheap and
+     * what makes letting go mean *stop*.
+     *
+     * Directions arrive as [Direction] ordinals in a primitive array, which is the representation
+     * [PathPlanner] plans in and the one that hands a whole route over without boxing a square of it.
+     *
+     * A route longer than [capacity] is **refused**, loudly: [PathPlanner] is bounded by
+     * [PATH_CAPACITY] and a buffer a drag feeds is built with it, so an overlong one is a caller's
+     * arithmetic rather than anything a player could do with a pointer.
+     */
+    public fun replace(directions: IntArray, count: Int) {
+        require(count >= 0) { "a path cannot hold $count directions" }
+        require(count <= directions.size) {
+            "a path of $count directions cannot be read from ${directions.size} of them"
+        }
+        require(count <= queued.size) {
+            "a path of $count directions does not fit a buffer of ${queued.size}"
+        }
+
+        directions.copyInto(queued, 0, 0, count)
+        head = 0
+        size = count
     }
 
     /**
@@ -102,5 +140,14 @@ public class InputBuffer(capacity: Int = DEFAULT_CAPACITY) {
          * it, so the snake stops responding to the key you just hit.
          */
         public const val DEFAULT_CAPACITY: Int = 3
+
+        /**
+         * Room for a path drawn across a large board. A person does not draw a longer one.
+         *
+         * The buffer is built once, in `main()`, before any board exists, so it cannot be sized off
+         * a grid. Two kilobytes, once. Keyboard behaviour does not change with it: the collapse rule
+         * is on [push], so a held arrow still queues at most one pending move whatever the capacity.
+         */
+        public const val PATH_CAPACITY: Int = 512
     }
 }

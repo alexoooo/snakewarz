@@ -4,6 +4,7 @@ import ao.snakewarz.core.grid.Direction
 import ao.snakewarz.core.grid.DirectionSet
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -82,6 +83,65 @@ class InputBufferTest {
         assertTrue(buffer.push(Direction.SOUTH), "the freed slot is at the far end of the array")
         assertEquals(Direction.EAST, buffer.take(DirectionSet.ALL))
         assertEquals(Direction.SOUTH, buffer.take(DirectionSet.ALL))
+    }
+
+    @Test
+    fun `a drawn path keeps its repeats, because five squares east is five moves`() {
+        // The collapse rule is the keyboard's, and a path is not a keyboard: it arrives as one
+        // gesture rather than as a run of key presses, so nothing about it is auto-repeat.
+        val buffer = InputBuffer(InputBuffer.PATH_CAPACITY)
+
+        buffer.replace(IntArray(5) { Direction.EAST.ordinal }, 5)
+
+        assertEquals(5, buffer.size)
+        repeat(5) {
+            assertEquals(Direction.EAST, buffer.take(DirectionSet.ALL))
+        }
+        assertTrue(buffer.isEmpty)
+    }
+
+    @Test
+    fun `a path replaces the queue whole rather than joining the back of it`() {
+        // Redrawing mid-drag has to cost the same however much was queued, and letting go has to be
+        // able to leave nothing behind. Both are the same swap.
+        val buffer = InputBuffer(InputBuffer.PATH_CAPACITY)
+        buffer.push(Direction.NORTH)
+        buffer.push(Direction.WEST)
+        buffer.take(DirectionSet.ALL)
+
+        buffer.replace(intArrayOf(Direction.SOUTH.ordinal, Direction.EAST.ordinal), 2)
+
+        assertEquals(2, buffer.size)
+        assertEquals(Direction.SOUTH, buffer.take(DirectionSet.ALL))
+        assertEquals(Direction.EAST, buffer.take(DirectionSet.ALL))
+        assertNull(buffer.take(DirectionSet.ALL), "and what the keyboard queued is gone, not behind it")
+    }
+
+    @Test
+    fun `a path longer than the buffer is refused rather than truncated`() {
+        // PathPlanner is bounded by PATH_CAPACITY and a buffer a drag feeds is built with it, so an
+        // overlong route is a caller's arithmetic rather than anything a player did with a pointer.
+        val buffer = InputBuffer(capacity = 2)
+
+        assertFailsWith<IllegalArgumentException> {
+            buffer.replace(IntArray(3) { Direction.EAST.ordinal }, 3)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            buffer.replace(IntArray(1) { Direction.EAST.ordinal }, 2)
+        }
+    }
+
+    @Test
+    fun `releasing a drag empties the path it queued`() {
+        // Lift the pointer and the snake stops on the square it is on: clear() is that stop, and it
+        // has to reach a queue a path put there as completely as one the keyboard did.
+        val buffer = InputBuffer(InputBuffer.PATH_CAPACITY)
+        buffer.replace(IntArray(4) { Direction.NORTH.ordinal }, 4)
+
+        buffer.clear()
+
+        assertTrue(buffer.isEmpty)
+        assertNull(buffer.take(DirectionSet.ALL))
     }
 
     @Test

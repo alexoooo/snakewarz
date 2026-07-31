@@ -1,31 +1,44 @@
 /*
- * Hand-written CSS, no framework. Theme-aware via prefers-color-scheme.
- * Kept deliberately small: the sidebar and controls grow here rather than in Kotlin.
+ * Hand-written CSS, no framework.
+ * Kept deliberately small: the panels and controls grow here rather than in Kotlin.
+ *
+ * The colours below are what the page has *before* a theme arrives, and nothing else. Theme.kt
+ * writes --bg, --panel, --ink, --ink-dim, --line, --accent, --accent-ink and --board straight onto
+ * <html> as the module starts, and an inline custom property outranks every rule here -- so a theme
+ * value is never spelled twice and there is no pair to keep in step. What is left is the loading
+ * strip and the unsupported-browser panel, which a browser that never boots keeps.
+ *
+ * Deliberately neutral rather than a copy of one theme's numbers, and deliberately without --board:
+ * nothing shows the board before the module runs, so a boot value for it could only ever be a second
+ * opinion about what the canvas is filled with.
+ *
+ * --danger and --scrim are not a theme's to set -- an error is an error on every board -- so they
+ * live only here, under the scheme.
  */
 
 :root {
-    --bg: #f6f7f9;
-    --panel: #ffffff;
-    --ink: #16191d;
-    --ink-dim: #5b6470;
-    --line: #dfe3e8;
-    --accent: #2f6f4f;
+    --bg: #f2f3f5;
+    --panel: #fbfbfc;
+    --ink: #1a1d21;
+    --ink-dim: #5e6670;
+    --line: #dcdfe4;
+    --accent: #4a5561;
     --accent-ink: #ffffff;
-    --board: #ffffff;
     --danger: #b3423a;
+    --scrim: rgb(10 14 18 / 0.45);
 }
 
 @media (prefers-color-scheme: dark) {
     :root {
-        --bg: #14171a;
-        --panel: #1c2024;
-        --ink: #e8ebee;
-        --ink-dim: #99a3ae;
-        --line: #2c3238;
-        --accent: #3f9e6c;
-        --accent-ink: #06120c;
-        --board: #171b1f;
+        --bg: #15181b;
+        --panel: #1d2126;
+        --ink: #e6e9ec;
+        --ink-dim: #98a1ab;
+        --line: #2d3239;
+        --accent: #6b7684;
+        --accent-ink: #0a0e12;
         --danger: #d3695f;
+        --scrim: rgb(0 0 0 / 0.6);
     }
 }
 
@@ -35,9 +48,9 @@
 
 /*
  * The chrome hides things by setting `hidden`, and every one of them is also given a `display` here
- * -- a flex transport, a grid scoreboard row. An author `display` outranks the user agent's
- * `[hidden] { display: none }`, so without this the hidden rows stay on screen while reporting
- * themselves as hidden. Kotlin cannot see that, which is exactly why the fix belongs here.
+ * -- a flex transport, a grid scoreboard row, a screen, a panel. An author `display` outranks the
+ * user agent's `[hidden] { display: none }`, so without this the hidden ones stay on screen while
+ * reporting themselves as hidden. Kotlin cannot see that, which is exactly why the fix belongs here.
  */
 [hidden] {
     display: none !important;
@@ -51,6 +64,26 @@ body {
     font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
+/*
+ * A visible focus ring everywhere, because every control on this page is a native <button>, <select>
+ * or <input> and the whole of keyboard navigation is Tab landing somewhere you can see.
+ */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/*
+ * Except on the containers. A screen and a panel are focused programmatically, so that arriving on
+ * one leaves Tab pointed at its first control rather than at the browser's own chrome -- but a ring
+ * drawn around the whole page says nothing a person cannot already see, and the panel's is the width
+ * of the panel.
+ */
+.screen:focus-visible,
+.panel:focus-visible {
+    outline: none;
+}
+
 /* Boot states -------------------------------------------------------------- */
 
 #app,
@@ -60,10 +93,15 @@ body {
 
 /*
  * One page. This is a game, not a document: the whole of it is on screen at once, and the only thing
- * that scrolls is the sidebar.
+ * that scrolls is whichever panel is open.
+ *
+ * `100dvh` rather than `100vh`, because a phone's address bar makes the two differ by its own height
+ * -- and `vh` is the taller of them, which puts the bottom bar underneath the browser's chrome.
  *
  * Applied to `booted` rather than to `body`, so #loading and #unsupported keep the ordinary block
- * layout they are written for -- a failure panel is a document and should behave like one.
+ * layout they are written for -- a failure panel is a document and should behave like one. Which is
+ * also why the page padding is dropped only here: a screen pays for its own insets, so that the two
+ * bars can sit against a notch and the board between them cannot.
  *
  * Every `min-height: 0` below is load-bearing. A flex or grid item's automatic minimum size is its
  * content, so without them the board column refuses to shrink past the board it contains, the page
@@ -72,6 +110,7 @@ body {
 body.booted {
     height: 100dvh;
     overflow: hidden;
+    padding: 0;
     display: flex;
     flex-direction: column;
 }
@@ -80,6 +119,9 @@ body.booted #app {
     display: flex;
     flex-direction: column;
     flex: 1;
+    align-self: center;
+    width: 100%;
+    max-width: 74rem;
     min-height: 0;
 }
 
@@ -116,91 +158,295 @@ body.failed #loading {
     word-break: break-word;
 }
 
-/* Layout ------------------------------------------------------------------- */
+/* Screens ------------------------------------------------------------------ */
 
-/* One line rather than two: the height it saves is height the board gets. */
-header {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: 0.6rem;
-    margin-bottom: 0.9rem;
+.screen {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
 }
 
-header h1 {
+/*
+ * The two screens with no board on them, and the two allowed to scroll. Nothing here is measured by
+ * anything, so a landscape phone with no room for the menu should give it a scrollbar rather than cut
+ * the last button off -- which is a different question from the game screen, where a scrollbar would
+ * mean the board had been sized against room the page does not have.
+ */
+#screen-home,
+#screen-ladder {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    padding: 1.5rem;
+    padding-top: max(1.5rem, env(safe-area-inset-top, 0px));
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+    padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
+    overflow-y: auto;
+}
+
+/*
+ * Rows, not flexbox, and deliberately so. The canvas sizes its backing store from the box
+ * .board-wrap is drawn at, so that box must not in turn depend on the canvas -- with an `auto` track
+ * it would, and the board came out a different size on each load. `minmax(0, 1fr)` gives the middle
+ * row a definite height that content cannot influence, and the single `minmax(0, 1fr)` column does
+ * the same across. The two bars are `auto`, so the board gets whatever is left and nothing overflows.
+ *
+ * The side insets are here rather than on .board-wrap, and that placement is load-bearing:
+ * `clientWidth` counts an element's own padding, so padding on the box the renderer measures is room
+ * the board would claim and then overflow by.
+ */
+#screen-game {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.4rem;
+    padding-left: max(0.6rem, env(safe-area-inset-left, 0px));
+    padding-right: max(0.6rem, env(safe-area-inset-right, 0px));
+}
+
+/* Home --------------------------------------------------------------------- */
+
+.home {
+    margin: auto;
+    width: 100%;
+    max-width: 22rem;
+    text-align: center;
+}
+
+.home h1 {
     margin: 0;
-    font-size: 1.35rem;
-    letter-spacing: -0.01em;
+    font-size: 2rem;
+    letter-spacing: -0.02em;
 }
 
 .tagline {
-    margin: 0;
+    margin: 0.2rem 0 0;
     color: var(--ink-dim);
     font-size: 0.9rem;
 }
 
+.home-actions {
+    margin-top: 2rem;
+}
+
+.home .note {
+    margin-top: 2rem;
+}
+
+/* Ladder ------------------------------------------------------------------- */
+
 /*
- * Grid, not flexbox, and deliberately so. The canvas sizes its backing store from the width of
- * .board-wrap, so .board-wrap's width must not in turn depend on the canvas -- with `flex: 1 1 auto`
- * it did, and the board came out a different size on each load. `minmax(0, 1fr)` gives the column a
- * definite width that content cannot influence.
+ * Ten tiles that reflow from one column on a phone to three on a desktop. `auto-fill` rather than a
+ * fixed count, so the number of columns is the width's business and not a set of breakpoints to keep
+ * in step with the rest of the page.
  */
-.arena {
+.levels {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 18rem;
-    gap: 1.5rem;
-    align-items: stretch;
-    max-width: 74rem;
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/*
+ * A tile is a <button>, so that a locked one can be `disabled` and thereby leave the tab order. That
+ * makes it a grid of its own: the picture spans both text rows, and everything beside it is left
+ * aligned rather than inheriting a button's centring.
+ */
+.level {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.1rem 0.7rem;
+    width: 100%;
+    padding: 0.7rem 0.85rem;
+    text-align: left;
+}
+
+/* Four rows of text beside it: the number, the title, the blurb and the line naming the board. */
+.level .portrait {
+    grid-row: 1 / span 4;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 8px;
+}
+
+.level-no {
+    grid-column: 2;
+    color: var(--ink-dim);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.level-title {
+    grid-column: 2;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* Two lines at most: ten tiles of an even height read as a ladder, and a ragged column does not. */
+.level-blurb {
+    grid-column: 2 / 4;
+    color: var(--ink-dim);
+    font-size: 0.8rem;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+}
+
+.level-meta {
+    grid-column: 2 / 4;
+    margin-top: 0.15rem;
+    color: var(--ink-dim);
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The badge sits beside the title, which is the row a glance lands on. */
+.level-state {
+    grid-column: 3;
+    grid-row: 2;
+    color: var(--ink-dim);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+}
+
+/* The one you would press: the accent says so without the fill a primary button carries, which on a
+   ten-tile grid would read as ten calls to action. */
+.level.open {
+    border-color: var(--accent);
+}
+
+.level.open .level-state {
+    color: var(--accent);
+}
+
+/* A face you have already beaten steps back; a locked one is dimmed by `button:disabled` already. */
+.level.cleared .portrait {
+    opacity: 0.55;
+}
+
+/* Bars --------------------------------------------------------------------- */
+
+/* Thin by construction: everything dense is a panel away, so a bar is one row of controls. */
+.bar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+/*
+ * The insets a notch and a home indicator ask for, on the two edges of the game screen that touch
+ * them. `max()` rather than the inset alone, so a phone that reports zero still gets the padding the
+ * layout was drawn with.
+ */
+.bar.top {
+    padding: max(0.35rem, env(safe-area-inset-top, 0px)) 0 0.15rem;
+}
+
+/*
+ * The seats, the transport, the scrub row and the status line, wrapping into as few rows as they
+ * fit in. Every child of it is a fixed number of lines tall on purpose -- see #scoreboard and
+ * #status -- because the board's track is what is left over after this, and a bar that grew a row
+ * mid-match would resize a board nothing is going to re-measure.
+ */
+.bar.bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.9rem;
+    padding: 0.15rem 0 max(0.35rem, env(safe-area-inset-bottom, 0px));
+}
+
+.bar h1 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.bar-gap {
     flex: 1;
-    min-height: 0;
+}
+
+.bar button {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.85rem;
+}
+
+.wordmark {
+    font-weight: 600;
+    letter-spacing: -0.01em;
 }
 
 /*
- * Narrow enough that the two columns stack, and two full-height panels cannot: the sidebar would get
- * a viewport of its own under a board that already used one. So the page goes back to being a page.
+ * A phone in portrait, where the top bar is four buttons wide and the viewport is not. Everything
+ * here buys the same thing: one row rather than two, and a row of this bar is a row of the board.
+ * The name of the game is the first thing to go -- the board is what somebody came for, and the tab
+ * already says which game it is.
  */
-@media (max-width: 52rem) {
-    .arena {
-        grid-template-columns: minmax(0, 1fr);
-        min-height: 0;
+@media (max-width: 30rem) {
+    #screen-game .wordmark {
+        display: none;
     }
 
-    body.booted {
-        height: auto;
-        overflow: visible;
-        display: block;
+    #screen-game .bar {
+        gap: 0.3rem;
     }
 
-    body.booted #app {
-        display: block;
+    #screen-game .bar button {
+        padding: 0.3rem 0.4rem;
+        font-size: 0.8rem;
     }
 
-    .sidebar {
-        overflow: visible;
+    /*
+     * Four cards share a phone's width, and every pixel a portrait takes is a pixel off a name that
+     * is already truncating. So the picture shrinks and the card closes up around it -- most of what
+     * is won back is the gap and the padding rather than the picture, which is why the picture stays
+     * large enough to read.
+     */
+    #scoreboard .portrait {
+        width: 1.15rem;
+        height: 1.15rem;
+        border-radius: 4px;
+    }
+
+    #scoreboard .slot {
+        gap: 0.25rem;
+        padding: 0.15rem 0.35rem;
     }
 }
 
-/*
- * Rows, for the reason .arena has columns. The board measures this panel, so the track it sits in
- * has to have a height of its own that the canvas inside cannot influence -- `minmax(0, 1fr)` is
- * that, and it is the vertical half of the circularity the comment above .arena describes. The
- * chrome under it is `auto`, so the board gets whatever is left and nothing overflows the page.
- */
-.board-panel {
-    min-width: 0;
-    min-height: 0;
-    display: grid;
-    grid-template-rows: minmax(0, 1fr) auto auto auto auto;
-}
+/* Board -------------------------------------------------------------------- */
 
 /*
  * One grid cell holding both canvases, and the box the hover label is placed against.
  *
- * The board is a fixed size and no longer fills the column, so it is centred -- and the overlay has
- * to land on it exactly. Stacking them in the same grid area centres both by the same algorithm,
- * which absolute positioning or a second centring rule could only ever approximate. The track is
- * still definite and still comes from .arena, so nothing here lets the canvas size its own
- * container: that is the circularity the comment above .arena is about.
+ * The board is centred in the room it has, and the overlay has to land on it exactly. Stacking them
+ * in the same grid area centres both by the same algorithm, which absolute positioning or a second
+ * centring rule could only ever approximate. The track around it is definite and comes from
+ * #screen-game, so nothing here lets the canvas size its own container.
+ *
+ * `touch-action: none` is what makes a drag across the board steering rather than scrolling, and
+ * `overscroll-behavior: contain` stops a drag that reaches an edge from pulling the page into a
+ * bounce or a pull-to-refresh. Neither has anything to hand the gesture to on this page, so a finger
+ * on the board can only ever mean the board.
+ *
+ * `user-select: none` is the third of that set and answers the mouse rather than the finger: a drag
+ * begun on the board is drawing a route, and without it the browser also reads it as a text
+ * selection, so the label and the bars around the board light up blue behind the route being drawn.
+ *
+ * No padding here, ever: `clientWidth` counts it, so the renderer would size the board to room it
+ * then overflows. The side insets live on #screen-game instead.
  */
 .board-wrap {
     display: grid;
@@ -210,6 +456,17 @@ header h1 {
     position: relative;
     min-width: 0;
     min-height: 0;
+    touch-action: none;
+    overscroll-behavior: contain;
+    user-select: none;
+    /*
+     * The one case the two clamps in BoardRenderer.fit cannot both satisfy: a 40x40 in a landscape
+     * phone with a couple of hundred pixels of height, where the minimum cell size is larger than the
+     * room. The board is centred and clipped rather than allowed out of its track -- this box is
+     * `position: relative`, so an overflowing canvas would paint over both bars *and* swallow the
+     * clicks meant for them, which is worse than not seeing the outermost rows.
+     */
+    overflow: hidden;
 }
 
 #board,
@@ -270,20 +527,19 @@ header h1 {
 .transport {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-top: 0.9rem;
+    gap: 0.4rem;
     flex-wrap: wrap;
 }
 
 .transport label {
-    margin-left: 0.5rem;
+    margin-left: 0.35rem;
     color: var(--ink-dim);
     font-size: 0.85rem;
 }
 
 .transport input[type="range"] {
-    flex: 0 1 11rem;
-    min-width: 6rem;
+    flex: 0 1 8rem;
+    min-width: 5rem;
     accent-color: var(--accent);
 }
 
@@ -294,47 +550,120 @@ header h1 {
     font-variant-numeric: tabular-nums;
 }
 
+/* Play and Pause are different widths, and a button that resized would move the two beside it. */
+#play {
+    min-width: 4.2rem;
+}
+
+/* Replay only, and wide: a seek bar you cannot land a finger accurately on is not a seek bar. */
+.bar .scrub {
+    flex: 1 1 100%;
+}
+
 .scrub input[type="range"] {
-    flex: 1 1 16rem;
+    flex: 1 1 10rem;
 }
-
-#status {
-    margin: 0.75rem 0 0;
-    color: var(--ink-dim);
-    font-size: 0.9rem;
-    font-variant-numeric: tabular-nums;
-}
-
-/* Tournament --------------------------------------------------------------- */
 
 /*
- * A disclosure rather than a section, so a page that must fit pays one line for a feature most
- * matches never use. Open, it takes its room out of the board above it rather than off the bottom of
- * the page -- which is the whole point of the `minmax(0, 1fr)` board row, and why opening it asks
- * the renderer to refit.
+ * One line, always. What it says changes every round, and the bottom bar's height is what the board's
+ * track is measured against -- so a status that wrapped would shrink the board and nothing would
+ * re-measure it. Its own row rather than the transport's, because that is the only way the line count
+ * cannot depend on the words.
  */
-.tournament {
-    margin-top: 1rem;
-    padding-top: 0.9rem;
-    border-top: 1px solid var(--line);
-    min-height: 0;
+#status {
+    flex: 1 1 100%;
+    margin: 0;
+    color: var(--ink-dim);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.tournament > summary {
+/* Panels ------------------------------------------------------------------- */
+
+/*
+ * A panel slides over the board rather than beside it, and that is what makes opening one free: the
+ * board's box does not move, so nothing has to be re-measured. A panel that ever pushed the board
+ * instead would have to come up as UiIntent.Relayout.
+ *
+ * It is also the only scrolling region left on the game screen, which is what buys everything else
+ * a fixed height.
+ */
+.panel {
+    position: fixed;
+    z-index: 11;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(24rem, 100%);
+    display: flex;
+    flex-direction: column;
+    /* A panel reaches every edge of the glass, so it pays the insets a notch and a home bar ask for. */
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    box-shadow: -8px 0 28px rgb(0 0 0 / 0.22);
+}
+
+#panel-scrim {
+    position: fixed;
+    z-index: 10;
+    inset: 0;
+    background: var(--scrim);
+}
+
+.panel-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.panel-head h2 {
+    margin: 0;
+    flex: 1;
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.07em;
     color: var(--ink-dim);
-    cursor: pointer;
-    user-select: none;
 }
 
-.tournament > summary:hover {
-    color: var(--ink);
+.panel-close {
+    padding: 0.1rem 0.5rem;
+    font-size: 1.1rem;
+    line-height: 1.2;
 }
 
-.tournament select {
-    width: auto;
+.panel-body {
+    padding: 1rem 1.25rem 1.5rem;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.panel-body h3 {
+    margin: 0 0 0.4rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-dim);
+}
+
+/* A second section of the same panel, ruled off from the one above it by space alone. */
+.panel-body h3.spaced {
+    margin-top: 1.6rem;
+}
+
+/*
+ * A slider in a panel has the panel's width to use, where one in the bottom bar was competing with
+ * the transport for it. The readout keeps its own column so the thumb does not shuffle sideways as
+ * the number changes width.
+ */
+.panel .transport input[type="range"] {
+    flex: 1 1 6rem;
 }
 
 #tournament-progress {
@@ -353,12 +682,65 @@ header h1 {
     padding: 0.75rem 0.9rem;
     max-height: 40vh;
     overflow: auto;
-    background: var(--panel);
+    background: var(--bg);
     border: 1px solid var(--line);
     border-radius: 8px;
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
     font-size: 0.78rem;
     line-height: 1.5;
+}
+
+/* The result dialog -------------------------------------------------------- */
+
+#dialog-result {
+    position: fixed;
+    z-index: 20;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1.5rem;
+    background: var(--scrim);
+}
+
+.result-card {
+    width: min(20rem, 100%);
+    padding: 1.5rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgb(0 0 0 / 0.3);
+    text-align: center;
+}
+
+/*
+ * The winner's face, above the verdict rather than beside it: the card is centred text, and a
+ * draw has nobody to show -- so the portrait is a block that is simply absent when there is none,
+ * and nothing has to hold a space open for it.
+ */
+#result-portrait {
+    display: block;
+    width: 4.5rem;
+    height: 4.5rem;
+    margin: 0 auto 0.85rem;
+    border-radius: 14px;
+}
+
+.result-card h2 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+#result-detail {
+    margin: 0.35rem 0 0;
+    color: var(--ink-dim);
+    font-size: 0.9rem;
+}
+
+.result-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
 }
 
 /* Controls ----------------------------------------------------------------- */
@@ -411,66 +793,93 @@ input[type="number"] {
     font-size: 0.85rem;
 }
 
-/* Sidebar ------------------------------------------------------------------ */
-
-/* The one scrollable region on the page, which is what buys everything else a fixed height. */
-.sidebar {
-    padding: 1rem 1.25rem 1.25rem;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    min-height: 0;
-    overflow-y: auto;
+.panel .transport select {
+    width: auto;
 }
 
-.sidebar section + section {
-    margin-top: 1.4rem;
-    padding-top: 1.1rem;
-    border-top: 1px solid var(--line);
-}
+/* The player cards --------------------------------------------------------- */
 
-.sidebar h2 {
-    margin: 0 0 0.75rem;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: var(--ink-dim);
-}
-
+/*
+ * A row of cards along the bar rather than a column beside the board: the board has the frame.
+ *
+ * One row at every width, and that is a layout constraint rather than a taste: a seat is eliminated
+ * mid-match and grows the words "trapped", so a row that could wrap would take a row off the board
+ * on a turn nothing re-measures the board on. Four cards share the width and their names truncate
+ * instead.
+ */
 #scoreboard {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
     margin: 0;
     padding: 0;
+    min-width: 0;
     list-style: none;
+    overflow: hidden;
 }
 
 .slot {
-    display: grid;
-    grid-template-columns: 0.75rem 1fr auto;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.3rem 0;
-    font-size: 0.9rem;
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    min-width: 0;
+    padding: 0.15rem 0.5rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+/*
+ * The opponent's face. Fixed size on purpose, like everything else in this bar: a card that grew
+ * with its picture would take a row off the board on a turn nothing re-measures it on.
+ *
+ * It does not replace the swatch beside it. Most portraits are drawn in one ramp and carry no seat
+ * colour at all, and the swatch is the only thing tying the card to a trail on the board.
+ */
+.slot .portrait {
+    flex: none;
+    align-self: center;
+    width: 1.55rem;
+    height: 1.55rem;
+    border-radius: 5px;
 }
 
 .slot .swatch {
-    width: 0.75rem;
-    height: 0.75rem;
+    flex: none;
+    align-self: center;
+    width: 0.7rem;
+    height: 0.7rem;
     border-radius: 3px;
 }
 
+/* The one part that may be cut: a name is recoverable from the colour, a length is not. */
+.slot .who {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .slot .length {
+    flex: none;
     color: var(--ink-dim);
     font-variant-numeric: tabular-nums;
 }
 
 .slot .fate {
-    grid-column: 2 / -1;
+    flex: none;
     color: var(--ink-dim);
-    font-size: 0.8rem;
+    font-size: 0.78rem;
 }
 
 .slot .fate:empty {
     display: none;
+}
+
+.slot.out {
+    background: transparent;
 }
 
 .slot.out .who,
@@ -478,9 +887,12 @@ input[type="number"] {
     opacity: 0.55;
 }
 
-.slot.out .swatch {
+.slot.out .swatch,
+.slot.out .portrait {
     opacity: 0.35;
 }
+
+/* The new-match form ------------------------------------------------------- */
 
 .setup {
     display: grid;
@@ -584,7 +996,7 @@ input[type="number"] {
 
 kbd {
     padding: 0.05em 0.35em;
-    background: var(--panel);
+    background: var(--bg);
     border: 1px solid var(--line);
     border-radius: 3px;
     font-family: inherit;

@@ -112,6 +112,24 @@ class SurvivalHorizonTest {
     }
 
     @Test
+    fun `a wall the map owns reads as a corpse standing in the same square`() {
+        // The fixture below draws its walls as eliminated snakes, which is a rule of the engine and
+        // still worth testing. A map's wall is the other kind of impassable square, and this reading
+        // asks the sweep what ground there is rather than what shape the board is — so the estimate,
+        // the square count and the oracle all have to come out identical on every walled shape here.
+        for (drawn in dumbbells() + combs()) {
+            val mapped = Shape(drawn.picture, drawn.growsNext, asMap = true)
+            val label = drawn.picture.joinToString("/")
+
+            assertEquals(drawn.fillable(), mapped.fillable(), "$label: the square count")
+            assertEquals(drawn.exact(), mapped.exact(), "$label: the oracle")
+            for (length in 1..8) {
+                assertEquals(drawn.horizon(length), mapped.horizon(length), "$label: the horizon at length $length")
+            }
+        }
+    }
+
+    @Test
     fun `a snake with nowhere to go has no horizon at all`() {
         assertEquals(0, shape("@#.", "2..", "1#.").horizon(), "a walled-in snake gets no moves")
         assertEquals(2, shape("@.").horizon(), "and one square in front of it is worth two moves, not one")
@@ -238,8 +256,12 @@ class SurvivalHorizonTest {
  * snake's body stays on the board as an obstacle and a dead snake seeds no sweep. The measured snake
  * is the last slot and the only survivor, so [TempoOwnership] hands it every free square it can reach
  * — which is what makes the picture the region rather than merely a board it is drawn on.
+ *
+ * [asMap] draws the `#` squares as the board's own map instead, leaving the body as corpses. The two
+ * are different rules — a corpse is a body that stopped moving and a map square never moved — and
+ * every reading here has to be blind to which it was handed.
  */
-private class Shape(private val picture: List<String>, val growsNext: Boolean) {
+private class Shape(val picture: List<String>, val growsNext: Boolean, asMap: Boolean = false) {
     private val grid = Grid(picture.size, picture[0].length)
     private val board: Board
     private val space: TempoOwnership
@@ -282,8 +304,8 @@ private class Shape(private val picture: List<String>, val growsNext: Boolean) {
             }
         }
 
-        val spawns = (walls + trail + headCell).toIntArray()
-        board = Board(grid, spawns)
+        val spawns = if (asMap) (trail + headCell).toIntArray() else (walls + trail + headCell).toIntArray()
+        board = Board(grid, spawns, wallCells = if (asMap) walls.toIntArray() else IntArray(0))
         for (dead in 0 until spawns.size - 1) {
             board.eliminate(SnakeId(dead), EliminationReason.RESIGNED)
         }

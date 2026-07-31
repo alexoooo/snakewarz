@@ -1,4 +1,4 @@
-package ao.snakewarz.ui.chrome
+package ao.snakewarz.ui.chrome.panel
 
 import kotlin.random.Random
 

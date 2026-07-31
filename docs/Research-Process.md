@@ -346,6 +346,21 @@ beside any rating that will be quoted later.
 is conditioned on the field *and* on the geometry, and cost is not monotone in board size either, so
 an allowance measured on one board does not transfer to another.
 
+**And the map is a third axis of the same thing, larger than either.** On `cross` the top pair
+inverts — `uct` above `puct` — and the field compresses from **979 Elo to 479** while `wallhug` gains
+about **400**; on `double-spiral` at 16x16, `puct` at a quarter of an allowance beats itself at the
+full one **77–23** and loses **23–77** on a bare board of the same size, so *more search is worse
+there*. **A map changes which bot is stronger, not merely by how much.** Two standing consequences:
+
+- **Name the map beside every rating, `empty` included.** A figure quoted without one is a figure the
+  next person will assume was taken on a bare rectangle, and half of them were. `rate` prints it on
+  every summary line for that reason, and `RunHeader.comparabilityKey` carries it so a walled batch
+  and a bare one cannot pool.
+- **Every measurement in this repository taken before Release 2 is an empty-board measurement.** That
+  includes the shipped ladder, `docs/Bots.md`'s tables and every closed agenda. None of them is wrong;
+  all of them are conditioned. [`Workflow.md`](Workflow.md#boards-with-walls-in-them) is what to read
+  before a batch on a map, and [`Maps.md`](Maps.md) is what each shape is *for*.
+
 ### 5. Diagnose, whichever way it went
 
 ```bash

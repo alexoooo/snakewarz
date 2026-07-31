@@ -19,8 +19,11 @@ import ao.snakewarz.core.rules.RulesConfig
  * costs a varint per slot and makes the record self-contained. [seed] is kept as provenance and as
  * the input CI needs to re-run the real bots, never as the source of truth for playback.
  *
- * [spawns] are **playable** indices, `row * cols + col`, so the format does not encode the engine's
- * padded-grid layout.
+ * The same reasoning puts the map here rather than a name for it: [walls] travels as the squares
+ * themselves, so a map shape can be redesigned or deleted without breaking a link anybody has shared.
+ *
+ * [spawns] and [walls] are **playable** indices, `row * cols + col`, so the format does not encode
+ * the engine's padded-grid layout.
  *
  * Four things are per slot — who is playing, when they act, where they start, and how they are
  * configured — and they are four parallel collections rather than a list of seat objects, because
@@ -40,6 +43,8 @@ public class MatchSetup(
     public val slots: List<BotId>,
     turnOrder: IntArray,
     spawns: IntArray,
+    /** Permanently impassable squares, as **playable** indices `row * cols + col`, strictly ascending. */
+    walls: IntArray = IntArray(0),
     /** Per-slot allowance. Empty gives every slot [budgetPerTurn], which is the usual match. */
     budgets: IntArray = IntArray(0),
     /** Per-slot knob values. Empty gives every slot [BotParams.EMPTY], which is the usual match. */
@@ -47,6 +52,7 @@ public class MatchSetup(
 ) {
     private val order: IntArray = turnOrder.copyOf()
     private val starts: IntArray = spawns.copyOf()
+    private val map: IntArray = walls.copyOf()
 
     /**
      * Materialised rather than left null, so that a setup built from [budgetPerTurn] alone is
@@ -97,6 +103,22 @@ public class MatchSetup(
                 require(starts[other] != starts[slot]) { "slots $other and $slot spawn on the same square" }
             }
         }
+
+        // Ascending order is demanded here rather than by the engine because this is where a
+        // stranger's payload lands, and it buys three things at once: duplicate detection in one
+        // pass, a canonical form so `equals` compares maps honestly rather than orderings, and an
+        // array the spawn test below can binary-search.
+        var previous = -1
+        for (i in map.indices) {
+            require(map[i] in 0 until playableCount) {
+                "wall $i is at ${map[i]}, which is off a ${rows}x$cols board"
+            }
+            require(map[i] > previous) { "walls must ascend and not repeat; ${map[i]} follows $previous" }
+            previous = map[i]
+        }
+        for (slot in 0 until slotCount) {
+            require(!holdsSorted(map, starts[slot])) { "slot $slot spawns on a wall of the map" }
+        }
     }
 
     /** The slot indices in the order they act, as a fresh array. */
@@ -104,6 +126,14 @@ public class MatchSetup(
 
     /** The playable spawn index per slot, as a fresh array. */
     public fun spawns(): IntArray = starts.copyOf()
+
+    /** The playable wall indices, as a fresh array. */
+    public fun walls(): IntArray = map.copyOf()
+
+    public val wallCount: Int get() = map.size
+
+    /** Whether this match is played on a map at all — the codec's version selector. */
+    public val mapped: Boolean get() = map.isNotEmpty()
 
     /** The search allowance per slot, as a fresh array. */
     public fun budgets(): IntArray = allowances.copyOf()
@@ -124,6 +154,10 @@ public class MatchSetup(
     internal fun spawnCells(grid: Grid): IntArray =
         IntArray(slotCount) { grid.cellAt(starts[it] / cols, starts[it] % cols).index }
 
+    /** The walls translated into [grid]'s padded address space, which is what [ao.snakewarz.core.rules.Board] wants. */
+    internal fun wallCells(grid: Grid): IntArray =
+        IntArray(map.size) { grid.cellAt(map[it] / cols, map[it] % cols).index }
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is MatchSetup) return false
@@ -135,6 +169,7 @@ public class MatchSetup(
             slots == other.slots &&
             order.contentEquals(other.order) &&
             starts.contentEquals(other.starts) &&
+            map.contentEquals(other.map) &&
             allowances.contentEquals(other.allowances) &&
             knobs == other.knobs
     }
@@ -148,13 +183,17 @@ public class MatchSetup(
         result = 31 * result + slots.hashCode()
         result = 31 * result + order.contentHashCode()
         result = 31 * result + starts.contentHashCode()
+        result = 31 * result + map.contentHashCode()
         result = 31 * result + allowances.contentHashCode()
         result = 31 * result + knobs.hashCode()
         return result
     }
 
+    // The wall count and not the wall indices: this string is embedded in the playback failure
+    // message `Match.step()` raises, which a person has to be able to read.
     override fun toString(): String =
-        "MatchSetup(${rows}x$cols, seed=$seed, slots=$slots, order=${order.toList()}, spawns=${starts.toList()})"
+        "MatchSetup(${rows}x$cols, seed=$seed, slots=$slots, order=${order.toList()}, " +
+            "spawns=${starts.toList()}, walls=${map.size})"
 
     public companion object {
         /**
@@ -298,6 +337,7 @@ public class MatchSetup(
             seed: Long,
             rules: RulesConfig = RulesConfig(),
             budgetPerTurn: Int = DEFAULT_BUDGET_PER_TURN,
+            walls: IntArray = IntArray(0),
             budgets: IntArray = IntArray(0),
             slotParams: List<BotParams> = emptyList(),
         ): MatchSetup {
@@ -320,10 +360,31 @@ public class MatchSetup(
                 budgetPerTurn = budgetPerTurn,
                 slots = slots.toList(),
                 turnOrder = order,
-                spawns = mostDistantSpawns(grid, slots.size),
+                spawns = mostDistantSpawns(grid, walls, slots.size),
+                walls = walls,
                 budgets = budgets,
                 slotParams = slotParams,
             )
         }
     }
+}
+
+/**
+ * Whether the ascending [sorted] holds [value].
+ *
+ * A binary search rather than a scan because the caller is the wall array, which a stranger's payload
+ * can make as long as the board is large; `java.util.Arrays` is not available to common code.
+ */
+private fun holdsSorted(sorted: IntArray, value: Int): Boolean {
+    var low = 0
+    var high = sorted.size - 1
+    while (low <= high) {
+        val middle = (low + high) ushr 1
+        when {
+            sorted[middle] < value -> low = middle + 1
+            sorted[middle] > value -> high = middle - 1
+            else -> return true
+        }
+    }
+    return false
 }

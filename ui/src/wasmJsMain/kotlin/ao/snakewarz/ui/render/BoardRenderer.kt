@@ -6,6 +6,7 @@ import ao.snakewarz.core.rules.BoardView
 import ao.snakewarz.core.snake.SnakeId
 import ao.snakewarz.core.snake.SnakeView
 import ao.snakewarz.match.TurnEvents
+import ao.snakewarz.match.human.PathPlanner
 import ao.snakewarz.ui.schedule.TurnScheduler
 import kotlinx.browser.window
 import org.w3c.dom.CanvasLineCap
@@ -75,12 +76,27 @@ internal class BoardRenderer(
      */
     private val bootRatio: Double = ratioNow()
 
-    private var palette: Palette = Palette.of(prefersDark())
+    /**
+     * The colours in force.
+     *
+     * The scheme is the one thing about it a renderer can know for itself; which *theme* the player
+     * chose is remembered a layer up, so this opens on the default and is handed the real one by
+     * [applyTheme] before the first fit.
+     */
+    private var theme: Theme = Theme.of(Theme.DEFAULT_ID, prefersDark())
     private var grid: Grid = Grid(1, 1)
     private var cellSize: Int = MIN_CELL
 
     /** The square the wash is drawn for, so a turn can redraw it without re-deciding. */
     private var hovered: Cell = Cell.NONE
+
+    /**
+     * The route being drawn, kept for the same reason [hovered] is: [fit] repaints the overlay from
+     * inside itself, so both decorations have to be readable without the caller handing them over
+     * again. An empty planner on a one-square grid stands in until the first real one arrives,
+     * exactly as [grid] does.
+     */
+    private var plan: PathPlanner = PathPlanner(Grid(1, 1))
 
     /**
      * The square each snake's head was last painted on.
@@ -93,14 +109,19 @@ internal class BoardRenderer(
     private var heads: IntArray = IntArray(0)
 
     /**
-     * Resizes the backing store to the fixed board and repaints. Start, resize and seek.
+     * Resizes the backing store to the room the board has and repaints. Start, resize and seek.
      *
-     * The board is **a fixed rectangle of device pixels**, so the grid decides only how finely that
-     * rectangle is divided: an 8x8 and a 40x40 occupy the same frame at different magnifications,
-     * and zooming the page moves the text around a board that stays where it is. Only a container
-     * with no room for it can make it smaller, and both of those clamps are measured in device
-     * pixels too — where zoom cancels out exactly, because the box loses CSS pixels at the same rate
-     * a CSS pixel gains device ones.
+     * **The board fills its container**, so an 8x8 and a 40x40 occupy the same frame at different
+     * magnifications and the grid decides only how finely that frame is divided. The container is
+     * the input to the size rather than a clamp on it: a phone in portrait and a 4K monitor are the
+     * same board at two magnifications, which is the whole of "snakes centre stage".
+     *
+     * One clamp survives in each direction and neither is a frame size. [MAX_CELL] stops a small
+     * board turning into a handful of enormous squares in a large window, and [MIN_CELL] keeps a
+     * 40x40 legible on a phone. Both are in CSS pixels at [bootRatio], so zooming the page moves the
+     * text around a board that stays where it is — the room is measured in device pixels too, where
+     * zoom cancels out exactly, because the box loses CSS pixels at the same rate a CSS pixel gains
+     * device ones.
      *
      * Everything below the CSS size is in **device** pixels, and the context is never scaled. The
      * obvious alternative — a backing store of `size * devicePixelRatio` and a matching
@@ -121,13 +142,14 @@ internal class BoardRenderer(
             (box?.clientWidth?.takeIf { it > 0 } ?: FALLBACK_WIDTH) * ratio,
             (box?.clientHeight?.takeIf { it > 0 } ?: FALLBACK_HEIGHT) * ratio,
         )
-        // Fitted by the longer side, so a 12x20 board sits inside the square a 20x20 fills. Rounded
-        // against the target and floored against the room: half a pixel a cell either way is how a
-        // 40x40 comes out the size of an 8x8, and how a board that has to shrink still fits.
+        // Fitted by the longer side, so a 12x20 board sits inside the square a 20x20 fills, and
+        // floored so that a whole number of device pixels a cell still leaves the room it was
+        // measured against.
         val span = maxOf(grid.rows, grid.cols)
-        val wanted = (BOARD_EXTENT * bootRatio - 1) / span + 0.5
         val fits = (room - 1) / span
-        cellSize = minOf(wanted, fits).toInt().coerceAtLeast((MIN_CELL * bootRatio).toInt().coerceAtLeast(1))
+        cellSize = fits.toInt()
+            .coerceAtMost((MAX_CELL * bootRatio).toInt())
+            .coerceAtLeast((MIN_CELL * bootRatio).toInt().coerceAtLeast(1))
 
         val width = cellSize * grid.cols + 1
         val height = cellSize * grid.rows + 1
@@ -150,8 +172,8 @@ internal class BoardRenderer(
     }
 
     /** Switches themes. The caller follows with [fit], because the gridlines change colour too. */
-    fun applyScheme(dark: Boolean) {
-        palette = Palette.of(dark)
+    fun applyTheme(theme: Theme) {
+        this.theme = theme
     }
 
     /**
@@ -182,7 +204,7 @@ internal class BoardRenderer(
     }
 
     /**
-     * Repaints the overlay, picking out whoever holds [cell] and nobody when that is nobody.
+     * Repaints the overlay: whoever holds [cell], the route in [plan], and every snake's thread.
      *
      * The whole overlay, because the threads on it move with the snakes: this is the one call that
      * has to follow every [paintMove], [paintSnake] and [repaint], not merely every pointer move.
@@ -191,8 +213,9 @@ internal class BoardRenderer(
      * moving on to its next match all resolve to whoever holds that square now. That is the same
      * rule every colour on this board already follows: read it off the position, do not keep it.
      */
-    fun paintOverlay(view: BoardView, cell: Cell) {
+    fun paintOverlay(view: BoardView, cell: Cell, plan: PathPlanner) {
         hovered = cell
+        this.plan = plan
         drawOverlay(view)
     }
 
@@ -200,10 +223,23 @@ internal class BoardRenderer(
         val width = (cellSize * grid.cols + 1).toDouble()
         val height = (cellSize * grid.rows + 1).toDouble()
 
-        context.fillStyle = palette.background.toJsString()
+        context.fillStyle = theme.background.toJsString()
         context.fillRect(0.0, 0.0, width, height)
 
-        context.strokeStyle = palette.gridline.toJsString()
+        // Between the background and the gridlines. A fill owns everything but the one-pixel gutter
+        // along its top and left edge, so the lines below land on top of the map and a grid reads
+        // across a wall exactly as it reads across open board. Walls never move, so this is the only
+        // pass that lays them down; keeping one is [paintOwner]'s job.
+        for (row in 0 until grid.rows) {
+            for (col in 0 until grid.cols) {
+                val cell = grid.cellAt(row, col)
+                if (view.isWall(cell)) {
+                    fillWall(cell)
+                }
+            }
+        }
+
+        context.strokeStyle = theme.gridline.toJsString()
         context.lineWidth = 1.0
         context.beginPath()
         for (col in 0..grid.cols) {
@@ -234,15 +270,15 @@ internal class BoardRenderer(
      */
     fun paintSnake(view: BoardView, id: SnakeId) {
         val snake = view.snake(id)
-        val colour = Palette.bodyColour(id.index)
-        val alpha = if (snake.alive) 1.0 else Palette.CORPSE_ALPHA
+        val colour = theme.body(id.index)
+        val alpha = if (snake.alive) 1.0 else Theme.CORPSE_ALPHA
 
         for (i in 0 until snake.length) {
             // cellAt(0) is the tail, and the tail is the one square whose colour is not the body's.
             fill(snake.cellAt(i), colour, if (i == 0) tailAlpha(view, snake) else alpha)
         }
         if (snake.alive) {
-            fill(snake.head, palette.head(id.index), 1.0)
+            fill(snake.head, theme.head(id.index), 1.0)
         }
         heads[id.index] = snake.head.index
     }
@@ -260,30 +296,69 @@ internal class BoardRenderer(
         // square the fade came *from* is either this same one or the one the engine just vacated,
         // and that one is in `events`, so there is no third square to chase and nothing to track.
         paintOwner(view, snake.tail)
-        fill(snake.head, palette.head(mover.index), 1.0)
+        fill(snake.head, theme.head(mover.index), 1.0)
         heads[mover.index] = snake.head.index
     }
 
-    /** Repaints [cell] as whoever holds it now, or as empty board if nobody does. */
+    /** Repaints [cell] as whoever holds it now, as wall, or as empty board when it is neither. */
     private fun paintOwner(view: BoardView, cell: Cell) {
+        // Three states and not two, so the wall is asked about first: `ownerOf` answers `SnakeId.NONE`
+        // for a wall and for an empty square alike, and taking that as empty repaints a wall in the
+        // colour of the board — wherever a snake happened to move past one.
+        if (view.isWall(cell)) {
+            fillWall(cell)
+            return
+        }
+
         val owner = view.ownerOf(cell)
         if (owner.isNone) {
-            fill(cell, palette.background, 1.0)
+            fill(cell, theme.background, 1.0)
             return
         }
 
         val snake = view.snake(owner)
         val alpha = when {
-            !snake.alive -> Palette.CORPSE_ALPHA
+            !snake.alive -> Theme.CORPSE_ALPHA
             cell == snake.tail -> tailAlpha(view, snake)
             else -> 1.0
         }
-        fill(cell, Palette.bodyColour(owner.index), alpha)
+        fill(cell, theme.body(owner.index), alpha)
     }
 
     /**
-     * How much colour a snake's oldest square keeps: full, then [Palette.AGING_ALPHA], then
-     * [Palette.DYING_ALPHA], and then the square is empty board.
+     * One wall square: the block, and the line that gives it a face.
+     *
+     * The edge is what stops a room's wall reading as one undifferentiated slab, and it is drawn in
+     * the same sweep as the block rather than in a second pass over the map — a wall square is one
+     * thing to paint and [paintOwner] has to be able to put one back exactly as [repaint] laid it
+     * down.
+     *
+     * Dropped below [WALL_EDGE_MIN_CELL], where a one-pixel perimeter is most of the square: a 40x40
+     * board on a phone is walls a handful of device pixels across, and there is no relief to give
+     * them at that size.
+     */
+    private fun fillWall(cell: Cell) {
+        fill(cell, theme.wall, 1.0)
+        if (cellSize < WALL_EDGE_MIN_CELL) {
+            return
+        }
+
+        // The cell owns `c*s + 1` through `c*s + s`, so a 1px stroke centred half a pixel inside
+        // each of those bounds lands exactly on the outermost row and column it holds.
+        val side = (cellSize - 2).toDouble()
+        context.strokeStyle = theme.wallEdge.toJsString()
+        context.lineWidth = 1.0
+        context.strokeRect(
+            grid.colOf(cell) * cellSize + 1.5,
+            grid.rowOf(cell) * cellSize + 1.5,
+            side,
+            side,
+        )
+    }
+
+    /**
+     * How much colour a snake's oldest square keeps: full, then [Theme.AGING_ALPHA], then
+     * [Theme.DYING_ALPHA], and then the square is empty board.
      *
      * The board already knows this and nothing has to be remembered between turns to read it:
      * `growsOnNextMove` is false exactly when the next move drags the body instead of extending it,
@@ -296,26 +371,29 @@ internal class BoardRenderer(
      * has no square about to clear, so fading one would be a lie about the rules in play.
      */
     private fun tailAlpha(view: BoardView, snake: SnakeView): Double = when {
-        !snake.alive -> Palette.CORPSE_ALPHA
-        tailClearsNext(view, snake) -> Palette.DYING_ALPHA
+        !snake.alive -> Theme.CORPSE_ALPHA
+        tailClearsNext(view, snake) -> Theme.DYING_ALPHA
         // A trail that never retracts has no square about to open, and a one-square snake is all
         // head — which is painted over this anyway.
         view.rules.growEveryNthMove < 2 || snake.length < 2 -> 1.0
-        else -> Palette.AGING_ALPHA
+        else -> Theme.AGING_ALPHA
     }
 
     /**
-     * Repaints the overlay: a thread through every snake, and a wash over the hovered one.
+     * Repaints the overlay: a wash over the hovered snake, the drawn route, a thread through every
+     * snake.
      *
      * The split is what each cue is *for*. The thread traces where a body ran, which a coil doubled
      * back beside itself makes genuinely hard to read off the squares alone — and that is true of
      * every snake on the board, every turn, whether or not a pointer is anywhere near it. So the
      * thread is drawn always. The wash picks *one* snake out of the others, which is a question only
-     * a pointer asks, so it stays with the pointer.
+     * a pointer asks, so it stays with the pointer. The route is a statement about squares nothing
+     * has happened on yet, which is a third thing again.
      *
-     * Order matters exactly once: the wash goes down first, so hovering lays a tint under the
-     * threads rather than rearranging them, and the picked-out snake's own thread stays on top of
-     * its own wash.
+     * Order is `wash -> plan -> threads`, and both steps of it are load-bearing. The wash goes down
+     * first, so hovering lays a tint under everything rather than rearranging it, and the picked-out
+     * snake's own thread stays on top of its own wash. The plan goes under the threads, so a snake
+     * reads on top of its own route rather than being hidden by it.
      *
      * Nothing here says anything about the tail being about to clear. The board already fades that
      * square and the label already says it in words; a third telling of one fact is noise.
@@ -330,10 +408,12 @@ internal class BoardRenderer(
 
         val hoveredOwner = if (grid.isPlayable(hovered)) view.ownerOf(hovered) else SnakeId.NONE
         if (!hoveredOwner.isNone) {
-            // The head colour, which is the palette's answer to "this snake, but readable against
+            // The head colour, which is the theme's answer to "this snake, but readable against
             // itself" — darker than the trail on a light page and lighter on a dark one, either way.
-            wash(view.snake(hoveredOwner), palette.head(hoveredOwner.index))
+            wash(view.snake(hoveredOwner), theme.head(hoveredOwner.index))
         }
+
+        drawPlan()
 
         for (slot in 0 until view.snakeCount) {
             drawThread(view, SnakeId(slot))
@@ -343,17 +423,62 @@ internal class BoardRenderer(
     }
 
     /**
+     * The route the player is drawing: the squares it will walk, and a mark on the one it ends on.
+     *
+     * Drawn in the accent, which is the one colour on the page that is already the player's — theirs
+     * rather than any snake's, so a route reads as an intention laid over the position instead of as
+     * a seventh trail somebody might mistake for a body.
+     *
+     * The anchor is skipped. `cellAt(0)` is the square the head is already standing on, and what a
+     * route says is where the snake is *going*; tinting the square it is on would put a translucent
+     * wash over the one square on the board that has to stay unambiguous.
+     *
+     * The mark on the end exists for the head marker's reason: a run of tinted squares across a busy
+     * board does not say at a glance which end of it the pointer is at.
+     */
+    private fun drawPlan() {
+        if (plan.isEmpty) {
+            return
+        }
+
+        overlayContext.fillStyle = theme.accent.toJsString()
+        overlayContext.globalAlpha = PLAN_ALPHA
+        for (i in 1 until plan.cellCount) {
+            val cell = plan.cellAt(i)
+            overlayContext.fillRect(
+                (grid.colOf(cell) * cellSize + 1).toDouble(),
+                (grid.rowOf(cell) * cellSize + 1).toDouble(),
+                (cellSize - 1).toDouble(),
+                (cellSize - 1).toDouble(),
+            )
+        }
+
+        val target = plan.cellAt(plan.cellCount - 1)
+        overlayContext.globalAlpha = PLAN_TARGET_ALPHA
+        overlayContext.beginPath()
+        overlayContext.arc(
+            centreX(target),
+            centreY(target),
+            (cellSize * PLAN_TARGET_RADIUS).coerceAtLeast(THREAD_MIN_WIDTH),
+            0.0,
+            2 * PI,
+            false,
+        )
+        overlayContext.fill()
+    }
+
+    /**
      * The thread down one snake's body, and the marker where it ends.
      *
-     * A corpse keeps the share of its colour that [Palette.CORPSE_ALPHA] gives it on the board, and
+     * A corpse keeps the share of its colour that [Theme.CORPSE_ALPHA] gives it on the board, and
      * loses the head marker entirely — both for the reason [paintSnake] paints it that way. A snake
      * that is out is an obstacle, and an obstacle has no head to be watching.
      */
     private fun drawThread(view: BoardView, id: SnakeId) {
         val snake = view.snake(id)
-        val tint = palette.head(id.index)
-        val thread = palette.background
-        val fade = if (snake.alive) 1.0 else Palette.CORPSE_ALPHA
+        val tint = theme.head(id.index)
+        val thread = theme.background
+        val fade = if (snake.alive) 1.0 else Theme.CORPSE_ALPHA
 
         if (snake.length > 1) {
             overlayContext.lineCap = CanvasLineCap.ROUND
@@ -430,7 +555,7 @@ internal class BoardRenderer(
         if (alpha < 1.0) {
             // Composite over the board rather than over whatever used to be here: a translucent fill
             // on top of a previous translucent fill would deepen every time the cell was repainted.
-            context.fillStyle = palette.background.toJsString()
+            context.fillStyle = theme.background.toJsString()
             context.fillRect(x, y, side, side)
             context.globalAlpha = alpha
         }
@@ -448,36 +573,47 @@ internal class BoardRenderer(
 
     private companion object {
         /**
-         * How wide and tall the board is, in CSS pixels at the ratio the page opened on — so, in
-         * millimetres. The grid chooses only how many squares fit inside it.
+         * The largest a single square may get, in CSS pixels at the ratio the page opened on — so,
+         * in millimetres.
          *
-         * There is deliberately no maximum cell size to go with the minimum. A cap on the cell is
-         * what used to make an 8x8 board a third of a 20x20 one, and it would fight this figure for
-         * every size the picker offers.
+         * It binds only on the small end of the picker: forty-four is a comfortable finger target
+         * and an 8x8 drawn at it is a board rather than eight rows of tiles, while a 20x20 has to be
+         * given nearly nine hundred pixels of frame before this is reached at all. Bigger boards
+         * therefore take the whole frame and this figure never enters into it.
          */
-        const val BOARD_EXTENT = 640.0
+        const val MAX_CELL = 44
 
         /** Below this a 40x40 board is unreadable. Also at CSS scale, and only a floor. */
         const val MIN_CELL = 6
 
         /**
-         * Only reached before the first layout, which `booted` ahead of `start()` already prevents.
+         * Reached whenever `.board-wrap` measures zero — before the first layout, and on a screen
+         * that is not showing the board. Both are followed by a `fit` that can measure for real.
          *
-         * Both are asked of `.board-wrap` rather than of the window, and the height is the half that
-         * changed: the page is a viewport-height column now, so the board's own track already *is*
-         * "whatever is left after the chrome", measured rather than guessed at as a share of the
-         * viewport. `.board-panel`'s `minmax(0, 1fr)` row is what makes that reading definite —
-         * without it the track would size to the canvas and the canvas to the track.
+         * Both are asked of `.board-wrap` rather than of the window: the page is a viewport-height
+         * column, so the board's own track already *is* "whatever is left after the two bars",
+         * measured rather than guessed at as a share of the viewport. `#screen-game`'s
+         * `minmax(0, 1fr)` row is what makes that reading definite — without it the track would size
+         * to the canvas and the canvas to the track.
          */
         const val FALLBACK_WIDTH = 640
         const val FALLBACK_HEIGHT = 640
 
         /**
+         * The smallest square that has room for a wall's edge, in device pixels.
+         *
+         * Below it the one-pixel perimeter is most of the square and the block is legible without
+         * relief anyway — which is the 40x40-on-a-phone end of `MIN_CELL`, where a cell is a
+         * handful of pixels across.
+         */
+        const val WALL_EDGE_MIN_CELL = 8
+
+        /**
          * The overlay: how much of the head colour a hovered square takes, oldest to newest, and
          * the thread that runs down the middle of every body.
          *
-         * The thread is drawn in the board's own colour, so it reads against all six trail hues on
-         * either theme without a seventh entry in the palette.
+         * The thread is drawn in the board's own colour, so it reads against all six trail hues of
+         * every theme without a seventh entry in any of them.
          */
         const val WASH_TAIL = 0.10
         const val WASH_HEAD = 0.62
@@ -488,5 +624,17 @@ internal class BoardRenderer(
 
         /** So the thread survives a 40x40 board, where a cell is about fifteen device pixels. */
         const val THREAD_MIN_WIDTH = 2.0
+
+        /**
+         * The drawn route: how much of the accent a square it will walk takes, and the mark on the
+         * square it ends on.
+         *
+         * Quiet, because a route has to be legible without competing with the snakes — it is what
+         * *may* happen and they are what has. The mark is nearly opaque against that, since the one
+         * thing a player checks mid-drag is where the far end of it has got to.
+         */
+        const val PLAN_ALPHA = 0.30
+        const val PLAN_TARGET_ALPHA = 0.85
+        const val PLAN_TARGET_RADIUS = 0.20
     }
 }

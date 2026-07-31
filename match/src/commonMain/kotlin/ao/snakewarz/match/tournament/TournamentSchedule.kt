@@ -75,6 +75,7 @@ public class TournamentSchedule(
             seed = seedFor(index),
             rules = config.rules,
             budgetPerTurn = config.budgetPerTurn,
+            walls = config.walls(),
             budgets = IntArray(seated.size) { seated[it].budgetIn(config.budgetPerTurn) },
             slotParams = seated.map { it.params },
         )

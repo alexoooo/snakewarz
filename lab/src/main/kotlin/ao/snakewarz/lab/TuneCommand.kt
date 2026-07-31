@@ -56,6 +56,8 @@ internal class TuneCommand(
     val cols: Int,
     val seed: Long,
     val budgetPerTurn: Int,
+    /** The map the whole sweep runs on, including its confirming run. */
+    val walls: IntArray,
     val openings: Openings,
     val threads: Int,
     val passes: Int,
@@ -91,7 +93,10 @@ internal class TuneCommand(
         val started = TimeSource.Monotonic.markNow()
 
         log("[lab] tuning ${entrant(fixed)} over ${knobs.joinToString { it.name }}")
-        log("[lab] ${rows}x$cols at $budgetPerTurn evaluations, $openings openings, journal $journalFile")
+        log(
+            "[lab] ${rows}x$cols with ${walls.size} walls at $budgetPerTurn evaluations, " +
+                "$openings openings, journal $journalFile",
+        )
         if (history.isNotEmpty()) {
             log("[lab] resuming: ${history.size} decisions already taken, ${history.count { it.accepted }} accepted")
         }
@@ -180,6 +185,7 @@ internal class TuneCommand(
             cols = cols,
             seed = seed,
             budgetPerTurn = budgetPerTurn,
+            walls = walls,
             openings = openings,
             threads = threads,
             sprt = Sprt(elo0 = SEARCH_ELO0, elo1 = bound, alpha = ALPHA, beta = BETA),

@@ -2,14 +2,18 @@ package ao.snakewarz.lab
 
 import ao.snakewarz.botapi.registry.BotRegistry
 import ao.snakewarz.lab.arena.Openings
+import ao.snakewarz.lab.log.EMPTY_MAP
 import ao.snakewarz.lab.log.LoggedMatch
 import ao.snakewarz.lab.log.MatchLog
 import ao.snakewarz.lab.log.RunHeader
+import ao.snakewarz.lab.log.mapKey
 import ao.snakewarz.lab.strength.Bootstrap
 import ao.snakewarz.lab.strength.Interval
 import ao.snakewarz.lab.strength.Ladder
 import ao.snakewarz.lab.strength.bootstrapIntervals
 import ao.snakewarz.lab.strength.winShareIntervals
+import ao.snakewarz.match.map.MapShape
+import ao.snakewarz.match.map.generateMap
 import ao.snakewarz.match.tournament.TournamentFormat
 import java.nio.file.Path
 import kotlin.math.abs
@@ -48,8 +52,8 @@ internal class RateCommand(
         require(pool || groups.size == 1) {
             "$logDirectory holds ${groups.size} kinds of run that cannot be compared:\n" +
                 groups.values.joinToString("\n") { "  ${summarise(it)}" } +
-                "\n\nNarrow it with --board, --budget, --build or --format, or pass --pool to " +
-                "average across them anyway and know that the number means less."
+                "\n\nNarrow it with --board, --map, --budget, --build or --format, or pass --pool " +
+                "to average across them anyway and know that the number means less."
         }
         if (groups.size > 1) {
             log("[lab] POOLING ${groups.size} kinds of run. These bots were not all the same bots.")
@@ -80,8 +84,28 @@ internal class RateCommand(
             "build" -> run.build.startsWith(value)
             "openings" -> run.openings.equals(value, ignoreCase = true)
             "since" -> run.id >= value
+            "map" -> run.map == value || run.map == keyOfShape(run, value)
             else -> error("no such filter: '--$name'")
         }
+    }
+
+    /**
+     * What [slug] fingerprints to on this run's own board, or `null` if it names no shape it could.
+     *
+     * A log records the walls it played and never the name of a shape, so a `--map cross` narrows by
+     * **redrawing** cross at each run's geometry and comparing. That is what keeps the flag honest
+     * across a redrawn generator: a run played on the old cross stops matching `--map cross` rather
+     * than being pooled with the new one under a name that no longer describes it.
+     *
+     * `scatter` resolves at its shipped density, because a density is not one of the run's recorded
+     * columns. A run played at another one is still reachable by its key, which the summary prints.
+     */
+    private fun keyOfShape(run: RunHeader, slug: String): String? {
+        val shape = MapShape.ofSlug(slug) ?: return null
+        if (run.rows < shape.minimumSide || run.cols < shape.minimumSide) {
+            return null
+        }
+        return mapKey(generateMap(run.rows, run.cols, shape, seed = run.seed).walls())
     }
 
     private fun report(
@@ -272,11 +296,28 @@ internal class RateCommand(
         )
     }
 
+    /**
+     * The conditions a group of runs shares, map included.
+     *
+     * The map is named every time, `empty` included, because a figure quoted without it is a figure
+     * somebody will later assume was taken on a bare rectangle — and half of them will have been.
+     * The shape's own slug is printed where the walls still reproduce it, so the line reads as a
+     * board rather than as a checksum; the checksum stays beside it, because it and not the name is
+     * what the run was pooled by.
+     */
     private fun summarise(runs: List<RunHeader>): String {
         val first = runs.first()
-        return "${first.rows}x${first.cols}, budget ${first.budgetPerTurn}, ${first.openings} openings, " +
-            "${first.format.lowercase().replace('_', ' ')}, build ${first.build}" +
-            if (runs.size > 1) " (${runs.size} runs)" else ""
+        return "${first.rows}x${first.cols}, ${mapLabel(first)}, budget ${first.budgetPerTurn}, " +
+            "${first.openings} openings, ${first.format.lowercase().replace('_', ' ')}, " +
+            "build ${first.build}" + if (runs.size > 1) " (${runs.size} runs)" else ""
+    }
+
+    private fun mapLabel(run: RunHeader): String {
+        if (run.map == EMPTY_MAP) {
+            return "map $EMPTY_MAP"
+        }
+        val named = MapShape.entries.firstOrNull { keyOfShape(run, it.slug) == run.map }
+        return "map ${named?.let { "${it.slug} (${run.map})" } ?: run.map}"
     }
 
     private fun describe(runs: List<RunHeader>): String =

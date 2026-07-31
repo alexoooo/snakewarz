@@ -3,14 +3,15 @@
 **For:** changing anything in `ui/`, `app/.../index.html`, `app/.../styles.css`, the boot path, or
 the GitHub Pages deployment.
 **Assumes:** [`../CLAUDE.md`](../CLAUDE.md) — the module graph, the forbidden dependency edges and
-the four non-obvious facts live there and are **not repeated here**.
+the five non-obvious facts live there and are **not repeated here**.
 **Enforced elsewhere:** `checkModulePurity` fails the build on `:ui → :bots`, so nothing here can
 tell a wall hugger from a human. It does not check anything below that.
 
 ## Working on the UI
 
-`:ui` exposes exactly two things — `GameSession` and `ReplayLink`. Everything else is `internal`, and
-should stay that way; `:app` builds a session and is otherwise sixty lines of wiring.
+`:ui` exposes exactly three things — `GameSession`, and the two seams `ReplayLink` and `Portraits`.
+Everything else is `internal`, and should stay that way; `:app` builds a session and is otherwise
+under fifty lines of wiring.
 
 ### One-way data flow, and two cadences
 
@@ -28,9 +29,42 @@ target — microseconds, and nothing to keep consistent.
 
 What *does* branch is which clock runs, and it branches on `Match.interactive` rather than on a mode
 flag: `TurnScheduler` paces bots and replays, while a match with a live player is stepped by
-`GameSession.playRound` straight out of the keydown. `TournamentRunner` is the third clock and the
+`GameSession.playRound` straight out of the **keydown**. `TournamentRunner` is the third clock and the
 only one with no speed at all — a batch is not something you watch at a rate, it is something you
 wait for, so it runs flat out on an 8ms-per-frame guard and reports progress instead.
+
+That keydown sentence is the **keyboard's half** and no longer the whole of an interactive match.
+There is a fourth arrangement, and it is the first time a live player has run `TurnScheduler`: a held
+drag starts it, so the same clock that paces two bots walks a person's snake along the route they
+drew. Which clock runs still branches on `Match.interactive` and on nothing else — what a drag changes
+is whether the scheduler is *started*, not what decides.
+
+**A drawn route is the one thing that puts a live player on the scheduler.** Press within a square of
+your own head and drag, and `GameSession` routes a `PathPlanner` from the head to the square under the
+pointer, swaps the whole queue with `InputBuffer.replace`, and *starts the scheduler* — so the snake
+walks what you drew at the speed on the slider while you hold still, instead of one square per key.
+Four consequences, each of which is a thing to get wrong:
+
+- **Letting go is the stop.** Release, cancel or `lostpointercapture` all discard the rest of the
+  route, empty the queue and stop the clock, so the snake halts on the square it is on that turn
+  rather than finishing the route. Holding is what makes it move, and that is the whole interaction.
+- **A route that empties while still held needs no state at all.** The queue runs dry,
+  `InteractiveBot` answers `Pending`, `Match.step` reports `AwaitingInput`, and the scheduler clamps
+  its accumulator and waits — so no debt builds while the player thinks, and dragging further just
+  refills the queue. There is no "parked" flag and there must not be one.
+- **A plan is anchored on the head, so it is consumed as the snake walks it.** `PathPlanner.advance()`
+  drops the first square on every move the player's slot makes; `GameSession.consumePlan` is that
+  obligation, and it re-anchors when the snake lands somewhere the route did not spell out —
+  `InputBuffer.take` discards a queued direction that has become illegal, so that really happens.
+  Miss it and the painted route trails a square further behind every move.
+- **An arrow key mid-drag takes over outright**, route and queue and clock together. Two ways of
+  saying where to go, left to interleave, produce a move neither one asked for.
+
+The press, the drag and the release are `UiIntent.Shell` for **Hover**'s reason, and beginning a route
+is refused outright while a batch owns the arena — the board on screen is then the tournament's, so a
+press on it is not a press on this player's head however close the coordinates come. That refusal is
+what makes the tier honest: a pointer dragged over a running batch changes nothing about it, and does
+not take the arena off it either.
 
 The one place the shared path *does* need to know which it is: **running off the end of a partial
 recording is terminal, not a pause.** A scripted slot with no move left answers `Pending`, which under
@@ -51,40 +85,322 @@ is under the pointer changes nothing, so it neither has to be dropped while a ba
 nor is grounds for taking the board back off one. Put the branch below either guard and moving the
 mouse across a finished tournament's last position silently swaps it for the player's own game.
 
-### The board is a fixed rectangle
+Which side of the guards an intent is answered on is **its type, not its position** in a `when`:
+`UiIntent` is split into `Shell` — the pointer, a relayout, navigation and the panels — and `Match`,
+everything that acts on the match. `GameSession.dispatch` is a two-line fork over that pair, so a new
+intent has to declare its tier where it is declared, and a rewrite of the dispatcher cannot lose the
+decision. Opening a panel is a `Shell` intent for exactly Hover's reason: it changes nothing about
+the match, so folding one away must not end somebody's tournament.
 
-**The board is a fixed rectangle of device pixels** — `BoardRenderer.BOARD_EXTENT`, anchored to the
-`devicePixelRatio` the page opened at. The grid decides only how finely that rectangle is divided, so
-an 8x8 and a 40x40 occupy the same frame and zooming the page moves the text around a board that
-stays put. Its container's width and height are clamps for a box it will not fit in, not inputs to the
-size. There is deliberately **no maximum cell size**: one is what used to make a small board small,
-and it would fight the extent at every size the picker offers.
+### Screens, panels and focus
+
+The page is **three static sections** — `#screen-home`, `#screen-ladder`, `#screen-game` — of which
+exactly one is visible, plus four panels, a backdrop and one modal. `Shell` owns which is showing;
+`Chrome` owns the game screen; `HomeScreen` owns which modes are offered; `LadderScreen` owns the ten
+level tiles; and one class per panel, under `chrome/panel/`, owns what is behind each — `SetupPanel`
+the new-match form and its seats, `TournamentPanel` the schedule and the matrix, `SharePanel` the
+link, `SettingsPanel` the theme and the speed.
+Every one of them is rendered from the same `UiModel` on the way through `Chrome.render`.
+
+- **`#panel-setup` is the tall one and is the reason panels scroll.** It carries the board size, the
+  map, four seats with their knob grids and the seed, so it is what `.panel-body`'s `overflow-y:
+  auto` exists for. It is also **what the rest of the tree means by "the sidebar"** — the phrase is in
+  KDoc across `:bot-api`, `:bots`, `:match` and `:lab`, all of which are talking about the one form
+  where a match is configured and a knob is offered. There is no column on this page.
+- **The map picker offers shapes, and a replay's map is not a shape.** A `#panel-setup` shape is a
+  *recipe*: it is redrawn at whatever size and seed the boxes above it say, so moving either moves the
+  map. A replay carries the wall squares themselves, so `applyMap` recognises a shape by redrawing
+  each at the setup's own size and seed and comparing — and where none matches, the bitmap becomes the
+  picker's own answer under the otherwise-hidden `#map-from-replay` option. Anything that moves the
+  board discards it, because a map drawn for another board is not a map. Options the chosen board is
+  too small for are `disabled` off `MapShape.minimumSide`, which is the single source of that number:
+  a copy in the markup is a Start match that throws.
+- **Which panels a mode offers is `Mode`, and it is enforced by hiding the button that opens one.**
+  A ladder level *is* its configuration, so Setup and Tournament are not offered there — and a
+  control that could never apply is absent rather than greyed, which also takes it out of the tab
+  order. `Mode` is deliberately not derived from `Screen`: a level and a custom match are both played
+  on `#screen-game`, so the mode is decided by the way in and kept while the board is up.
+- **A hidden screen is `hidden`, never merely off-screen.** An off-screen but focusable section means
+  Tab walks into controls nobody can see.
+- **A panel is an overlay, not a column.** Opening one leaves the board's box exactly where it was, so
+  there is nothing to re-measure and a batch underneath keeps its arena. A panel that ever *pushed*
+  the board would have to come up as `UiIntent.Relayout` — which is why that intent is still here
+  with **no emitter**: the tournament disclosure that used to raise it is now `#panel-tournament`.
+- **`inert` on everything that is not the overlay on top is the whole of the focus trap.** The
+  panels and the dialog are siblings of `#app` rather than children precisely so one attribute can
+  put a whole screen out of reach; with the unopened overlays `hidden`, the only focusable elements
+  left in the document are the ones inside the open one, so Tab cycles within it without a key
+  handler counting elements. **The set is `#app` *and the four panels*, not `#app` alone** — that
+  sibling relationship cuts both ways, so a panel still open when the match ends would otherwise sit
+  beside the result card, visible and still a tab stop, while the card claims `aria-modal`.
+  `Shell.behind` is that list and `ShellTest."while the verdict is up, the only controls Tab can
+  reach are its own"` is what keeps it honest.
+- **The focus is handed over and handed back.** Opening an overlay remembers what had it and moves it
+  to the overlay's `[data-focus]` control, or to the overlay itself where it names none — every screen
+  and panel carries `tabindex="-1"` for that. Closing gives it back. **Navigating also moves it**, to
+  the section that arrived: the control that navigated is on the screen that just left, so otherwise
+  the focus drops to `<body>` and the next Tab starts in the browser's own chrome.
+- **`[data-focus]` is a list, and the focus goes to the first entry a person could press.** A
+  container is allowed to mark several, because which is the default can depend on what just
+  happened: the verdict marks Retry, Next level and Home and shows one or two of them, and the level
+  select marks whichever tile is open. `focusInto` skips the hidden and the disabled, so a card whose
+  default action is not showing still lands somewhere — focusing a hidden element silently does
+  nothing, which would leave the focus on a screen that has just gone away.
+- **Escape closes the overlay on top; with none open it goes back a screen.** One `ClosePanel` intent
+  rather than one per overlay, because which is on top is the session's to know.
+- **While an overlay is up the board does not have the keyboard.** `Chrome.onKeyDown` asks
+  `Shell.boardHasKeys` before its own two guards, so the space bar activates the focused button — which
+  is what pressing it in a panel means — and the arrow keys steer nothing behind a scrim. Its two other
+  guards still matter on the game screen: a focused `<select>` or slider owns the arrows, and a held
+  modifier means Ctrl+A and Alt+Left are not swallowed.
+
+Leaving the game screen calls `scheduler.stop()` and `batch.stop()`: a match nobody can see must not
+keep running. It is also the one navigation that ends in a `refit`, and it renders the chrome
+**before** it measures, for the reason `begin()` does — the board's track belongs to the screen that
+just appeared.
+
+### The ladder, and the one thing on this page that is remembered
+
+**A level is an ordinary match, and that is the whole design.** `LadderLevel.setup` in `:match` builds
+one from the rung's own board, map, opponent and allowance; `GameSession.startLevel` runs it through
+the same driver, the same renderer and the same codec as anything else, so a level is shareable,
+replayable and scrubbable like a custom match. **The mode must never branch the match code path.**
+
+What the mode does branch is three things and only three, and all three come off `UiModel.level` — the
+rung number, `null` for a custom match:
+
+1. **Which panels are offered.** `Mode` is derived from `level`, and `Mode.offers` hides `#panel-setup`
+   and `#panel-tournament`: a level *is* its configuration, so re-seating it would be playing
+   something else under its name.
+2. **What the verdict offers.** A lost level shows Retry, a beaten one shows Next level, the tenth
+   shows Home and says *Ladder complete*. `UiModel.nextLevel` is derived from `level` and
+   `levelCleared` so the card cannot offer a rung that does not exist.
+3. **What the top bar names** — the level, where a custom match is named by its seat cards. It is the
+   same single line either way, because the bar's height is what the board's track is measured
+   against. On a phone the wordmark is hidden by the `max-width: 30rem` rule, and the opponent's name and face on
+   the scoreboard are what identify the level there.
+
+**Retry draws a fresh seed.** `GameSession.restart` is the one place the mode is read on the match
+path, and it is a level's whole difference: a rung that replayed identically after a loss would be a
+puzzle with one solution, and the first three opponents draw no randomness at all, so the seed is the
+only thing that varies for them.
+
+**Progress is `localStorage["snakewarz.ladder.v1"]`, written only on a win.** The value is
+`v1:<highest unlocked>:<cleared bits>`, hand-parsed by `LadderProgress` — not JSON, because there is
+none in the bundle and pulling one in for two integers is what SW-08 is about. `Preferences` owns
+whether the store can be read at all and `LadderProgress` owns what the text means, which keeps two
+unrelated failures apart. Every way of the value being unusable — a missing key, a version this reader
+has never heard of, junk, or storage that throws — is a playable level 1, and a `highest` past the end
+of the table clamps rather than indexing off it. A level index is **frozen** on release for the same
+reason a `BotId` is: it is the key somebody's saved game is stored under.
+
+Because progress is only ever written on a win, walking out of a level costs nothing — which is why
+`navigate` and an `#r=` link arriving by hash may both drop `level` without ceremony.
+
+The tiles are static markup, like the four scoreboard cards, and `LadderScreen` writes only their
+text, state and picture. It renders **before** `Shell` in `Chrome.render`, because it marks the open
+tile `[data-focus]` and the shell reads that on the frame the screen arrives. It also skips the write
+entirely when the progress instance and the theme id are both unchanged: every screen is rendered once
+a frame, and ten tiles of unchanged text sixty times a second would be the one wasteful thing on that
+path.
+
+### Playing it without a mouse
+
+Every screen is reachable, every match startable, playable and restartable, from the keyboard alone.
+The map below is written down in exactly two places — here, and the Keys note in `#panel-settings` —
+so `Chrome.onKeyDown`, that note and this table are changed together. A shortcut list that has
+stopped matching what the keys do is worse than no list at all.
+
+| Key | Does | Where |
+|---|---|---|
+| Arrows / WASD | steer | the game screen, unless a `<select>` or a slider has the focus |
+| Space | play / pause | the game screen; a match with a person in it has no clock to toggle |
+| `.` | step one turn | the game screen |
+| Enter | presses the control the focus is on | everywhere |
+| Escape | closes the overlay on top, or goes back a screen | everywhere |
+| Tab | the next control, in DOM order | everywhere |
+
+- **Enter costs no code, and that is the point.** Every control on the page is a native `<button>`,
+  `<select>` or `<input>`. A custom widget is a keyboard-accessibility bill that has to be paid in
+  full and nothing here needs one, so the whole of "Enter activates it" is choosing native elements
+  and putting the focus somewhere worth pressing — which is `Shell`'s half, above.
+- **On the game screen the space bar is the match's, not the focused button's.** `boardHasKeys` is
+  true there, so Space is cancelled and toggles play even while a button has the focus; Enter is
+  what presses a button on that screen and the Keys note says so. Behind a panel the reverse holds,
+  which is what pressing the space bar in a form full of buttons means.
+- **`preventDefault` first, the repeat guard second.** Dropping auto-repeat is a statement about how
+  fast the *snake* moves and says nothing about what the browser may do with the event. The other
+  way round, a held arrow steered at `KeyRepeat`'s rate and scrolled the page at the keyboard's.
+- **`onKeyUp` has no focus guard on purpose**, and the `blur` listener cancels the repeat: a key let
+  go of while the page is not looking never reports it, and a release that stops nothing costs
+  nothing.
+- **There is no keyboard way to *draw* a route, and there does not need to be.** The arrow keys are
+  the keyboard's steering, and a key mid-drag takes the route over outright — `GameSession.steer`
+  opens with `endPath()`, so the two ways of saying where to go can never interleave.
+- **No element carries a positive `tabindex`.** The order is DOM order; `tabindex="-1"` appears only
+  on the screens and panels, which are focused programmatically and are not tab stops. One positive
+  value anywhere would make the whole page's order a puzzle.
+- **`:focus-visible` rings, not `:focus`**, in `--accent` at a 2px offset — so they read against a
+  panel, against the page and against a primary button's own accent fill, in every theme and both
+  schemes, and a mouse click leaves none behind. `.screen` and `.panel` opt out: a ring the width of
+  the page says nothing a person cannot already see.
+- **`#tournament-table` is the one region that has to ask for a tab stop.** It scrolls and holds no
+  control of its own, so without `tabindex="0"` a wide matrix has rows only a pointer can reach.
+
+The screen-reader half is the same work. Every control has an accessible name — a `<label for>`, the
+`<label>` wrapped around a knob row by `SlotForm`, or an `aria-label` on the icon-only ones. `#status`
+keeps `role="status"` and `#unsupported` `role="alert"`. Portraits are decoration: `aria-hidden`,
+empty `alt`, always beside the seat's name in text. The result card announces itself by taking the
+focus — `aria-labelledby` the verdict, `aria-describedby` the line under it — rather than through a
+live region, which inside a just-focused modal would say all of it twice. The panels claim
+`aria-modal` and are entitled to: they really do trap the focus.
+
+### The board fills its frame
+
+**The board is as large as the room it is given**, so a phone in portrait and a 4K monitor are the
+same board at two magnifications. `BoardRenderer.fit` measures `.board-wrap` and divides it by the
+longer of `rows` and `cols`: the container is the *input* to the size, not a clamp on a size decided
+elsewhere. An 8x8 and a 40x40 therefore occupy the same frame, at different magnifications.
+
+Two clamps survive, and neither is a frame size. `MAX_CELL` stops a small board turning into a
+handful of enormous squares in a large window — it binds only on the small end of the picker, since a
+20x20 needs nearly nine hundred pixels of frame before it is reached at all — and `MIN_CELL` keeps a
+40x40 legible on a phone. Both are stated in CSS pixels at the `devicePixelRatio` the page opened at,
+which is what makes zooming move the text around a board that stays put: the room is measured in
+device pixels too, and there the zoom cancels out exactly.
+
+### Themes, and the one place a colour is written
+
+**Every colour on the page comes out of `Theme`, and `styles.css` holds only what the page looks like
+before one arrives.** There is one `Theme` instance per named theme *and* per light/dark scheme, and
+the two axes carry different things — a theme is the player's, a scheme is their system's, so flipping
+the OS to dark recolours the theme they chose rather than resetting it.
+
+- **A trail belongs to the theme; a head, the board, the gridlines and the walls belong to the
+  scheme.** `Theme.body(slot)` is the same string under either scheme, which is what a snake *is*;
+  `Theme.head(slot)` is the readable-against-the-page end of it. `ThemeTest` pins the split, and it is
+  why a scheme change repaints the canvas but the seat swatches do not have to move.
+- **`Theme.applyToPage()` writes `--bg`, `--panel`, `--ink`, `--ink-dim`, `--line`, `--accent`,
+  `--accent-ink` and `--board` inline on `<html>`.** Inline beats every stylesheet rule and custom
+  properties inherit, so one write recolours the document. `--board` is the very string the canvas
+  fills the board with — the board and the frame around it cannot disagree because there is one value.
+  `styles.css` therefore carries **no theme's numbers**: what is in `:root` is the loading strip and
+  the unsupported-browser panel, and a value repeated there would be a second opinion nothing keeps in
+  step. `--danger` and `--scrim` are not a theme's to set and live only in the stylesheet.
+- **The theme is applied in `GameSession`'s constructor**, which runs before `:app` adds `booted` and
+  therefore before `#app` stops being `display: none`. Later and the page is briefly the wrong colour.
+- **The seat swatches take their colour from `UiModel.theme`, never from a global.** A theme can move
+  a trail hue, and a swatch painted from a global keeps the old one until something else happens to
+  redraw the card — intermittent, and it looks like nothing at all.
+- **The theme picker is static markup**, like the map shapes and unlike the bot pickers: `Theme.ALL`
+  is not a registry and there is no "fork, add a file, register it" workflow behind a colour scheme.
+  `SettingsPanel` checks the markup against `Theme.ALL` at boot, so a theme with no `<option>` fails
+  with its own name.
+- **The choice is `localStorage["snakewarz.theme.v1"]`, through `Preferences`.** A theme is not part of
+  a replay and never travels in a link. Reading survives a missing key, a value from another version
+  and storage that throws outright — Safari in private browsing does — because a boot that died on a
+  preference lookup would be a black page for the whole game. `Theme.of` is total for the same reason.
+  Ladder progress is the other thing `Preferences` keeps, under its own key and on the same terms.
+- **Walls are painted in `repaint`'s one sweep, between the background fill and the gridline stroke**,
+  and `paintOwner` asks `isWall` before `ownerOf` so a snake moving past one does not repaint it as
+  board. `Theme.wallEdge` outlines each block in the same call — without it a room's wall reads as one
+  slab — and is dropped below `BoardRenderer.WALL_EDGE_MIN_CELL`, where the perimeter would be most of
+  the square.
+
+### Faces, and the seam they arrive through
+
+**Every opponent has a picture, and `:ui` still cannot tell a wall hugger from a human.** `Portraits`
+is a `fun interface` taking a **slug** and answering a URL or `null`, `GameSession`'s constructor
+takes one, and `:app` fills it from `portraitUrl` — a set of slugs it ships `resources/portrait/*.svg`
+for. A slug because that is the one part of a bot that is frozen; a seam because a table of eleven
+slugs in `:ui` would be exactly the coupling the `:bots` edge exists to prevent, and because
+`resources/` is `:app`'s to know about.
+
+- **`null` is answered with a drawn mark, not a broken image.** `render/identicon.kt` hashes the slug
+  into a mirrored 5×5 block grid and emits an SVG `data:` URI, so a *contributed* bot has a face on
+  the day it is registered and a registry nobody drew anything for still tells its seats apart. The
+  hash is FNV-1a written out in the file rather than `String.hashCode()`, which Kotlin does not
+  specify to be identical across targets — the same bot must get the same mark forever, and
+  `IdenticonTest` pins one literal to say so.
+- **A mark is tinted with `Theme.body(slot)`, so it is keyed by *slot* and not by slug**, and
+  `GameSession` rebuilds `SlotPortraits` when the match changes **or the theme id does**. Not on a
+  scheme change: a trail is the same string under light and dark, so the sun going down would spend a
+  hash and a base64 encode per seat to produce the marks that are already on the page.
+- **The level tiles resolve their own**, because `SlotPortraits` is keyed by a `MatchSetup`'s slots and
+  a tile has no match. `LadderScreen` asks the same seam by slug and tints a fallback with
+  `Theme.body(1)` — the seat `LadderLevel.setup` puts the opponent in — so a tile's face is already the
+  colour that snake will be on the board, and it is rebuilt on the same theme-id rule.
+- **A portrait is decoration and never information.** `aria-hidden`, empty `alt`, and always beside
+  the seat's name in text — a reader hears `PUCT - 1k/territory`, not "image". It does not replace
+  the swatch either: the shipped art is drawn in one green ramp and carries no seat colour, and the
+  swatch is what ties a card to a trail on the board.
+- **It is written through `showPortrait`, which compares the attribute first.** The seat cards and the
+  result dialog are both rendered once a *frame* while a portrait changes only when the match does,
+  and a bot with no shipped art carries its whole picture in the URL.
+- **The bot pickers in `#panel-setup` get none.** They are `<select>`s; a styled listbox is a custom
+  widget, and every custom widget is a keyboard-accessibility bill. The names are enough.
+- **The art follows `favicon.svg`** — chunky flat rectangles on a rounded `#16191d` tile in the snake
+  ramp, square `viewBox`, no gradients, no text, no external references — and each one is drawn for
+  *how the bot plays*, since that is the only thing a player can learn from it. `PortraitUrlTest`
+  walks `ShippedBots` plus `PlayableRegistry.HUMAN_ID` and fails when the two lists drift; what it
+  cannot reach is the directory itself, so a slug with no file beside the page is a broken image the
+  browser reports and no test does.
+- **The bundle gate measures subdirectories.** CI's size step walks the distribution with `find`
+  rather than a glob, because `portrait/` is a directory and a glob would hand `gzip` one, measure it
+  as zero, and leave every asset under it outside the budget. See
+  [SW-08](Coding-Standards.md#sw-08--the-bundle-is-a-budget).
 
 ### One page, and the one thing that scrolls
 
-**The page does not scroll; the sidebar does.** This is a game, not a document — `body.booted` is a
-`100dvh` column with `overflow: hidden`, `.sidebar` is the single `overflow-y: auto` region, and the
-board takes whatever height the chrome in its column leaves.
+**The game screen does not scroll; the open panel does.** This is a game, not a document —
+`body.booted` is a `100dvh` column with `overflow: hidden`, `.panel-body` is the `overflow-y: auto`
+region a panel's own content lives in, and the board takes whatever height the two bars around it
+leave. `#screen-home` and `#screen-ladder` may scroll, and that is not the same concession: nothing
+measures them, so a landscape phone with no room for the menu should give it a scrollbar rather than
+put the last button out of reach.
 
-That last part is the piece with a trap in it. `.board-panel` is a grid whose first row is
+`100dvh` and not `100vh`: a phone's address bar is the difference between them, and `vh` is the
+taller — which puts the bottom bar underneath the browser's own chrome. The two bars carry
+`env(safe-area-inset-*)` for a notch and a home indicator, inside `max()` so a display that reports
+zero still gets the padding the layout was drawn with.
+
+**`.board-wrap` carries `touch-action: none`, `overscroll-behavior: contain` and `user-select: none`,
+and never padding.** The first two are what make a finger dragged across the board mean the board
+rather than the page — without them a drag scrolls, and there is nothing on this screen for it to
+scroll to. The third answers the mouse rather than the finger: a drag begun on the board is drawing a
+route, and without it the browser reads the same gesture as a text selection and lights up the label
+and the bars behind it. **They are not the whole of it** — the box also clips its overflow, so a drag
+that leaves the canvas would simply stop arriving; `PathInput` takes `setPointerCapture` on
+`pointerdown` for that, and treats `lostpointercapture` as a release, because a browser that takes
+capture back would otherwise leave a snake walking with nobody holding it. The no-padding rule is
+arithmetic: `clientWidth` counts an element's own padding, so padding on the box the renderer
+measures is room the board would claim and then overflow by. The game screen's side insets live on
+`#screen-game` for that reason.
+
+The board taking whatever the bars leave is the piece with a trap in it. `#screen-game` is a grid
+whose middle row is
 `minmax(0, 1fr)`, and `BoardRenderer.fit` measures `.board-wrap`'s `clientHeight` — so the track has a
-height of its own that the canvas inside cannot influence. **This is the vertical half of the
-circularity `.arena`'s comment describes**: size the track from its content and the canvas sizes the
-box that sizes the canvas, which is how the board once came out different on every load. Every
-`min-height: 0` down that chain is load-bearing for the same reason — a flex or grid item's automatic
-minimum size is its content, so one missing `min-height` and the column refuses to shrink, the page
-grows a scrollbar, and the whole arrangement quietly does nothing.
+height of its own that the canvas inside cannot influence. Its single `minmax(0, 1fr)` column does the
+same across. **Size the track from its content and the canvas sizes the box that sizes the canvas**,
+which is how the board once came out different on every load; do not switch either axis to flexbox and
+do not put a shrink-to-fit box around the canvas. Every `min-height: 0` down that chain is
+load-bearing for the same reason — a flex or grid item's automatic minimum size is its content, so one
+missing `min-height` and the column refuses to shrink, the page grows a scrollbar, and the whole
+arrangement quietly does nothing.
 
-Anything that changes the height of the chrome beside the board therefore changes the board, and the
-`resize` listener will not hear about it. Two things do: the tournament disclosure opening or closing,
-which comes up as `UiIntent.Relayout` and is answered beside `Hover` for `Hover`'s reason — folding a
-panel must not take the arena off a running batch — and replay mode revealing the scrub row, which
+Anything that changes the height of the bars therefore changes the board, and the `resize` listener
+will not hear about it. Two things do, and neither is a panel: **a screen change**, which
+`GameSession.navigate` answers with a `refit`, and **replay mode revealing the scrub row**, which
 `GameSession` causes itself and so handles by rendering the chrome **before** it measures, in
-`begin()`.
+`begin()`. A panel does not, because it is an overlay and the board's box does not move.
 
-Below `52rem` the arena stacks into one column and the shell reverts to an ordinary scrolling page.
-Two full-height panels cannot share one viewport, and pretending otherwise gives the sidebar a
-viewport of its own underneath a board that already used one.
+Everything else in the bars is therefore built to be **a fixed number of lines tall**, because there
+is no third event and a match would have to end before anyone noticed. `#status` is one line with an
+ellipsis rather than a paragraph that wraps on a long winner's name; `#scoreboard` is one row of
+cards that truncate their names rather than a row that grows a second one the turn a seat is
+eliminated and the word "trapped" arrives. It is also why the speed slider is under Settings and not
+in the bar: it is set once and left, where the transport beside it is pressed every few seconds, and
+a control the bar does not carry is width the seat cards do not have to fight for on a phone.
 
 ### The overlay canvas
 
@@ -95,14 +411,22 @@ The overlay is cleared with one `clearRect` and is sized off the same integers a
 measured, so the two cannot drift. `BoardRenderer` owns both, so the cell size and the grid still
 have one home.
 
-There are two decorations on it and they answer to different things. The **thread** through each
+There are three decorations on it and they answer to different things. The **thread** through each
 body — plus the marker on the head — is drawn for **every snake, every turn**, because a body that
 moved one square has a thread that moved along its whole length; there is no dirty square for it, and
 nothing about it was ever a question about the pointer. The **wash** picks one snake out of the
-others, which only a pointer asks, so it stays with the pointer and goes down first, under every
-thread. That is why `BoardRenderer.paintOverlay` has to follow every `paintMove`, `paintSnake` and
-`repaint` — `GameSession.refreshOverlay` is that obligation, not a pointer handler. A corpse keeps
-`Palette.CORPSE_ALPHA` and loses its head marker, because `paintSnake` already says both.
+others, which only a pointer asks, so it stays with the pointer. The **route** is a statement about
+squares nothing has happened on yet, which is a third thing again. That is why
+`BoardRenderer.paintOverlay` has to follow every `paintMove`, `paintSnake` and `repaint` —
+`GameSession.refreshOverlay` is that obligation, not a pointer handler. A corpse keeps
+`Theme.CORPSE_ALPHA` and loses its head marker, because `paintSnake` already says both.
+
+The order is **wash → route → threads**, and both steps of it are load-bearing. The wash goes down
+first, so hovering lays a tint under everything rather than rearranging it. The route goes *under*
+the threads, so a snake reads on top of its own plan rather than being hidden by it. It is drawn in
+`Theme.accent` — the one colour on the page that is already the player's — rather than in a trail
+hue, so a plan laid over the position cannot be mistaken for a seventh snake, and it skips its own
+first square, which is the one the head is already standing on.
 
 `GameSession` remembers the hovered **square**, never the snake, so a restart, a seek and a batch
 moving on to its next match all resolve to whoever holds it now — the same rule every colour on this
@@ -113,7 +437,7 @@ board already follows.
 **Seats are named by `SlotLabels`, not by the registry directly.** A seat is a *configured* bot, so
 two of them can be the same bot at two allowances or two evaluations, and the display name alone
 cannot say so. The qualifier is `Contestant.suffix` from `:match` — the very string the win-rate
-matrix uses — so the sidebar, the hover label, the winner line and the table cannot start disagreeing
+matrix uses — so the seat list, the hover label, the winner line and the table cannot start disagreeing
 about what `4k` means. `PUCT - 1k/survival` is a full seat: allowance first, because that is what
 strength scales on, then the settings.
 
@@ -132,18 +456,37 @@ writes text, values and `hidden`; do not start constructing structure there. The
 the case that most invites breaking that rule and does not: `TournamentTable.toString()` lays it out
 in `:match` and the chrome writes the text into one `<pre>`.
 
-**There are exactly two exceptions, and both come off `BotRegistry.entries`**: the `<option>` list in
-each picker, and the knob rows inside each seat's `<details class="knobs">`. Both exist to keep
+**There are exactly two exceptions, and both come off `BotRegistry.entries`**, and both live behind
+`#panel-setup`: the `<option>` list in each picker, and the knob rows inside each seat's
+`<details class="knobs">`. Both exist to keep
 "fork, add a file, register it, open a PR" from also meaning "and edit the markup". A pre-written pool
 of rows would have been the doctrinal answer and is the wrong one — the day a bot declares one knob
 more than the pool holds, it silently loses it, which is the exact coupling the rule is there to
 prevent. The *containers* are still static, and adding a third exception needs a better reason than
-either of these had. The overlay canvas and the hover label are **not** a third one — they are static
-markup like everything else, and Kotlin only ever writes their size, text and position.
+either of these had.
 
-`SlotForm` owns all of that, one per seat, and nothing in it dispatches a `UiIntent`. Which bot is
-picked and what its knobs are set to is **form state**, like the reseed button writing `#seed`; it
-becomes app state only when Start match calls `read()`. Two things there are load-bearing:
+**Still exactly two**, and the list of things that look like they should have joined them is worth
+writing down, because every one of them was considered and none qualifies. The test is not "is it a
+list" — it is **does it come off a registry**:
+
+- **The three screens, the four panels, the backdrop and the result dialog** are a fixed set the
+  page's own design fixes. A fifth panel is a markup change *and* a `Panel` entry *and* a button, and
+  that is the honest cost of adding one.
+- **The map `<option>`s and the theme `<option>`s** enumerate `MapShape.entries` and `Theme.ALL`,
+  neither of which is a registry and neither of which has a "fork, add a file, register it" workflow
+  behind it. `SetupPanel` and `SettingsPanel` check the markup against the enum at boot instead, so a
+  shape or a theme with no `<option>` fails at startup naming itself — which is the *cheaper* half of
+  what building the list would have bought, without the DOM construction.
+- **The ten ladder tiles** are static markup like the four scoreboard cards. `Ladder.levels` is a
+  fixed table in `:match`, not something a contributor extends, and `LadderScreen` writes only each
+  tile's text, state and picture.
+- **The overlay canvas, the hover label and the seat portraits** are static markup too; Kotlin only
+  ever writes their size, text, position and `src`.
+
+`SlotForm` owns all of that, one per seat under `SetupPanel`, and nothing in it dispatches a
+`UiIntent`. Which bot is picked and what its knobs are set to is **form state**, like the reseed
+button writing `#seed`; it becomes app state only when Start match calls `read()`. Three things there
+are load-bearing, and `SetupPanelTest` pins each one:
 
 - **A value is corrected in the field, not just in the read.** `SlotForm` runs `BotKnob.reject`
   first, falls back to the declared default, and writes the correction back — a match that quietly
@@ -175,14 +518,34 @@ build-config change, not a rewrite.
 
 ## Browser gotchas already hit — don't rediscover these
 
+- **`.board-wrap` needs `touch-action: none`, or a finger dragged across the board scrolls the
+  page.** The browser decides whether a touch is a gesture *before* it delivers a `pointermove`, so
+  there is no `preventDefault` that gets there in time — the declaration is the only way to say the
+  board wants the drag. `overscroll-behavior: contain` stops the rubber band at the edges, and
+  `user-select: none` answers the mouse rather than the finger: without it the same drag reads as a
+  text selection and lights up every label behind the canvas.
+- **`100dvh`, never `100vh`.** On a phone `vh` is measured against the viewport with the address bar
+  *retracted*, which is the taller one — so a `100vh` column puts its bottom bar underneath the
+  browser's own chrome, on the device where the transport matters most. `dvh` tracks the bar. The
+  bars also carry `env(safe-area-inset-*)` inside `max()`, so a display reporting zero still gets the
+  padding the layout was drawn with.
+- **`setPointerCapture` on `pointerdown`, and treat `lostpointercapture` as a release.** `.board-wrap`
+  clips its overflow, so a drag that leaves the canvas simply stops arriving and the snake keeps
+  walking a route nobody is holding. Capture routes the rest of the gesture to the element whatever
+  it crosses. The browser can take capture back — a context menu, a system gesture — and it announces
+  that with `lostpointercapture` rather than with `pointerup`, so a handler that listens only for the
+  latter leaves a snake moving. `PathInput` listens for both, plus `pointercancel`.
 - **Reveal `#app` before the first paint.** It starts `display: none`, and a hidden element reports
   `clientWidth == 0`, so measuring the board container first sizes every board to the minimum cell
   size. `document.body.classList.add("booted")` must stay ahead of `session.start()` in `Main.kt`.
+  The same arithmetic is why the page opening on `#screen-home` is not a problem: the board is
+  measured again on the way to the game screen, and `navigate` renders before it measures.
 - **The board container's width must not depend on the canvas.** The canvas measures the container to
   find out how much room it has; with `flex: 1 1 auto` that was circular and the board came out a
-  different size on each load. `.arena` is a CSS grid with `minmax(0, 1fr)` so the track width is
-  definite, and `.board-wrap` is a one-cell grid that centres the canvas without shrink-wrapping it.
-  Don't switch either back to flexbox, and don't put a shrink-to-fit box around the canvas.
+  different size on each load. `#screen-game` is a CSS grid whose one column is `minmax(0, 1fr)` so
+  the track width is definite, and `.board-wrap` is a one-cell grid that centres the canvas without
+  shrink-wrapping it. Don't switch either back to flexbox, and don't put a shrink-to-fit box around
+  the canvas.
 - **`#board` carries an `outline`, not a `border`, and that is load-bearing twice.**
   `box-sizing: border-box` makes a border eat into the width Kotlin wrote, so a backing store of N
   device pixels was being squeezed into N-2 pixels' worth of CSS and every gridline resampled; and

@@ -30,6 +30,7 @@ internal class AbCommand(
     val cols: Int,
     val seed: Long,
     val budgetPerTurn: Int,
+    val walls: IntArray,
     val openings: Openings,
     val threads: Int,
     val sprt: Sprt,
@@ -38,7 +39,10 @@ internal class AbCommand(
     val logDirectory: Path?,
 ) : LabCommand {
     override fun run(registry: BotRegistry, log: (String) -> Unit) {
-        log("[lab] $candidate against $baseline on ${rows}x$cols at $budgetPerTurn evaluations")
+        log(
+            "[lab] $candidate against $baseline on ${rows}x$cols with ${walls.size} walls " +
+                "at $budgetPerTurn evaluations",
+        )
         log("[lab] $sprt, stopping between ${sprt.lower.round()} and ${sprt.upper.round()}")
 
         val started = TimeSource.Monotonic.markNow()
@@ -49,6 +53,7 @@ internal class AbCommand(
             cols = cols,
             seed = seed,
             budgetPerTurn = budgetPerTurn,
+            walls = walls,
             openings = openings,
             threads = threads,
             sprt = sprt,

@@ -79,6 +79,10 @@ class ReplayCodecTest {
                 }
             }
 
+            // Mapped about half the time, for the same reason `configured` is: both layouts get
+            // fuzzed rather than one of them living only in a hand-written case.
+            val walls = if (rng.nextInt(2) == 0) IntArray(0) else combWalls(rng, rows, cols, slotCount)
+
             val setup = MatchSetup.create(
                 rows = rows,
                 cols = cols,
@@ -86,6 +90,7 @@ class ReplayCodecTest {
                 seed = rng.nextLong(),
                 rules = RulesConfig(growEveryNthMove = 1 + rng.nextInt(4), maxTurns = 1 + rng.nextInt(5000)),
                 budgetPerTurn = budgetPerTurn,
+                walls = walls,
                 budgets = budgets,
                 slotParams = slotParams,
             )
@@ -177,7 +182,11 @@ class ReplayCodecTest {
         val record = Match(setup, TestRegistry.ALL).also { it.runToCompletion() }.record()
 
         val bytes = base64.decode(ReplayCodec.encode(record))
-        assertEquals(ReplayCodec.FORMAT_VERSION.toByte(), bytes[0], "a configured record is written at version 2")
+        assertEquals(
+            ReplayCodec.CONFIGURED_VERSION.toByte(),
+            bytes[0],
+            "a configured record on an empty board is written at version 2",
+        )
         bytes[0] = 1
 
         assertFailsWith<IllegalArgumentException> { ReplayCodec.decode(base64.encode(bytes)) }
@@ -251,6 +260,104 @@ class ReplayCodecTest {
     }
 
     @Test
+    fun `a match on a map survives the round trip`() {
+        val setup = MatchSetup.create(12, 12, MAPPED_SLOTS, seed = 5, walls = latticeWalls(12, 12))
+        val record = play(setup)
+
+        val decoded = ReplayCodec.decode(ReplayCodec.encode(record))
+
+        assertEquals(record, decoded)
+        assertEquals(setup.walls().toList(), decoded.setup.walls().toList())
+    }
+
+    @Test
+    fun `the version written is the oldest one that can express the record`() {
+        val plain = MatchSetup.create(12, 12, MAPPED_SLOTS, seed = 5)
+        val tuned = MatchSetup.create(12, 12, MAPPED_SLOTS, seed = 5, budgets = intArrayOf(10, 20))
+        val mapped = MatchSetup.create(12, 12, MAPPED_SLOTS, seed = 5, walls = latticeWalls(12, 12))
+
+        assertEquals(1, versionOf(plain), "nothing tuned and no map")
+        assertEquals(ReplayCodec.CONFIGURED_VERSION, versionOf(tuned), "a per-slot allowance")
+        assertEquals(ReplayCodec.FORMAT_VERSION, versionOf(mapped), "a map")
+    }
+
+    @Test
+    fun `a map travels as one bit a square, low bit of each byte first`() {
+        // Walls at (1,1), (1,3), (3,1) and (3,3) -- playable squares 6, 8, 16 and 18 -- so the
+        // packing is pinned by a bitmap somebody can check by hand, and byte 3 holds only square 24.
+        val bytes = base64.decode(ReplayCodec.encode(play(smallLatticeMatch())))
+
+        assertEquals(
+            listOf(0x40, 0x01, 0x05, 0x00),
+            (SMALL_HEADER until SMALL_HEADER + SMALL_BITMAP).map { bytes[it].toInt() and 0xFF },
+            "square i is bit (i and 7) of byte (i shr 3), exactly as DirectionStream packs a move",
+        )
+    }
+
+    @Test
+    fun `a map that two payloads could spell is refused rather than decoded`() {
+        val bytes = base64.decode(ReplayCodec.encode(play(smallLatticeMatch())))
+
+        // Bits above the last square would let one map be written two ways, so encode(decode(x))
+        // would stop being x -- and so would a flag claiming a map with no wall on it.
+        val padded = bytes.copyOf().also { it[SMALL_HEADER + SMALL_BITMAP - 1] = 0x80.toByte() }
+        val empty = bytes.copyOf().also { for (i in 0 until SMALL_BITMAP) it[SMALL_HEADER + i] = 0 }
+
+        assertFailsWith<IllegalArgumentException>("bits past the last square") {
+            ReplayCodec.decode(base64.encode(padded))
+        }
+        assertFailsWith<IllegalArgumentException>("a map with no walls") {
+            ReplayCodec.decode(base64.encode(empty))
+        }
+    }
+
+    @Test
+    fun `a mapped payload declaring a huge board is refused before the map is allocated for`() {
+        // The map block is the first thing that allocates from the decoded geometry, so the bound on
+        // rows and cols has to run before it -- and refusing has to be an IllegalArgumentException,
+        // because an OutOfMemoryError is not what :app catches to turn a bad link into a fresh match.
+        val bytes = base64.decode(ReplayCodec.encode(play(smallLatticeMatch())))
+
+        // Byte 2 is the rows varint, one byte wide for any board this game offers. Widen it to a
+        // hundred million rows, which is a map block of a hundred and fifty megabytes.
+        val huge = bytes.copyOfRange(0, 2) +
+            byteArrayOf(0x80.toByte(), 0xC2.toByte(), 0xD7.toByte(), 0x2F) +
+            bytes.copyOfRange(3, bytes.size)
+
+        assertFailsWith<IllegalArgumentException> { ReplayCodec.decode(base64.encode(huge)) }
+    }
+
+    @Test
+    fun `a map is refused at a version too old to carry one, and an unknown flag outright`() {
+        val mapped = base64.decode(ReplayCodec.encode(play(smallLatticeMatch())))
+        val stale = mapped.copyOf().also { it[0] = ReplayCodec.CONFIGURED_VERSION.toByte() }
+
+        val plain = base64.decode(ReplayCodec.encode(play(MatchSetup.create(8, 8, MAPPED_SLOTS, seed = 4))))
+        val unknown = plain.copyOf().also { it[1] = 4 }
+
+        assertFailsWith<IllegalArgumentException>("version 2 cannot carry a map") {
+            ReplayCodec.decode(base64.encode(stale))
+        }
+        assertFailsWith<IllegalArgumentException>("flags bit 2 means nothing yet") {
+            ReplayCodec.decode(base64.encode(unknown))
+        }
+    }
+
+    @Test
+    fun `a map costs its bitmap and stays inside the share budget`() {
+        val setup = MatchSetup.create(20, 20, MAPPED_SLOTS, seed = 4, walls = latticeWalls(20, 20))
+        val payload = ReplayCodec.encode(play(setup))
+
+        // 400 squares is 50 bytes, and base64 without padding turns 50 bytes into 68 characters --
+        // so a mapped 20x20 is the plain budget this suite already asserts, plus the map itself.
+        val bitmapChars = ((20 * 20 + 7) / 8 + 2) / 3 * 4
+        assertTrue(
+            payload.length < 400 + bitmapChars,
+            "a mapped 20x20 match encoded to ${payload.length} characters",
+        )
+    }
+
+    @Test
     fun `a future format version is refused, not guessed at`() {
         val match = matchOf(6, 6, "cycle", "cycle")
         match.runToCompletion()
@@ -274,5 +381,69 @@ class ReplayCodecTest {
         const val SHIPPED_BUDGET = 40_000
 
         val base64 = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
+
+        /** Two bots that stay alive by playing differently, so a mapped match is worth recording. */
+        val MAPPED_SLOTS = listOf(BotId("cycle"), BotId("last"))
+
+        /**
+         * Where [smallLatticeMatch]'s map block starts, and how long it is.
+         *
+         * The map sits between the turn order and the move stream, so a test that corrupts one byte
+         * of it has to count the header: a version and a flags byte, two geometry varints, eight
+         * seed bytes, four header varints, then a length-prefixed slug, a spawn and a turn order
+         * entry per slot. Every varint there is one byte on the board [smallLatticeMatch] picks.
+         */
+        val SMALL_HEADER = 2 + 2 + 8 + 4 + MAPPED_SLOTS.sumOf { it.slug.length + 1 } + 2 * MAPPED_SLOTS.size
+        const val SMALL_BITMAP = (5 * 5 + 7) / 8
+
+        fun play(setup: MatchSetup) = Match(setup, TestRegistry.ALL).also { it.runToCompletion() }.record()
+
+        fun versionOf(setup: MatchSetup): Int = base64.decode(ReplayCodec.encode(play(setup))).first().toInt()
+
+        /**
+         * A 5x5 lattice, chosen so every header field before the map is one byte wide.
+         *
+         * `maxTurns` and the allowance are spelled out for that reason alone: the defaults are wider
+         * than a varint byte, and [SMALL_HEADER] would then name a byte of the seed.
+         */
+        fun smallLatticeMatch(): MatchSetup = MatchSetup.create(
+            rows = 5,
+            cols = 5,
+            slots = MAPPED_SLOTS,
+            seed = 11,
+            rules = RulesConfig(maxTurns = 100),
+            budgetPerTurn = 0,
+            walls = latticeWalls(5, 5),
+        )
+
+        /** Pillars on the odd squares — the shape a map most likely has, and connected by construction. */
+        fun latticeWalls(rows: Int, cols: Int): IntArray {
+            val walls = mutableListOf<Int>()
+            for (row in 1 until rows step 2) {
+                for (col in 1 until cols step 2) {
+                    walls += row * cols + col
+                }
+            }
+            return walls.toIntArray()
+        }
+
+        /**
+         * Walls in odd rows only and never in column 0, so whatever the draw the open squares stay
+         * one connected region — which is what `mostDistantSpawns` needs of a fuzzed map.
+         *
+         * Column 0 links every row, the even rows are untouched, and an open odd-row square always
+         * borders one. Dropped entirely when it would leave fewer squares than there are snakes.
+         */
+        fun combWalls(rng: SplitMix64, rows: Int, cols: Int, slotCount: Int): IntArray {
+            val walls = mutableListOf<Int>()
+            for (row in 1 until rows step 2) {
+                for (col in 1 until cols) {
+                    if (rng.nextInt(2) == 0) {
+                        walls += row * cols + col
+                    }
+                }
+            }
+            return if (rows * cols - walls.size < slotCount) IntArray(0) else walls.toIntArray()
+        }
     }
 }

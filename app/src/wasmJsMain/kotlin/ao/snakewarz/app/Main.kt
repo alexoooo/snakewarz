@@ -14,13 +14,18 @@ import kotlinx.browser.window
  * `:ui` renders a `BoardView` it cannot trace back to a bot, which is what keeps the replay codec
  * free of bot classes and the renderer free of opinions about who is playing. The concrete registry
  * gets injected here, once, and nowhere else could do it.
+ *
+ * The two seams beside it are the same arrangement for two smaller questions: where a replay link
+ * goes, and where a bot's picture comes from. Both are about what was deployed around the page, and
+ * neither is a thing `:ui` could answer without learning what is in the registry.
  */
 public fun main() {
-    val input = InputBuffer()
+    val input = InputBuffer(InputBuffer.PATH_CAPACITY)
     val session = GameSession(
         registry = PlayableRegistry(ShippedBots, input),
         input = input,
         replayLink = ::publishReplay,
+        portraits = ::portraitUrl,
     )
 
     // Reveal the app *before* the first paint. #app starts `display: none`, and a hidden element

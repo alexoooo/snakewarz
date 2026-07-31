@@ -69,7 +69,7 @@ internal fun matchInOrder(rows: Int, cols: Int, vararg slots: String): Match =
             budgetPerTurn = 0,
             slots = slots.map { BotId(it) },
             turnOrder = IntArray(slots.size) { it },
-            spawns = mostDistantSpawns(Grid(rows, cols), slots.size),
+            spawns = mostDistantSpawns(Grid(rows, cols), IntArray(0), slots.size),
         ),
         TestRegistry.ALL,
     )

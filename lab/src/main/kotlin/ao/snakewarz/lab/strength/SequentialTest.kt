@@ -31,6 +31,8 @@ internal class SequentialTest(
     val cols: Int,
     val seed: Long,
     val budgetPerTurn: Int,
+    /** The map both arms play on, held still across every block for the reason the board is. */
+    val walls: IntArray = IntArray(0),
     val openings: Openings,
     val threads: Int,
     val sprt: Sprt,
@@ -93,6 +95,7 @@ internal class SequentialTest(
         rounds = blockPairs * MATCHES_PER_BOARD,
         seed = seed + block.toLong() * blockPairs,
         budgetPerTurn = budgetPerTurn,
+        walls = walls,
     )
 
     /** What the test has seen, and the three things a reader has to check before believing it. */

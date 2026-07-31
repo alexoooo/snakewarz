@@ -3,7 +3,7 @@
 **For:** comparing the live code against the pre-rewrite Java, or working out why the rewrite
 disagrees with it. Nothing in here is outstanding work.
 **Assumes:** [`../CLAUDE.md`](../CLAUDE.md) — the module graph, the forbidden dependency edges and
-the four non-obvious facts live there and are **not repeated here**. Fact 4, that legality is
+the five non-obvious facts live there and are **not repeated here**. Fact 4, that legality is
 evaluated before the tail retracts, is the one legacy rule the rewrite *does* keep.
 
 ## Reaching the deleted tree
@@ -34,7 +34,7 @@ family — all of which collapse into `Decision` — `PlayerAvatar`/`PlayerWrapp
 It fused player identity, the AI delegate and a `java.awt.Image` into a single class, and was the key
 type of `GameState`'s map — so the game state transitively dragged in AWT, and nothing could hold a
 position without also holding a window toolkit. It is three separate things in three modules now:
-`SnakeId` in `:core`, `Bot` in `:bot-api`, `Palette` in `:ui`.
+`SnakeId` in `:core`, `Bot` in `:bot-api`, `Theme` in `:ui`.
 
 **The AI is fully ported and nothing under `ai/` is outstanding.** The sample bots — `WallHugAi`,
 `RandomAi`, `ForkAi`, `ForkPathAi`, `PathAi`, `AStar`, `MonteCarloAi`, `UctAi`/`Node`/`BiState`,

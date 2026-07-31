@@ -72,6 +72,24 @@ class ChamberTreeTest {
     }
 
     @Test
+    fun `a wall the map owns reads as a corpse standing in the same square`() {
+        // The fixture below draws its walls as eliminated snakes, which is a rule of the engine and
+        // still worth testing. A map's wall is the other kind of impassable square, and the
+        // decomposition asks the board what is free rather than what is wall — so every reading has
+        // to come out identical, on every shape, or something here is reading the geometry.
+        for (picture in shapes()) {
+            val corpses = treeOn(Region(picture))
+            val mapped = treeOn(Region(picture, asMap = true))
+            val drawn = picture.joinToString("/")
+
+            assertEquals(corpses.chainWorth, mapped.chainWorth, "$drawn: the chain")
+            assertEquals(corpses.regionArea, mapped.regionArea, "$drawn: the region")
+            assertEquals(corpses.chamberCount, mapped.chamberCount, "$drawn: the chambers")
+            assertEquals(corpses.sealed, mapped.sealed, "$drawn: what the chain cannot reach")
+        }
+    }
+
+    @Test
     fun `a plain room is one chamber, and the walk reaches all of it`() {
         val tree = treeOn(Region(listOf("@..", "...", "...")))
 
@@ -274,8 +292,12 @@ class ChamberTreeTest {
  * stays on the board as an obstacle and a dead snake seeds no sweep. The measured snake is the last
  * slot and the only survivor, so [TempoOwnership] hands it every free square it can reach — which is
  * what makes the picture the region rather than merely a board it is drawn on.
+ *
+ * [asMap] draws the same `#` squares as the board's own map instead. The two are different rules —
+ * a corpse is a body that stopped moving and a map square never moved — and every reading here has
+ * to be blind to which it was handed.
  */
-private class Region(picture: List<String>) {
+private class Region(picture: List<String>, asMap: Boolean = false) {
     val grid = Grid(picture.size, picture[0].length)
     val head: Cell
     val slot: Int
@@ -299,8 +321,8 @@ private class Region(picture: List<String>) {
         }
         require(headCell >= 0) { "the picture has no head" }
 
-        val spawns = (walls + headCell).toIntArray()
-        val board = Board(grid, spawns)
+        val spawns = if (asMap) intArrayOf(headCell) else (walls + headCell).toIntArray()
+        val board = Board(grid, spawns, wallCells = if (asMap) walls.toIntArray() else IntArray(0))
         for (dead in 0 until spawns.size - 1) {
             board.eliminate(SnakeId(dead), EliminationReason.RESIGNED)
         }

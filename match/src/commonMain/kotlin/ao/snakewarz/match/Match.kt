@@ -54,7 +54,8 @@ public class Match private constructor(
 
     public val grid: Grid = setup.grid()
 
-    private val board: Board = Board(grid, setup.spawnCells(grid), setup.rules, setup.turnOrder())
+    private val board: Board =
+        Board(grid, setup.spawnCells(grid), setup.rules, setup.turnOrder(), setup.wallCells(grid))
     private val matchRng: Rng = SplitMix64(setup.seed)
     private val budgets: Array<Budget> = Array(setup.slotCount) { Budget(setup.budgetFor(it)) }
     private val scratches: Array<Scratch> = Array(setup.slotCount) { BoardScratch(board, budgets[it]) }

@@ -26,6 +26,14 @@ public interface BoardView {
     /** Snake ids are dense: they are exactly `SnakeId(0) until SnakeId(snakeCount)`. */
     public val snakeCount: Int
 
+    /**
+     * Playable squares that are not permanently wall — what a share of the board is a share *of*.
+     *
+     * [Grid.playableCount] is `rows * cols` and stays pure geometry; this is the quantity every
+     * evaluation normalising by "the board" actually wants, and on a map the two differ.
+     */
+    public val openCount: Int
+
     /** Whose move it is. Always a living snake while the match is running. */
     public val toAct: SnakeId
 
@@ -63,7 +71,15 @@ public interface BoardView {
 
     public fun isFree(cell: Cell): Boolean
 
-    /** The snake occupying [cell], or [SnakeId.NONE] if it is empty or part of the wall ring. */
+    /**
+     * Whether [cell] can never be entered — the padded border ring, or a wall of the map.
+     *
+     * What [ownerOf] cannot say: an empty square and a wall both read [SnakeId.NONE], and the
+     * renderer needs to tell them apart. Constant for the life of a match.
+     */
+    public fun isWall(cell: Cell): Boolean
+
+    /** The snake occupying [cell], or [SnakeId.NONE] if it is empty or part of a wall. */
     public fun ownerOf(cell: Cell): SnakeId
 
     /**

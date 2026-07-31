@@ -128,6 +128,22 @@ import ao.snakewarz.core.snake.SnakeId
  * that ought to be unchanged move ±30-90 between them — so the 8x8 and 12x12 rows say nothing, and
  * only the 20x20 move of about +240 is outside that. The two fits have **never been seated in one
  * field**; what is measured directly, on identical corpora, is the loss.
+ *
+ * ### Correct on an empty board, honest on a map, unfitted for one
+ *
+ * [PositionFeatures] normalises by the board's open squares, so a map leaves every reading **in
+ * range and defined** — `boardFill` still runs zero to one, `regionShare` is still at most one,
+ * `headWalls` still lands in `{0, .25, .5, .75, 1}` — and on a board without walls the row is the
+ * one [LearnedWeights] was fitted on, to the bit. What the model has not seen is the *distribution*
+ * a map produces, so it is extrapolating rather than degenerate, and nothing here claims it plays a
+ * map as well as it plays a rectangle.
+ *
+ * The refit wants its own instrument — loss on a map corpus by these weights against the same
+ * weights refitted, then a field — and one thing to know before building it. `:lab`'s `train` keys
+ * its [PositionFeatures] cache on rows, columns and slot count, so two different maps of the same
+ * size share a reader. That is sound exactly as long as a reader is built from a grid and a slot
+ * count and nothing else; a reading that depended on the map would be answered off whichever map
+ * happened to arrive first.
  */
 internal class LearnedEval(
     grid: Grid,

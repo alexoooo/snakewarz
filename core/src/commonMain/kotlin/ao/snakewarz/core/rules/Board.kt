@@ -26,7 +26,8 @@ import ao.snakewarz.core.snake.SnakeView
  * ### Rules
  *
  * - A move into any occupied square is fatal. Walls, other snakes and your own body are the same
- *   array read, so there is no separate "off the board" case and no bounds check.
+ *   array read, so there is no separate "off the board" case and no bounds check. An interior wall
+ *   of a map is the padded ring's byte stamped on a playable square, so it needs no rule of its own.
  * - Legality is evaluated **before** the tail retracts, so a snake cannot move into the square its
  *   own tail is about to leave. This matches the legacy engine, which tested the destination against
  *   a board built before the retraction.
@@ -41,6 +42,8 @@ public class Board(
     spawnCells: IntArray,
     override val rules: RulesConfig = RulesConfig(),
     turnOrder: IntArray = IntArray(spawnCells.size) { it },
+    /** Permanently impassable squares, as padded [Cell] indices — the same address space as [spawnCells]. */
+    wallCells: IntArray = IntArray(0),
 ) : BoardView {
     override val snakeCount: Int = spawnCells.size
 
@@ -64,6 +67,13 @@ public class Board(
     /** Slot indices in the order they act. A permutation of `0 until snakeCount`. */
     private val order: IntArray = turnOrder.copyOf()
     private val spawns: IntArray = spawnCells.copyOf()
+    private val walls: IntArray = wallCells.copyOf()
+
+    // A fifth key family, folded in once. Xor is order-independent, so two orderings of the same map
+    // key identically -- which is what makes this usable as copyFrom's guard as well as as a key.
+    private val wallKey: Long = walls.fold(0L) { key, cell -> key xor stateKey(FAMILY_WALL, 0, cell) }
+
+    override val openCount: Int = grid.playableCount - walls.size
 
     private val occupancy = Occupancy(grid)
     private val bodies: Array<SnakeBody> = Array(snakeCount) { SnakeBody(grid.playableCount) }
@@ -76,7 +86,7 @@ public class Board(
     /** Position within [order], not a slot index. */
     private var orderPos = 0
 
-    /** Everything in [hash] that is not occupancy: heads, growth phases, liveness, whose turn. */
+    /** Everything in [hash] that is not occupancy: heads, growth phases, liveness, whose turn, the map. */
     private var auxHash = 0L
 
     private var journal = LongArray(INITIAL_JOURNAL_CAPACITY)
@@ -103,9 +113,18 @@ public class Board(
             seen[slot] = true
         }
 
+        // Stamped before the spawns are checked so that a spawn standing on a wall is caught here
+        // rather than by whichever of the two happened to be validated second.
+        for (i in walls.indices) {
+            val cell = Cell(walls[i])
+            require(grid.isPlayable(cell)) { "wall $i is not a playable square of $grid" }
+            occupancy.wall(cell)
+        }
+
         for (slot in 0 until snakeCount) {
             val cell = Cell(spawns[slot])
             require(grid.isPlayable(cell)) { "spawn for slot $slot is not a playable square of $grid" }
+            require(!occupancy.isWall(cell)) { "spawn for slot $slot stands on a wall of the map" }
             for (other in 0 until slot) {
                 require(spawns[other] != spawns[slot]) { "slots $other and $slot spawn on the same square" }
             }
@@ -119,6 +138,8 @@ public class Board(
     override val hash: Long get() = occupancy.hash xor auxHash
 
     override fun isFree(cell: Cell): Boolean = occupancy.isFree(cell)
+
+    override fun isWall(cell: Cell): Boolean = occupancy.isWall(cell)
 
     override fun ownerOf(cell: Cell): SnakeId = occupancy.ownerOf(cell)
 
@@ -147,7 +168,7 @@ public class Board(
         journalTop = 0
 
         auxHash = 0L
-        auxHash = auxHash xor toActKey()
+        auxHash = auxHash xor toActKey() xor wallKey
         for (slot in 0 until snakeCount) {
             auxHash = auxHash xor headKey(slot, bodies[slot].head) xor growthPhaseKey(slot, 0)
         }
@@ -294,6 +315,10 @@ public class Board(
             "cannot copy a ${other.snakeCount}-snake board into a $snakeCount-snake one"
         }
         require(other.rules == rules) { "cannot copy a board played under ${other.rules} into $rules" }
+        // O(1) rather than an array compare, because this runs on every rollout reset. The occupancy
+        // copy below already carries the walls' bytes; what it does not carry is `walls` itself,
+        // which is what copy() hands on.
+        require(other.wallKey == wallKey) { "cannot copy a board played on a different map into this one" }
 
         occupancy.copyFrom(other.occupancy)
         for (slot in 0 until snakeCount) {
@@ -321,7 +346,7 @@ public class Board(
      * live board on every rollout reset. Never call it per node — that is the legacy mistake.
      */
     public fun copy(): Board {
-        val clone = Board(grid, spawns, rules, order)
+        val clone = Board(grid, spawns, rules, order, walls)
         clone.copyFrom(this)
         return clone
     }
@@ -340,7 +365,7 @@ public class Board(
                 cells = IntArray(body.size) { body.cellAt(it).index },
             )
         }
-        return MatchState(grid, rules, turnIndex, toAct, outcome, snakes)
+        return MatchState(grid, rules, turnIndex, toAct, outcome, snakes, walls)
     }
 
     override fun toString(): String = snapshot().toString()
@@ -460,6 +485,7 @@ public class Board(
         const val FAMILY_HEAD = 2L
         const val FAMILY_GROWTH = 3L
         const val FAMILY_ALIVE = 4L
+        const val FAMILY_WALL = 5L
 
         fun stateKey(family: Long, slot: Int, payload: Int): Long =
             mix64((family shl 60) or (slot.toLong() shl 32) or (payload.toLong() and 0xFFFFFFFFL))

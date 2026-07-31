@@ -30,14 +30,24 @@ internal class RunHeader(
     val seed: Long,
     val openings: String,
     val threads: Int,
+    /** Which map, as [mapKey] fingerprints it — `empty` for a bare rectangle. */
+    val map: String,
     /** Every entrant in full — see [expandedSpec] — space separated, in seating order. */
     val contestants: List<String>,
 ) {
-    /** What a batch has to agree on before its matches may be pooled with another's. */
+    /**
+     * What a batch has to agree on before its matches may be pooled with another's.
+     *
+     * [map] is in here for the same reason the board size is, and the failure it prevents is quieter:
+     * a batch on a walled board and a batch on a bare one are two different games under one name, and
+     * a rating fitted across them describes neither. Nothing else in the row would have separated
+     * them — the geometry, the rules and the allowance are identical.
+     */
     val comparabilityKey: String
-        get() = "$build|$format|${rows}x$cols|$growEveryNthMove|$maxTurns|$budgetPerTurn|$openings"
+        get() = "$build|$format|${rows}x$cols|$map|$growEveryNthMove|$maxTurns|$budgetPerTurn|$openings"
 
-    override fun toString(): String = "RunHeader($id, $build, ${rows}x$cols, ${contestants.size} entrants)"
+    override fun toString(): String =
+        "RunHeader($id, $build, ${rows}x$cols, $map, ${contestants.size} entrants)"
 
     companion object {
         fun of(
@@ -60,6 +70,7 @@ internal class RunHeader(
             seed = config.seed,
             openings = openings,
             threads = threads,
+            map = mapKey(config.walls()),
             contestants = config.contestants.map { expandedSpec(it, registry, config.budgetPerTurn) },
         )
 

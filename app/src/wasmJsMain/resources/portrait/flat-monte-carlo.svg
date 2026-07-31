@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Flat Monte Carlo">
+    <!-- One straight column per legal move and nothing joining them: samples, with no tree. -->
+    <rect width="32" height="32" rx="6" fill="#16191d"/>
+    <rect x="5" y="13" width="4" height="11" fill="#3a7f5c"/>
+    <rect x="11" y="7" width="4" height="17" fill="#4c9f74"/>
+    <rect x="17" y="11" width="4" height="13" fill="#5fbf8a"/>
+    <rect x="23" y="9" width="4" height="15" fill="#7fe0a8"/>
+    <rect x="4" y="24" width="24" height="4" fill="#3a7f5c"/>
+</svg>

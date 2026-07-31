@@ -174,8 +174,9 @@ internal class TempoOwnership(private val grid: Grid, private val snakeCount: In
      * How many squares the sweep could set foot on at all — free ones plus the tails retracting
      * within the round.
      *
-     * Against `Grid.playableCount` that is how full the board is, which is a reading about the
-     * *phase* of the game rather than about any one snake and so has nowhere else to come from.
+     * Against `BoardView.openCount` — the squares that are not permanently wall — that is how full
+     * the board is, which is a reading about the *phase* of the game rather than about any one snake
+     * and so has nowhere else to come from.
      */
     fun walkableCount(): Int = open.count()
 

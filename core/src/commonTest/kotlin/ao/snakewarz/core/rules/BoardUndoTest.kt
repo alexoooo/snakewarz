@@ -19,8 +19,25 @@ import kotlin.test.assertTrue
 class BoardUndoTest {
     @Test
     fun `unwinding a whole game restores every position bit for bit`() {
-        val board = boardOf(8, 8, 0 to 0, 7 to 7, 0 to 7)
-        val rng = SplitMix64(20260725L)
+        assertUnwindsExactly(boardOf(8, 8, 0 to 0, 7 to 7, 0 to 7), SplitMix64(20260725L))
+    }
+
+    @Test
+    fun `and it holds the same on a board with a map`() {
+        // A pillar lattice, so the games branch round obstacles rather than only round each other.
+        val board = boardOf(
+            9, 9, 0 to 0, 8 to 8, 8 to 0,
+            walls = listOf(2 to 2, 2 to 6, 6 to 2, 6 to 6, 4 to 4),
+        )
+
+        assertUnwindsExactly(board, SplitMix64(20260730L))
+
+        for (wall in listOf(2 to 2, 2 to 6, 6 to 2, 6 to 6, 4 to 4)) {
+            assertTrue(board.isWall(board.grid.cellAt(wall.first, wall.second)), "$wall is still wall")
+        }
+    }
+
+    private fun assertUnwindsExactly(board: Board, rng: SplitMix64) {
         val history = mutableListOf<String>()
 
         while (board.outcome == null) {

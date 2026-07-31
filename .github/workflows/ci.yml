@@ -35,17 +35,21 @@ jobs:
       # Kotlin/Wasm bundle size is a standing risk, so it is a build failure rather than a
       # code review question. GitHub Pages serves gzip, so measure gzipped -- not brotli.
       # Source maps are excluded: browsers only fetch them with devtools open.
+      #
+      # `find`, and not a glob: the distribution has subdirectories in it -- `portrait/` is eleven
+      # of them -- and a glob would hand gzip a directory, measure it as zero, and leave every asset
+      # under it outside a budget whose whole point is that it cannot be forgotten about.
       - name: Check gzipped transfer size
         run: |
           DIST=app/build/dist/wasmJs/productionExecutable
           LIMIT=$((1536 * 1024))
           TOTAL=0
-          for f in "$DIST"/*; do
+          while IFS= read -r f; do
             case "$f" in *.map) continue ;; esac
             SIZE=$(gzip -9 -c "$f" | wc -c)
-            printf '  %-40s %8d bytes gzipped\n' "$(basename "$f")" "$SIZE"
+            printf '  %-40s %8d bytes gzipped\n' "${f#"$DIST"/}" "$SIZE"
             TOTAL=$((TOTAL + SIZE))
-          done
+          done < <(find "$DIST" -type f | sort)
           echo "Total gzipped transfer: ${TOTAL} bytes (limit ${LIMIT})"
           if [ "$TOTAL" -gt "$LIMIT" ]; then
             echo "::error::Bundle exceeds the gzipped transfer budget (${TOTAL} > ${LIMIT})."

@@ -2,7 +2,7 @@
 
 **For:** adding or changing a bot, or touching `bots/` and `bot-api/`.
 **Assumes:** [`../CLAUDE.md`](../CLAUDE.md) — the module graph, the forbidden dependency edges and
-the four non-obvious facts live there and are **not repeated here**.
+the five non-obvious facts live there and are **not repeated here**.
 **Reviewed against:** [`Coding-Standards.md`](Coding-Standards.md), especially SW-01 determinism,
 SW-02 portable arithmetic, SW-03 the hot path and SW-05 frozen identifiers.
 
@@ -51,6 +51,127 @@ second one only adds a picker row and a column to every matrix. That is what ret
 80/20 mixture of `random` and `pressure` that scored 5% against a field and beat no candidate version
 of anything. **Retiring is a real cost** — the slug is frozen, so it is never reused — and it is worth
 paying only when the bot answers no question that another bot here does not answer better.
+
+### The single-player ladder is a different ordering, and it is measured per level
+
+`Ladder` in `:match` seats each of the ten slugs once, on **its own board, map and allowance** — so it
+is not the registry order with numbers on it, and it could not be. `BotLadderTest` certifies its rungs
+on an empty 12x12, and neither half of that survives: `alphabeta:eval=territory` rates above bare
+`puct` at 8x8 while losing its head-to-head to it, and a six-entrant field on `cross` moved `wallhug`
+about 400 Elo up the table while compressing the whole field to half its empty-board width.
+
+So the order is measured on the geometry each level plays, by `:lab`'s `ladder` subcommand: one fixed
+reference against every level in turn, and the ordering is right when the reference's score falls.
+
+```bash
+./gradlew :lab:run --args="ladder --rounds 200"
+```
+
+Two references, 2,000 matches each, mirrored openings, seed 1. `uct@100` is the shipped default and
+is what resolves the whole ladder; `puct@250` is carried beside it because a single reference cannot
+be believed on an ordering it saturates at both ends.
+
+| # | opponent | board | map | allowance | `uct@100` | `puct@250` |
+|---|---|---|---|---|---|---|
+| 1 | `random` | 8x8 | `empty` | — | 100% | 100% |
+| 2 | `burninhell` | 10x10 | `cross` | — | 98% | 100% |
+| 3 | `wallhug` | 10x10 | `pillars` | — | 100% | 100% |
+| 4 | `space` | 12x12 | `empty` | — | 92% | 99% |
+| 5 | `pressure` | 12x12 | `ring` | — | 74% | 99% |
+| 6 | `chase` | 14x14 | `double-spiral` | — | 55% | 94% |
+| 7 | `flat-monte-carlo` | 14x14 | `diagonals` | 400 | 58% | 64% |
+| 8 | `uct` | 16x16 | `scatter` | 600 | 26% | 51% |
+| 9 | `puct:eval=territory` | 16x16 | `rooms` | 1,000 | 8% | 30% |
+| 10 | `alphabeta:eval=territory` | 20x20 | `rooms` | 1,000 | 4% | 12% |
+
+Every row of the `uct@100` run was **200 of 200 distinct games** bar level 6 at 197, which is the
+honest sample size and the first thing to read: five of these levels are bots that draw no randomness,
+and a reference that did the same would have played each of them the same four games. Neither column
+falls strictly — 2/3 and 6/7 are ties under one reference each, both inside a five-point band — and
+the two references disagree about nothing. `puct@250` is the noisier sample for exactly the reason
+above: it converges on a deterministic opponent, so its rows against those run 86 to 148 of 200
+distinct, which is why it is the second reading and not the first.
+
+**Three things in that table are the measurement correcting a guess, and each is worth knowing.**
+
+- **`cross` had to come down, not up.** Its first assignment was level 4 (`space`), where it lifted a
+  flood-filling bot above the two levels over it: `puct@250` scored 68% on it against 100% on level 5.
+  `cross` boosts a room-filler by so much that it can only sit under a bot too weak to be lifted past
+  anything.
+- **`double-spiral` inverts the value of search**, so it cannot sit above a searcher. At 16x16,
+  `puct@250` against `puct@1000` scores **77%** on `double-spiral` and **23%** on an empty board of
+  the same size — a quarter of the allowance beating the full one, on the map whose own KDoc says the
+  game there is close to pure space-filling. Measured across the catalogue at 16x16, the full
+  allowance scores 83% on `ring`, 77% on `scatter` and on `empty`, 65% on `pillars`, 63% on `rooms`,
+  57% on `diagonals`, 50% on `cross` and 23% on `double-spiral`. So it is level 6, under the last bot
+  that does not search.
+- **The dearest evaluation is not the hardest level.** Level 10 plays `alphabeta` at its shipped
+  `territory` leaf rather than `eval=chamber`, for two reasons that agree: `AlphaBetaBot.EVAL` records
+  that leaf finishing *below* the cheap one in a common field, and `MatchSetup.DEFAULT_BUDGET_PER_TURN`
+  puts it at about 4.6x `territory` per evaluation, which on a 20x20 overruns `:ui`'s 8 ms slice
+  several times over.
+
+The allowances are the frame criterion rather than a ramp somebody liked the look of. `lab time` on
+each level's own board and map, best of five, with `uct` at 20x20 and the shipped allowance carried as
+the control this table's figures are read against — that control reads 2.19 ms here against the 2.0 ms
+`MatchSetup.DEFAULT_BUDGET_PER_TURN` records, so the machine is comparable:
+
+| level | JVM us/turn |
+|---|---|
+| 7 `flat-monte-carlo` @400, 14x14 `diagonals` | 191 |
+| 8 `uct` @600, 16x16 `scatter` | 896 |
+| 9 `puct` @1,000, 16x16 `rooms` | 1,628 |
+| 10 `alphabeta` @1,000, 20x20 `rooms` | 2,142 |
+| *control:* `uct` @1,000, 20x20 | 2,189 |
+
+Every level is at or under the control, which is the configuration the 8 ms slice was chosen by — so
+no level costs a player more of a frame than an unconfigured match already does.
+
+## A bot on a map: two readings, and the one denominator
+
+Interior walls cost the hot path nothing — they are the padded ring's `WALL` byte, so `freeNeighbors`
+already treats them as not-free and `copyFrom` carries them into every search arena for free. What
+they break is anything that answered a question about the board **without asking the board**. Two
+sites in `:bots` did, and both are worth recognising because the shape recurs:
+
+- **A reading taken off a row and a column is blind to a wall.** `MovePrior`'s wall feature counted
+  how many of a destination's four sides were the *edge of the rectangle*, from `row == 0`,
+  `row == lastRow` and so on. It now asks `BoardView.isWall` at each of the four neighbours, which
+  answers for the border ring and the map's own obstacles alike. **No golden hash could have caught
+  the old reading**, and that is the part to remember: `PuctBot.PRIOR_WALL` defaults to `0.0`, so the
+  feature is multiplied out of the shipped prior entirely and every move stream is identical either
+  way. A feature at a zero weight is a feature no test is watching. Pricing it is `MovePrior`'s own
+  ablation table — the wall and tail readings together are 1.02x a turn, at or under the resolution of
+  a `time` run.
+- **`Grid.playableCount` is the geometry; `BoardView.openCount` is the denominator.** A share of the
+  board is a share of the squares a snake could ever stand on. `PositionFeatures` normalises by
+  `openCount`, so `boardFill` still starts at zero on a fresh walled board and still reaches one;
+  against `playableCount` a map would arrive already looking part filled, which is a phase of the game
+  it is not in. `TempoOwnership.walkableCount()` is read against the same quantity, and `MatchStats`
+  divides by `openCells` for the same reason one level up. **`TerritoryEval` needed no change at all**
+  — it normalises by `totalOwned`, the ground the sweep actually handed out, which is already a
+  quantity a map shrinks correctly.
+
+### `eval=learned` is correct on empty, honest on a map, and unfitted for one
+
+All three clauses are true at once and none of them substitutes for another.
+
+**Correct on empty:** the readings are the ones `LearnedWeights` was fitted on, to the bit, because
+`openCount` equals `playableCount` where there are no walls.
+
+**Honest on a map:** every feature stays in range and defined. `boardFill` still runs zero to one,
+`regionShare` is still at most one, `headWalls` still lands in `{0, .25, .5, .75, 1}`. So the model is
+*extrapolating* rather than degenerate — it is being asked about a distribution it has not seen, not
+being handed a number outside its domain.
+
+**Unfitted for one:** nothing claims it plays a map as well as it plays a rectangle, and no measurement
+here says it does. A refit wants its own instrument — loss on a map corpus by these weights against
+the same weights refitted, then a field — and one thing has to be known before building it: `:lab`'s
+`train` keys its `PositionFeatures` cache on rows, columns and slot count, so **two different maps of
+the same size share a reader**. That is sound exactly as long as a reader is built from a grid and a
+slot count and nothing else. A reading that depended on the map would be answered off whichever map
+happened to arrive first, silently, for the whole corpus. `LearnedEval`'s KDoc carries the same
+argument beside the code.
 
 ## Adding a bot
 

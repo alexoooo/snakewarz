@@ -10,6 +10,8 @@ import ao.snakewarz.lab.log.MatchLog
 import ao.snakewarz.lab.strength.Sprt
 import ao.snakewarz.lab.tune.KnobSpace
 import ao.snakewarz.match.MatchSetup
+import ao.snakewarz.match.map.MapShape
+import ao.snakewarz.match.map.generateMap
 import ao.snakewarz.match.tournament.Contestant
 import ao.snakewarz.match.tournament.TournamentConfig
 import java.nio.file.Path
@@ -52,27 +54,40 @@ internal interface LabCommand {
 
         private const val DEFAULT_SEED = 1L
 
+        /** What `--density` means when nobody said: whatever the shape ships with. */
+        private const val SHIPPED_DENSITY = 0.0
+
         private val PLAY_FLAGS = setOf(
             "rows", "cols", "rounds", "seed", "budget", "format", "openings", "threads",
-            "replays", "log",
+            "replays", "log", "map", "density",
         )
-        private val TIME_FLAGS = setOf("rows", "cols", "seed", "budget", "passes")
-        private val RATE_FLAGS = setOf("log", "board", "budget", "format", "build", "openings", "since", "pool")
+        private val TIME_FLAGS = setOf("rows", "cols", "seed", "budget", "passes", "map", "density")
+
+        /**
+         * No geometry here, and that is the point: every board a `ladder` run plays comes off the
+         * level rather than off the command line. A `--rows` accepted here would measure ten levels
+         * on a board none of them is played on.
+         */
+        private val LADDER_FLAGS = setOf("against", "rounds", "seed", "openings", "threads", "log")
+
+        private val RATE_FLAGS = setOf(
+            "log", "board", "budget", "format", "build", "openings", "since", "pool", "map",
+        )
 
         /** The `rate` options that narrow the log rather than configure the report. */
-        private val RATE_FILTERS = setOf("board", "budget", "format", "build", "openings", "since")
+        private val RATE_FILTERS = setOf("board", "budget", "format", "build", "openings", "since", "map")
 
         private val REPORT_FLAGS = setOf("log", "against", "worst")
 
         private val PHASES_FLAGS = setOf("log", "against")
 
         private val TUNE_FLAGS = setOf(
-            "knobs", "rows", "cols", "seed", "budget", "openings", "threads",
+            "knobs", "rows", "cols", "seed", "budget", "openings", "threads", "map", "density",
             "passes", "block", "max-pairs", "journal", "elo1",
         )
 
         private val SPSA_FLAGS = setOf(
-            "knobs", "rows", "cols", "seed", "budget", "openings", "threads",
+            "knobs", "rows", "cols", "seed", "budget", "openings", "threads", "map", "density",
             "iterations", "boards", "spread", "stride", "max-pairs", "journal", "elo1",
         )
 
@@ -139,7 +154,7 @@ internal interface LabCommand {
         private const val DEFAULT_WORST = 5
 
         private val AB_FLAGS = setOf(
-            "rows", "cols", "seed", "budget", "openings", "threads", "log",
+            "rows", "cols", "seed", "budget", "openings", "threads", "log", "map", "density",
             "elo0", "elo1", "alpha", "beta", "block", "max-pairs",
         )
 
@@ -168,32 +183,39 @@ internal interface LabCommand {
               play <entrant> <entrant> [...] [--rows N] [--cols N] [--rounds N] [--seed N]
                                             [--budget N] [--format head|ffa]
                                             [--openings mirrored|fixed] [--threads N]
+                                            [--map SHAPE] [--density F]
                                             [--replays decisive|none|all] [--log DIR|none]
               time <entrant> [--rows N] [--cols N] [--seed N] [--budget N] [--passes N]
+                             [--map SHAPE] [--density F]
               rate [--log DIR] [--board RxC] [--budget N] [--format head|ffa] [--build SHA]
-                   [--openings mirrored|fixed] [--since RUN] [--pool true]
+                   [--openings mirrored|fixed] [--map SHAPE] [--since RUN] [--pool true]
               ab <baseline> <candidate> [--elo0 N] [--elo1 N] [--alpha N] [--beta N]
                                         [--block N] [--max-pairs N] [--rows N] [--cols N]
                                         [--seed N] [--budget N] [--openings ...] [--threads N]
+                                        [--map SHAPE] [--density F]
               report <entrant> [--against <entrant>] [--worst N] [--log DIR]
               phases <entrant> [--against <entrant>] [--log DIR]
               tune <entrant> [--knobs a,b,c] [--passes N] [--block N] [--max-pairs N]
                              [--rows N] [--cols N] [--seed N] [--budget N] [--openings ...]
-                             [--threads N] [--journal FILE]
+                             [--threads N] [--map SHAPE] [--density F] [--journal FILE]
               spsa <entrant> [--knobs a,b,c] [--iterations N] [--boards N] [--spread N] [--stride N]
                              [--rows N] [--cols N] [--seed N] [--budget N] [--openings ...]
-                             [--threads N] [--journal FILE] [--elo1 N] [--max-pairs N]
+                             [--threads N] [--map SHAPE] [--density F] [--journal FILE]
+                             [--elo1 N] [--max-pairs N]
               train [--log DIR] [--rows N] [--cols N] [--stride N] [--positions N] [--hidden N]
                     [--epochs N] [--rate N] [--decay N] [--batch N] [--seed N] [--out FILE]
                     [--model FILE]
+              ladder [--against <entrant>] [--rounds N] [--seed N] [--openings ...] [--threads N]
+                     [--log DIR|none]
 
             An entrant is <slug>[:name=value,...], where `budget` is that entrant's own allowance
             and every other name is one of that bot's declared knobs. For example:
 
               play puct:eval=territory puct:eval=survival --rounds 40
               play uct uct:budget=100
+              play uct puct --map cross --rows 12 --cols 12 --rounds 100
               time puct:eval=survival --budget 2000
-              rate --board 12x12 --budget 1000
+              rate --board 12x12 --budget 1000 --map cross
               ab uct uct:exploration=2.5
               report puct:eval=horizon --against puct --worst 5
               phases puct:eval=learned --log .lab/rave-field
@@ -201,6 +223,8 @@ internal interface LabCommand {
               spsa puct:eval=chamber --knobs parityWeight,sealPenalty --budget 1000
               train --rows 12 --cols 12 --hidden 8 --epochs 40
               train --log .lab/p2b-field-20 --rows 20 --cols 20 --model .lab/shipped-model.txt
+              ladder --rounds 40
+              ladder --rounds 40 --against uct:budget=100
 
             `tune` and `spsa` both search a bot's declared knobs and recommend; neither ever edits a
             default. Adopting one moves every golden move-stream hash, and that is a question for a
@@ -240,12 +264,31 @@ internal interface LabCommand {
             match, which is what the engine does and what the shipped ladder was measured under --
             and which gives bots that draw no randomness the same few games over and over.
 
+            `--map` draws interior walls, one map for the whole run, at its --rows/--cols and --seed:
+            ${MapShape.entries.joinToString { it.slug }}. `empty` is the default and is a bare
+            rectangle, so a run that names it is identical to one that says nothing. A shape refuses
+            a board too small to express it rather than drawing a degenerate version. `--density`
+            is the fraction of the board `scatter` fills; the other shapes are a function of the
+            geometry alone and ignore it.
+
+            Every rung of the shipped ladder was certified on an empty rectangle, and a rating is
+            conditioned on the geometry as much as on the field -- so a map is a new measurement and
+            not a variation on an old one. `rate --map <shape>` narrows the log to it, and refuses
+            to pool it with anything else, for the reason a different board size is refused.
+
             `train` plays nothing at all: it replays the move streams already in the log, reads each
             position as a feature vector and fits the value function `puct:eval=learned` uses. It
             prints a literal for `LearnedWeights` and never edits one, for the reason `tune` does
             not edit a default. Everything it reports is over games it held out whole. With
             `--model FILE` it fits nothing and scores that literal over the whole corpus instead,
             which is how a fit taken on one board is read on another.
+
+            `ladder` takes no board at all: it plays each of the ten single-player levels on that
+            level's own geometry, map and allowance, against one fixed reference, and prints the
+            reference's score per level. The order is right when that score falls -- and a level that
+            comes out easier than the one below it is a table to reorder, not a run to repeat. The
+            reference is `--against`, and its allowance is held still across every level, which is
+            what makes the ten readings comparable.
 
             Every batch is appended to the match log under .lab/, which is what `rate` and `report`
             read. `--log none` runs without recording anything.
@@ -267,6 +310,7 @@ internal interface LabCommand {
                 "tune" -> tuneOf(entrants, Flags(options, TUNE_FLAGS), registry)
                 "spsa" -> spsaOf(entrants, Flags(options, SPSA_FLAGS), registry)
                 "train" -> trainOf(entrants, Flags(options, TRAIN_FLAGS))
+                "ladder" -> ladderOf(entrants, Flags(options, LADDER_FLAGS), registry)
                 else -> error("no such subcommand: '$subcommand'.\n\n$USAGE")
             }
         }
@@ -332,15 +376,20 @@ internal interface LabCommand {
                 }
             }
 
+            val rows = flags.int("rows", LADDER_BOARD)
+            val cols = flags.int("cols", LADDER_BOARD)
+            val seed = flags.long("seed", DEFAULT_SEED)
+
             return PlayCommand(
                 config = TournamentConfig(
                     contestants = contestants,
-                    rows = flags.int("rows", LADDER_BOARD),
-                    cols = flags.int("cols", LADDER_BOARD),
+                    rows = rows,
+                    cols = cols,
                     rounds = rounds,
                     format = flags.format("format"),
-                    seed = flags.long("seed", DEFAULT_SEED),
+                    seed = seed,
                     budgetPerTurn = flags.int("budget", MatchSetup.DEFAULT_BUDGET_PER_TURN),
+                    walls = flags.walls(rows, cols, seed),
                 ),
                 openings = flags.openings("openings"),
                 threads = threads,
@@ -404,6 +453,36 @@ internal interface LabCommand {
         private fun Flags.knobNames(): List<String>? =
             text("knobs")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
 
+        /**
+         * The map every match of the run is played on: `--map <shape>` at this run's own geometry.
+         *
+         * One map per run rather than one per match, so a batch is a comparison on a board rather
+         * than a comparison across boards. The seed is the run's, so `--map scatter` is reproducible
+         * from the command line alone and two runs at different seeds are two different scatterings.
+         *
+         * `--map empty` is the default and produces no walls at all, so a run that names it is
+         * byte-identical to a run that says nothing — which is what lets every existing command and
+         * every logged batch keep its meaning.
+         *
+         * A shape nobody offers lists the ones that exist, the way [contestantOf] does for a bot id.
+         * A shape that cannot be drawn at this size refuses by name from [generateMap], because a
+         * cross with no arms is a bug in the game rather than a small cross.
+         */
+        private fun Flags.walls(rows: Int, cols: Int, seed: Long): IntArray {
+            val slug = text("map") ?: MapShape.EMPTY.slug
+            val shape = MapShape.ofSlug(slug)
+                ?: error("no such map: '$slug'. Known: ${MapShape.entries.joinToString { it.slug }}")
+
+            // A density with no map behind it draws nothing and would be read back as a setting that
+            // took effect. Which shapes read one is `generateMap`'s business, not this parser's.
+            require(text("density") == null || text("map") != null) {
+                "--density asks a map for a fraction of the board, so it needs --map. " +
+                    "The default map is '${MapShape.EMPTY.slug}' and has no walls to place."
+            }
+
+            return generateMap(rows, cols, shape, decimal("density", SHIPPED_DENSITY), seed).walls()
+        }
+
         private fun tuneOf(entrants: List<String>, flags: Flags, registry: BotRegistry): TuneCommand {
             require(entrants.size == 1) { "tune searches one bot's knobs, was ${entrants.size}.\n\n$USAGE" }
 
@@ -433,14 +512,19 @@ internal interface LabCommand {
                 "--max-pairs must leave room for the ${Sprt.MINIMUM_PAIRS} boards a verdict needs, was $maxPairs"
             }
 
+            val rows = flags.int("rows", LADDER_BOARD)
+            val cols = flags.int("cols", LADDER_BOARD)
+            val boardSeed = flags.long("seed", DEFAULT_SEED)
+
             return TuneCommand(
                 subject = subject.bot,
                 fixed = subject.fixed,
                 knobs = knobs,
-                rows = flags.int("rows", LADDER_BOARD),
-                cols = flags.int("cols", LADDER_BOARD),
-                seed = flags.long("seed", DEFAULT_SEED),
+                rows = rows,
+                cols = cols,
+                seed = boardSeed,
                 budgetPerTurn = flags.int("budget", MatchSetup.DEFAULT_BUDGET_PER_TURN),
+                walls = flags.walls(rows, cols, boardSeed),
                 openings = flags.openings("openings"),
                 threads = threads,
                 passes = passes,
@@ -502,6 +586,10 @@ internal interface LabCommand {
                 "--max-pairs must leave room for the ${Sprt.MINIMUM_PAIRS} boards a verdict needs, was $maxPairs"
             }
 
+            val rows = flags.int("rows", LADDER_BOARD)
+            val cols = flags.int("cols", LADDER_BOARD)
+            val boardSeed = flags.long("seed", DEFAULT_SEED)
+
             return SpsaCommand(
                 subject = subject.bot,
                 fixed = subject.fixed,
@@ -509,10 +597,11 @@ internal interface LabCommand {
                 ignored = entry.params
                     .filter { KnobSpace.span(it) == null && it.name !in subject.fixed.names }
                     .map { it.name },
-                rows = flags.int("rows", LADDER_BOARD),
-                cols = flags.int("cols", LADDER_BOARD),
-                seed = flags.long("seed", DEFAULT_SEED),
+                rows = rows,
+                cols = cols,
+                seed = boardSeed,
                 budgetPerTurn = flags.int("budget", MatchSetup.DEFAULT_BUDGET_PER_TURN),
+                walls = flags.walls(rows, cols, boardSeed),
                 openings = flags.openings("openings"),
                 threads = threads,
                 iterations = iterations,
@@ -594,6 +683,45 @@ internal interface LabCommand {
             )
         }
 
+        /**
+         * The one subcommand whose boards are not the caller's to choose.
+         *
+         * `--against` takes a full entrant spec so the reference can be retuned without a code
+         * change, and its allowance is filled in from [LadderCommand.REFERENCE_BUDGET] when the spec
+         * leaves it out — because a reference that took each level's own figure would grow with the
+         * ladder and the column would stop being about the ladder.
+         */
+        private fun ladderOf(entrants: List<String>, flags: Flags, registry: BotRegistry): LadderCommand {
+            require(entrants.isEmpty()) {
+                "ladder plays the levels rather than a field, so it takes no entrants: " +
+                    "'${entrants.first()}'. The reference is `--against`.\n\n$USAGE"
+            }
+
+            val rounds = flags.int("rounds", TournamentConfig.DEFAULT_ROUNDS)
+            require(rounds > 0) { "--rounds must be positive, was $rounds" }
+            require(rounds % 2 == 0) {
+                "--rounds must be even so each seed is played from both seats, was $rounds"
+            }
+
+            val threads = flags.int("threads", Arena.defaultThreads())
+            require(threads > 0) { "--threads must be positive, was $threads" }
+
+            val named = contestantOf(flags.text("against") ?: LadderCommand.DEFAULT_REFERENCE, registry)
+
+            return LadderCommand(
+                reference = Contestant(
+                    bot = named.bot,
+                    budgetPerTurn = named.budgetPerTurn ?: LadderCommand.REFERENCE_BUDGET,
+                    params = named.params,
+                ),
+                rounds = rounds,
+                seed = flags.long("seed", DEFAULT_SEED),
+                openings = flags.openings("openings"),
+                threads = threads,
+                logDirectory = flags.logDirectory("log"),
+            )
+        }
+
         private fun reportOf(entrants: List<String>, flags: Flags): ReportCommand {
             require(entrants.size == 1) {
                 "report diagnoses one entrant, was ${entrants.size}.\n\n$USAGE"
@@ -652,13 +780,18 @@ internal interface LabCommand {
             val threads = flags.int("threads", Arena.defaultThreads())
             require(threads > 0) { "--threads must be positive, was $threads" }
 
+            val rows = flags.int("rows", LADDER_BOARD)
+            val cols = flags.int("cols", LADDER_BOARD)
+            val seed = flags.long("seed", DEFAULT_SEED)
+
             return AbCommand(
                 baseline = baseline,
                 candidate = candidate,
-                rows = flags.int("rows", LADDER_BOARD),
-                cols = flags.int("cols", LADDER_BOARD),
-                seed = flags.long("seed", DEFAULT_SEED),
+                rows = rows,
+                cols = cols,
+                seed = seed,
                 budgetPerTurn = flags.int("budget", MatchSetup.DEFAULT_BUDGET_PER_TURN),
+                walls = flags.walls(rows, cols, seed),
                 openings = flags.openings("openings"),
                 threads = threads,
                 sprt = Sprt(
@@ -694,12 +827,17 @@ internal interface LabCommand {
             val passes = flags.int("passes", DEFAULT_PASSES)
             require(passes > 0) { "--passes must be positive, was $passes" }
 
+            val rows = flags.int("rows", LADDER_BOARD)
+            val cols = flags.int("cols", LADDER_BOARD)
+            val seed = flags.long("seed", DEFAULT_SEED)
+
             return TimeCommand(
                 subject = contestantOf(entrants.single(), registry),
-                rows = flags.int("rows", LADDER_BOARD),
-                cols = flags.int("cols", LADDER_BOARD),
-                seed = flags.long("seed", DEFAULT_SEED),
+                rows = rows,
+                cols = cols,
+                seed = seed,
                 budgetPerTurn = flags.int("budget", MatchSetup.DEFAULT_BUDGET_PER_TURN),
+                walls = flags.walls(rows, cols, seed),
                 passes = passes,
             )
         }

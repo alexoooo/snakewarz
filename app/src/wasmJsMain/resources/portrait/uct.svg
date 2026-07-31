@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="UCT">
+    <!-- One root splitting evenly to four leaves: a tree grown wherever the bound says to look. -->
+    <rect width="32" height="32" rx="6" fill="#16191d"/>
+    <rect x="14" y="22" width="5" height="6" fill="#4c9f74"/>
+    <rect x="8" y="18" width="17" height="4" fill="#4c9f74"/>
+    <rect x="8" y="13" width="4" height="5" fill="#5fbf8a"/>
+    <rect x="21" y="13" width="4" height="5" fill="#5fbf8a"/>
+    <rect x="4" y="9" width="12" height="4" fill="#5fbf8a"/>
+    <rect x="17" y="9" width="12" height="4" fill="#5fbf8a"/>
+    <rect x="4" y="4" width="4" height="5" fill="#7fe0a8"/>
+    <rect x="12" y="4" width="4" height="5" fill="#7fe0a8"/>
+    <rect x="17" y="4" width="4" height="5" fill="#7fe0a8"/>
+    <rect x="25" y="4" width="4" height="5" fill="#7fe0a8"/>
+</svg>

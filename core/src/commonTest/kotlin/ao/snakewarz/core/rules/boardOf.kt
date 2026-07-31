@@ -8,17 +8,19 @@ import ao.snakewarz.core.random.Rng
 import ao.snakewarz.core.snake.SnakeId
 import ao.snakewarz.core.snake.SnakeView
 
-/** Builds a board from `(row, col)` spawn pairs, which read far better in a test than cell indices. */
+/** Builds a board from `(row, col)` pairs, which read far better in a test than cell indices. */
 internal fun boardOf(
     rows: Int,
     cols: Int,
     vararg spawns: Pair<Int, Int>,
     rules: RulesConfig = RulesConfig(),
     turnOrder: IntArray = IntArray(spawns.size) { it },
+    walls: List<Pair<Int, Int>> = emptyList(),
 ): Board {
     val grid = Grid(rows, cols)
     val cells = IntArray(spawns.size) { grid.cellAt(spawns[it].first, spawns[it].second).index }
-    return Board(grid, cells, rules, turnOrder)
+    val wallCells = IntArray(walls.size) { grid.cellAt(walls[it].first, walls[it].second).index }
+    return Board(grid, cells, rules, turnOrder, wallCells)
 }
 
 /**

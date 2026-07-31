@@ -1,6 +1,7 @@
 package ao.snakewarz.core.rules
 
 import ao.snakewarz.core.grid.Direction
+import ao.snakewarz.core.grid.DirectionSet
 import ao.snakewarz.core.grid.Grid
 import ao.snakewarz.core.random.SplitMix64
 import ao.snakewarz.core.snake.SnakeId
@@ -91,8 +92,76 @@ class BoardStateTest {
     }
 
     @Test
-    fun `reset returns to the opening position`() {
-        val board = boardOf(7, 7, 0 to 0, 6 to 6, 0 to 6)
+    fun `a board refuses a map it cannot play`() {
+        val grid = Grid(5, 5)
+        val spawns = intArrayOf(grid.cellAt(0, 0).index, grid.cellAt(4, 4).index)
+
+        assertFailsWith<IllegalArgumentException>("a wall in the padded ring") {
+            Board(grid, spawns, wallCells = intArrayOf(0))
+        }
+        assertFailsWith<IllegalArgumentException>("a wall off the array altogether") {
+            Board(grid, spawns, wallCells = intArrayOf(grid.cellCount))
+        }
+        assertFailsWith<IllegalArgumentException>("the same square walled twice") {
+            Board(grid, spawns, wallCells = intArrayOf(grid.cellAt(2, 2).index, grid.cellAt(2, 2).index))
+        }
+        assertFailsWith<IllegalArgumentException>("a spawn standing on a wall") {
+            Board(grid, spawns, wallCells = intArrayOf(grid.cellAt(0, 0).index))
+        }
+    }
+
+    @Test
+    fun `a copy plays the same map, and one played on another map cannot be copied in`() {
+        val source = boardOf(6, 6, 0 to 0, 5 to 5, walls = listOf(2 to 2, 3 to 3))
+        val rng = SplitMix64(4242L)
+        repeat(10) { if (source.outcome == null) source.apply(source.toAct, chosenMove(source, rng)) }
+
+        val copy = source.copy()
+
+        assertEquals(source.signature(), copy.signature())
+        assertTrue(copy.isWall(copy.grid.cellAt(2, 2)), "the map travels with the copy")
+        assertEquals(source.openCount, copy.openCount)
+
+        assertFailsWith<IllegalArgumentException>("no map at all") {
+            boardOf(6, 6, 0 to 0, 5 to 5).copyFrom(source)
+        }
+        assertFailsWith<IllegalArgumentException>("a different map") {
+            boardOf(6, 6, 0 to 0, 5 to 5, walls = listOf(2 to 2)).copyFrom(source)
+        }
+    }
+
+    @Test
+    fun `open squares are the playable ones the map did not take`() {
+        val board = boardOf(6, 6, 0 to 0, 5 to 5, walls = listOf(2 to 2, 3 to 3, 2 to 3))
+
+        assertEquals(36, board.grid.playableCount, "geometry does not know about maps")
+        assertEquals(33, board.openCount)
+    }
+
+    @Test
+    fun `a snake walled in on every side is trapped rather than an error`() {
+        // Whether a map seals a spawn into a pocket is a fairness question for whoever drew the map.
+        // The engine only has to keep playing, and record the death it already has a reason for.
+        val board = boardOf(5, 5, 2 to 2, 0 to 0, walls = listOf(1 to 2, 3 to 2, 2 to 1, 2 to 3))
+
+        assertEquals(DirectionSet.EMPTY, board.legalMoves(SnakeId(0)))
+        assertEquals(MoveOutcome.TRAPPED, board.apply(SnakeId(0), Direction.NORTH))
+        assertEquals(EliminationReason.TRAPPED, board.snake(SnakeId(0)).eliminationReason)
+    }
+
+    @Test
+    fun `a snapshot renders a wall of the map as a hash`() {
+        val board = boardOf(3, 3, 0 to 0, 2 to 2, walls = listOf(1 to 1))
+
+        val rendered = board.snapshot().toString().lines()
+        assertEquals("A..", rendered[1])
+        assertEquals(".#.", rendered[2])
+        assertEquals("..B", rendered[3])
+    }
+
+    @Test
+    fun `reset returns to the opening position, map included`() {
+        val board = boardOf(7, 7, 0 to 0, 6 to 6, 0 to 6, walls = listOf(3 to 3, 3 to 4))
         val opening = board.signature()
         val rng = SplitMix64(909L)
         repeat(20) { if (board.outcome == null) board.apply(board.toAct, chosenMove(board, rng)) }
@@ -101,6 +170,7 @@ class BoardStateTest {
 
         assertEquals(opening, board.signature())
         assertEquals(0, board.undoDepth)
+        assertTrue(board.isWall(board.grid.cellAt(3, 3)), "clearing the snakes must not clear the map")
     }
 
     @Test

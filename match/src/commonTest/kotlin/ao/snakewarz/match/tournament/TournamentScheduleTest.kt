@@ -1,6 +1,8 @@
 package ao.snakewarz.match.tournament
 
 import ao.snakewarz.botapi.registry.BotId
+import ao.snakewarz.match.map.MapShape
+import ao.snakewarz.match.map.generateMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -65,6 +67,33 @@ class TournamentScheduleTest {
     }
 
     @Test
+    fun `the map reaches every seating of every pairing`() {
+        // The field a rebuild forgets. `setupFor` names the config's fields one at a time, so a map
+        // left off is a whole batch played on a bare rectangle while the log says otherwise -- and
+        // nothing else in the setup would look wrong.
+        val walls = generateMap(rows = 9, cols = 9, shape = MapShape.CROSS).walls()
+        val schedule = TournamentSchedule(configOf(listOf("cycle", "last", "north"), rounds = 4, walls = walls))
+
+        for (index in 0 until schedule.matchCount) {
+            val setup = schedule.setupFor(index)
+            assertEquals(walls.toList(), setup.walls().toList(), "match $index")
+            for (spawn in setup.spawns()) {
+                assertTrue(spawn !in walls, "match $index seats a snake at $spawn, which is a wall")
+            }
+        }
+    }
+
+    @Test
+    fun `a config refuses a map it could never seat a match on`() {
+        assertFailsWith<IllegalArgumentException> {
+            configOf(listOf("cycle", "last"), rounds = 2, walls = intArrayOf(9 * 9))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            configOf(listOf("cycle", "last"), rounds = 2, walls = intArrayOf(4, 4))
+        }
+    }
+
+    @Test
     fun `a schedule refuses a match it does not contain`() {
         val schedule = scheduleOf(listOf("cycle", "last"), rounds = 2)
 
@@ -83,6 +112,7 @@ class TournamentScheduleTest {
         contestants: List<String>,
         rounds: Int,
         format: TournamentFormat = TournamentFormat.HEAD_TO_HEAD,
+        walls: IntArray = IntArray(0),
     ): TournamentConfig = TournamentConfig(
         contestants = contestants.map { Contestant(BotId(it)) },
         rows = 9,
@@ -90,5 +120,6 @@ class TournamentScheduleTest {
         rounds = rounds,
         budgetPerTurn = 0,
         format = format,
+        walls = walls,
     )
 }

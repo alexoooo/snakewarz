@@ -1,5 +1,6 @@
 package ao.snakewarz.core.rules
 
+import ao.snakewarz.core.grid.Cell
 import ao.snakewarz.core.grid.Grid
 import ao.snakewarz.core.snake.SnakeId
 import ao.snakewarz.core.snake.SnakeState
@@ -20,6 +21,14 @@ public class MatchState internal constructor(
     public val toAct: SnakeId,
     public val outcome: MatchOutcome?,
     private val snakes: Array<SnakeState>,
+    /**
+     * The map's impassable squares, as padded cell indices.
+     *
+     * `Board`'s own array, shared rather than copied: it is never mutated after construction, so
+     * [Board.snapshot] stays O(total snake length). Private because its only consumer is [toString]
+     * — a renderer reads walls off `BoardView` instead.
+     */
+    private val walls: IntArray,
 ) {
     public val snakeCount: Int get() = snakes.size
 
@@ -28,11 +37,15 @@ public class MatchState internal constructor(
     public fun snake(id: SnakeId): SnakeState = snakes[id.index]
 
     /**
-     * An ASCII rendering of the board: `.` is empty, a snake's body is its slot digit, and its head
-     * is the corresponding letter. Purely a debugging aid — nothing renders through this.
+     * An ASCII rendering of the board: `.` is empty, `#` is a wall, a snake's body is its slot digit,
+     * and its head is the corresponding letter. Purely a debugging aid — nothing renders through this.
      */
     override fun toString(): String {
         val picture = CharArray(grid.rows * grid.cols) { '.' }
+        for (wall in walls) {
+            val cell = Cell(wall)
+            picture[grid.rowOf(cell) * grid.cols + grid.colOf(cell)] = '#'
+        }
         for (snake in snakes) {
             for (i in 0 until snake.length) {
                 val cell = snake.cellAt(i)

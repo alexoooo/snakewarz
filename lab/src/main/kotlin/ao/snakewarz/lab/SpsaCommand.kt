@@ -83,6 +83,8 @@ internal class SpsaCommand(
     val cols: Int,
     val seed: Long,
     val budgetPerTurn: Int,
+    /** The map the whole search runs on, including its confirming run. */
+    val walls: IntArray,
     val openings: Openings,
     val threads: Int,
     val iterations: Int,
@@ -119,8 +121,9 @@ internal class SpsaCommand(
 
         log("[lab] spsa ${entrant(fixed)} over ${knobs.joinToString { it.name }}")
         log(
-            "[lab] ${rows}x$cols at $budgetPerTurn evaluations, $openings openings, " +
-                "$iterations iterations of $boardsPerIteration boards, journal $journalFile",
+            "[lab] ${rows}x$cols with ${walls.size} walls at $budgetPerTurn evaluations, " +
+                "$openings openings, $iterations iterations of $boardsPerIteration boards, " +
+                "journal $journalFile",
         )
         log("[lab] $schedule, in each knob's own declared steps")
         if (ignored.isNotEmpty()) {
@@ -253,6 +256,7 @@ internal class SpsaCommand(
                 rounds = boardsPerIteration * MATCHES_PER_BOARD,
                 seed = boardSeed,
                 budgetPerTurn = budgetPerTurn,
+                walls = walls,
             ),
             registry = registry,
             openings = openings,
@@ -307,6 +311,7 @@ internal class SpsaCommand(
             cols = cols,
             seed = seed + TuneCommand.CONFIRM_SEED_OFFSET,
             budgetPerTurn = budgetPerTurn,
+            walls = walls,
             openings = openings,
             threads = threads,
             sprt = confirm,

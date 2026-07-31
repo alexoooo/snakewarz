@@ -3,11 +3,12 @@ package ao.snakewarz.ui.render
 import kotlinx.browser.window
 
 /**
- * Whether the reader has asked their system for a dark interface.
+ * Whether the reader has asked their system for a dark interface — the system's half of a [Theme].
  *
- * Read once at construction by both `BoardRenderer` and `GameSession` rather than watched, because
- * the two must agree: the canvas and the chrome pick their colours independently and a theme that
- * changed between the two calls would leave the board lit for one scheme and the panel for the
- * other. Switching themes mid-match is a reload, which is the honest cost of not having a listener.
+ * Asked by `GameSession` and by nobody else, which is what keeps the canvas and the page in step:
+ * there is one `Theme` instance per frame and both are painted from it, so a scheme that flipped
+ * between two readings cannot leave the board lit one way and the panel the other. The `matchMedia`
+ * listener `GameSession.start` registers is what makes the sun going down recolour the theme the
+ * player chose rather than needing a reload.
  */
 internal fun prefersDark(): Boolean = window.matchMedia("(prefers-color-scheme: dark)").matches

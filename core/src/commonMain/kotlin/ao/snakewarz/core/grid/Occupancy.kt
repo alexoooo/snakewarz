@@ -18,7 +18,9 @@ import ao.snakewarz.core.snake.SnakeId
  * flood-fill bot.
  *
  * The border ring of the padded grid is permanently marked as wall, so walking off the board and
- * walking into a snake are the same array read and neither needs a bounds check.
+ * walking into a snake are the same array read and neither needs a bounds check. An interior wall of
+ * a map is stamped with the same byte by [wall], so it costs the legality check no branch at all and
+ * rides into every search arena for free through [copyFrom].
  *
  * ### Zobrist hashing
  *
@@ -31,6 +33,10 @@ import ao.snakewarz.core.snake.SnakeId
  *
  * The invariant that guards this whole optimization — *incremental occupancy always equals occupancy
  * rebuilt from all bodies, cell for cell and hash for hash* — is property-tested.
+ *
+ * Walls are outside that fingerprint, the map's as much as the ring's, so [hash] stays a pure
+ * function of the occupied squares. A map is fingerprinted one level up, by `Board`, which means a
+ * key derived from `BoardView.hash` still tells two maps apart.
  */
 public class Occupancy(public val grid: Grid) {
     private val owner = ByteArray(grid.cellCount)
@@ -63,6 +69,19 @@ public class Occupancy(public val grid: Grid) {
     public fun ownerOf(cell: Cell): SnakeId {
         val code = owner[cell.index].toInt()
         return if (code > 0) SnakeId(code - 1) else SnakeId.NONE
+    }
+
+    /**
+     * Marks [cell] permanently impassable, the way the border ring is.
+     *
+     * Stamped once, before any snake is placed, and never taken back — which is why it is outside
+     * [hash] exactly as the ring is, and why [clear] leaves it alone.
+     */
+    public fun wall(cell: Cell) {
+        require(owner[cell.index] == EMPTY) {
+            "$cell is already ${owner[cell.index]}, so it cannot become wall"
+        }
+        owner[cell.index] = WALL
     }
 
     public fun occupy(cell: Cell, by: SnakeId) {
@@ -104,11 +123,19 @@ public class Occupancy(public val grid: Grid) {
         hash = other.hash
     }
 
-    /** Clears every snake, leaving the wall ring in place. */
+    /**
+     * Clears every snake, leaving every wall — the padded ring and the map alike — in place.
+     *
+     * Keeping the map here rather than re-stamping it in `Board.reset()` makes it a property of the
+     * type that owns the bytes: any path that clears is a path that keeps the map, so there is no
+     * ordering to get wrong and no way to silently play a different game.
+     */
     public fun clear() {
         for (row in 1..grid.rows) {
             val rowStart = row * grid.stride
-            owner.fill(EMPTY, rowStart + 1, rowStart + grid.cols + 1)
+            for (index in rowStart + 1..rowStart + grid.cols) {
+                if (owner[index] != WALL) owner[index] = EMPTY
+            }
         }
         hash = 0L
     }

@@ -13,6 +13,49 @@ correction is [below](#ground-truth) with a pointer to the line it corrects.
 How a phase is run, what an agent is told, and the order the instruments go in are all in
 [`../Research-Process.md`](../Research-Process.md). This document is the *what*.
 
+> ## Read first: parts of this were built rather than researched
+>
+> **This agenda is not edited and is not the current state of the tree.** It records what was believed
+> on 2026-07-30. Some of it has since been *delivered as engineering* by
+> [`../plans/README.md`](../plans/README.md) — Release 2, eighteen sessions — which is a different
+> route to the same ground and leaves parts of the text below describing work that is done.
+>
+> | here | delivered by |
+> |---|---|
+> | **P3** — the header change and obstacles | whole. `MatchSetup.walls`, `ReplayCodec` v3 with a raw wall bitmap under flags bit 1, `Occupancy.wall`, and the differential test P3 asks for — `WallNeutralityTest` in `:core` and `:match`, with `SHIPPED_PAYLOAD` untouched |
+> | **P4** — fair maps | the *generator* half. `match/map/` ships eight ρ-symmetric shapes with connectivity asserted at generation; [`../Maps.md`](../Maps.md) is the catalogue. Fairness came out as **construction**, not as the measurement question this agenda framed it as |
+> | **P4** — does the ladder survive a map | answered, and the answer was **no**. See below |
+> | **P7** — `learned` needs a refit | diagnosed, not done. The features were moved onto `BoardView.openCount` so a map leaves every reading in range; the refit and its instrument are still open, and `LearnedEval`'s KDoc states the three clauses precisely |
+> | **P7** — separation, parity | untouched |
+> | P1, P2, P5, P6, P8 | untouched |
+>
+> **Three of the ground truths below were corrected in the doing.** Each is a case of a written
+> description being read instead of the code:
+>
+> - **Ground truth 6 overstates the damage.** It lists `TerritoryEval` among the sites reading a share
+>   against `playableCount`. It does not — it normalises by `totalOwned`, the ground the sweep actually
+>   handed out, which a map shrinks correctly. **It needed no change at all.**
+> - **`TempoOwnership` was a KDoc sentence, not a computation.** The same list names it as a second
+>   site. What it had was a *comment* saying its walkable count is read against `Grid.playableCount`;
+>   the reading is the caller's, and the fix was one sentence.
+> - **Graph-distance spawn placement would have broken every existing three-seat replay.** P3 says
+>   `mostDistantSpawns` "has to pick *reachable* squares that are far apart in the graph rather than in
+>   the plane". The first half was done; the second was not, and deliberately. Graph distance on a
+>   wall-free rectangle is **Manhattan**, where the shipped metric is Euclidean — a different argmin,
+>   so switching would have moved seat 3 and beyond *on an empty board*, invalidating every three-seat
+>   replay header and every empty-board measurement already taken. The metric stayed Euclidean and only
+>   a reachability **filter** was added. `mostDistantSpawns`' KDoc carries the escalation and the
+>   condition it becomes available under.
+>
+> **And one thing this agenda predicted, correctly and larger than it guessed.** P4 asks whether the
+> ladder survives a map and says an inversion should be recorded rather than treated as a defect. It
+> does not survive: on `cross` the top pair inverts and the field compresses from 979 Elo to 479, and
+> on `double-spiral` at 16x16 a quarter of an allowance beats the full one 77–23 where it loses 23–77
+> on a bare board. **A map changes which bot is stronger, not merely by how much.** That result is
+> live rather than historical, so it lives in
+> [`../Workflow.md`](../Workflow.md#a-map-is-a-different-game-not-a-harder-one) where somebody hits it
+> before running a batch — not here.
+
 ## Status
 
 | Phase | Workstream | State |

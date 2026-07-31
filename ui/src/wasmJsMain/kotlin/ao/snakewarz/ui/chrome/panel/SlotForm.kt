@@ -1,4 +1,4 @@
-package ao.snakewarz.ui.chrome
+package ao.snakewarz.ui.chrome.panel
 
 import ao.snakewarz.botapi.knob.BotKnob
 import ao.snakewarz.botapi.knob.BotParams
@@ -6,6 +6,8 @@ import ao.snakewarz.botapi.registry.BotEntry
 import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.botapi.registry.BotRegistry
 import ao.snakewarz.match.MatchSetup
+import ao.snakewarz.ui.chrome.child
+import ao.snakewarz.ui.chrome.elementById
 import ao.snakewarz.ui.model.SlotOptions
 import ao.snakewarz.ui.model.UiIntent
 import kotlinx.browser.document
@@ -94,7 +96,8 @@ internal class SlotForm(
      * seat does not show still has a value — a replay carried one in through [apply], or somebody
      * measured one in `:lab` and pasted the link — and it is sitting in [remembered] where [apply]
      * put it. Reading only the rows would drop it and rematch at the default, which is exactly the
-     * promise [Chrome.applySetup] makes about replaying under the conditions the match was played at.
+     * promise [SetupPanel.applySetup] makes about replaying under the conditions the match was
+     * played at.
      */
     fun read(): SlotOptions? {
         val slug = select.value
@@ -331,8 +334,5 @@ internal class SlotForm(
                 removeChild(firstChild!!)
             }
         }
-
-        fun HTMLElement.child(selector: String): HTMLElement =
-            querySelector(selector) as? HTMLElement ?: error("a settings panel is missing $selector")
     }
 }

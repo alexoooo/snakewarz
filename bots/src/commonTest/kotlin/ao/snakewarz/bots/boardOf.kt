@@ -27,9 +27,36 @@ internal fun boardOf(
     cols: Int,
     vararg spawns: Pair<Int, Int>,
     rules: RulesConfig = RulesConfig(),
+    walls: List<Pair<Int, Int>> = emptyList(),
 ): Board {
     val grid = Grid(rows, cols)
-    return Board(grid, IntArray(spawns.size) { grid.cellAt(spawns[it].first, spawns[it].second).index }, rules)
+    return Board(
+        grid,
+        IntArray(spawns.size) { grid.cellAt(spawns[it].first, spawns[it].second).index },
+        rules,
+        wallCells = IntArray(walls.size) { grid.cellAt(walls[it].first, walls[it].second).index },
+    )
+}
+
+/**
+ * A map drawn the way the region fixtures draw a region: `#` a wall, anything else open.
+ *
+ * The picture is the map rather than a board built on one, so the spawns stay where the caller wants
+ * them and a fixture reads as the shape it is.
+ */
+internal fun wallsOf(grid: Grid, picture: List<String>): IntArray {
+    require(picture.size == grid.rows) { "the picture is ${picture.size} rows, not ${grid.rows}" }
+
+    val cells = mutableListOf<Int>()
+    for (row in picture.indices) {
+        require(picture[row].length == grid.cols) { "row $row is ${picture[row].length} squares, not ${grid.cols}" }
+        for (col in 0 until grid.cols) {
+            if (picture[row][col] == '#') {
+                cells += grid.cellAt(row, col).index
+            }
+        }
+    }
+    return cells.toIntArray()
 }
 
 /** The `Turn` the driver would hand [self] on [board], with the allowance a search bot would get. */

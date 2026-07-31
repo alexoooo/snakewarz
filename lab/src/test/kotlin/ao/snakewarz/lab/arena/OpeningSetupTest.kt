@@ -2,6 +2,9 @@ package ao.snakewarz.lab.arena
 
 import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.match.MatchSetup
+import ao.snakewarz.match.map.MapShape
+import ao.snakewarz.match.map.generateMap
+import ao.snakewarz.match.openRegionFrom
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -62,7 +65,9 @@ class OpeningSetupTest {
 
     @Test
     fun `everything but the squares travels through untouched`() {
-        val setup = setupOf(seed = 5)
+        // This function rebuilds the header field by field, so a field it forgets is a batch that
+        // plays a different match from the one the log records. Nothing else would notice.
+        val setup = setupOf(seed = 5, walls = CROSS)
         val opened = openingSetup(setup, Openings.MIRRORED)
 
         assertEquals(setup.seed, opened.seed)
@@ -70,6 +75,41 @@ class OpeningSetupTest {
         assertEquals(setup.turnOrder().toList(), opened.turnOrder().toList())
         assertEquals(setup.budgets().toList(), opened.budgets().toList())
         assertEquals(setup.rules, opened.rules)
+        assertEquals(setup.walls().toList(), opened.walls().toList())
+    }
+
+    @Test
+    fun `a map survives the opening rather than being dropped on the way through`() {
+        for (shape in MapShape.entries) {
+            if (ROWS < shape.minimumSide || COLS < shape.minimumSide) {
+                continue
+            }
+            val walls = generateMap(ROWS, COLS, shape).walls()
+
+            for (seed in 1L..20L) {
+                val opened = openingSetup(setupOf(seed, walls = walls), Openings.MIRRORED)
+                assertEquals(walls.toList(), opened.walls().toList(), "${shape.slug} at seed $seed")
+            }
+        }
+    }
+
+    @Test
+    fun `a drawn opening never seats a snake on a wall or out of reach of the other`() {
+        // The two ways a drawn square can be unplayable, and they fail differently: a wall is
+        // refused by MatchSetup and ends the batch, while a sealed pocket is accepted and plays a
+        // match nobody could win.
+        val walls = generateMap(ROWS, COLS, MapShape.ROOMS).walls()
+
+        for (seed in 1L..60L) {
+            val opened = openingSetup(setupOf(seed, walls = walls), Openings.MIRRORED)
+            val spawns = opened.spawns()
+
+            val reached = openRegionFrom(ROWS, COLS, walls, spawns[0])
+            for (spawn in spawns) {
+                assertTrue(spawn !in walls, "seed $seed opened on a wall at $spawn")
+                assertTrue(reached[spawn], "seed $seed opened at $spawn, sealed off from the other snake")
+            }
+        }
     }
 
     @Test
@@ -91,12 +131,24 @@ class OpeningSetupTest {
         }
     }
 
-    private fun setupOf(seed: Long, slots: List<String> = SLOTS): MatchSetup =
-        MatchSetup.create(rows = ROWS, cols = COLS, slots = slots.map { BotId(it) }, seed = seed, budgetPerTurn = 0)
+    private fun setupOf(
+        seed: Long,
+        slots: List<String> = SLOTS,
+        walls: IntArray = IntArray(0),
+    ): MatchSetup = MatchSetup.create(
+        rows = ROWS,
+        cols = COLS,
+        slots = slots.map { BotId(it) },
+        seed = seed,
+        budgetPerTurn = 0,
+        walls = walls,
+    )
 
     private companion object {
         const val ROWS = 12
         const val COLS = 12
         val SLOTS = listOf("space", "wallhug")
+
+        val CROSS: IntArray = generateMap(ROWS, COLS, MapShape.CROSS).walls()
     }
 }

@@ -25,14 +25,14 @@ public class MatchStats internal constructor(
     public val outcome: MatchOutcome?,
     public val slots: List<SlotStats>,
 ) {
-    /** Squares a snake could ever stand on. The wall ring the engine pads with is not one of them. */
-    public val playableCells: Int = setup.rows * setup.cols
+    /** Squares a snake could ever stand on: the board, less the wall ring and less the map. */
+    public val openCells: Int = setup.rows * setup.cols - setup.wallCount
 
     /** Squares under a body, the dead included — a corpse is an obstacle and still holds ground. */
     public val occupiedCells: Int = slots.sumOf { it.length }
 
     /** How much of the board is no longer anybody's to move into, in `0.0..1.0`. */
-    public val fillRate: Double = occupiedCells.toDouble() / playableCells
+    public val fillRate: Double = occupiedCells.toDouble() / openCells
 
     /**
      * How many moves the busiest snake has made.

@@ -16,7 +16,7 @@ class MatchSetupTest {
     fun `two snakes start in opposite corners, as they always have`() {
         // The legacy special case, and the reason the old README said "you always start in the
         // bottom right".
-        val spawns = mostDistantSpawns(Grid(20, 20), 2)
+        val spawns = mostDistantSpawns(Grid(20, 20), IntArray(0), 2)
 
         assertEquals(listOf(0, 399), spawns.toList())
     }
@@ -24,7 +24,7 @@ class MatchSetupTest {
     @Test
     fun `further snakes are placed away from everyone already down`() {
         val grid = Grid(9, 9)
-        val spawns = mostDistantSpawns(grid, 4)
+        val spawns = mostDistantSpawns(grid, IntArray(0), 4)
 
         assertEquals(spawns.size, spawns.toSet().size, "no two snakes share a square")
         for (spawn in spawns) {
@@ -40,14 +40,14 @@ class MatchSetupTest {
     @Test
     fun `placement is deterministic, and stated to be`() {
         assertEquals(
-            mostDistantSpawns(Grid(13, 17), 4).toList(),
-            mostDistantSpawns(Grid(13, 17), 4).toList(),
+            mostDistantSpawns(Grid(13, 17), IntArray(0), 4).toList(),
+            mostDistantSpawns(Grid(13, 17), IntArray(0), 4).toList(),
         )
     }
 
     @Test
     fun `a board too small for the field is refused`() {
-        assertFailsWith<IllegalArgumentException> { mostDistantSpawns(Grid(1, 2), 3) }
+        assertFailsWith<IllegalArgumentException> { mostDistantSpawns(Grid(1, 2), IntArray(0), 3) }
     }
 
     @Test
@@ -150,7 +150,7 @@ class MatchSetupTest {
     }
 
     @Test
-    fun `setups differing only in one slot's configuration are not equal`() {
+    fun `setups differing only in one slot's configuration, or in the map, are not equal`() {
         // MatchSetup.equals enumerates every field by hand, so a new one that nobody added there
         // would make two different matches compare the same and quietly break every round trip.
         val slots = List(2) { BotId("bot$it") }
@@ -164,11 +164,46 @@ class MatchSetupTest {
             budgetPerTurn = 1_000,
             slotParams = listOf(BotParams.EMPTY, BotParams(mapOf("exploration" to "1.5"))),
         )
+        val mapped = MatchSetup.create(10, 10, slots, seed = 7, budgetPerTurn = 1_000, walls = intArrayOf(44, 45))
+        val elsewhere = MatchSetup.create(10, 10, slots, seed = 7, budgetPerTurn = 1_000, walls = intArrayOf(54, 55))
 
         assertNotEquals(plain, budgeted)
         assertNotEquals(plain, tuned)
         assertNotEquals(budgeted, tuned)
+        assertNotEquals(plain, mapped)
+        assertNotEquals(mapped, elsewhere)
+        assertNotEquals(mapped.hashCode(), elsewhere.hashCode())
         assertTrue(tuned.configured)
+        assertTrue(mapped.mapped)
+        assertFalse(plain.mapped)
+    }
+
+    @Test
+    fun `a map is recorded rather than derived, and comes back as it went in`() {
+        val setup = MatchSetup.create(6, 6, List(2) { BotId("bot$it") }, seed = 3, walls = intArrayOf(14, 15, 20, 21))
+
+        assertEquals(listOf(14, 15, 20, 21), setup.walls().toList())
+        assertEquals(4, setup.wallCount)
+        assertEquals(
+            listOf(2 to 2, 2 to 3, 3 to 2, 3 to 3).map { setup.grid().cellAt(it.first, it.second).index },
+            setup.wallCells(setup.grid()).toList(),
+        )
+    }
+
+    @Test
+    fun `a map that is not a canonical ascending set is refused`() {
+        // Ascending and repeat-free is what makes `equals` compare maps rather than orderings, so a
+        // payload that spells the same map two ways has to be refused rather than accepted twice.
+        assertFailsWith<IllegalArgumentException>("walls out of order") { setupWalled(intArrayOf(7, 6)) }
+        assertFailsWith<IllegalArgumentException>("a repeated wall") { setupWalled(intArrayOf(6, 6)) }
+        assertFailsWith<IllegalArgumentException>("a wall off the board") { setupWalled(intArrayOf(6, 25)) }
+        assertFailsWith<IllegalArgumentException>("a negative wall") { setupWalled(intArrayOf(-1)) }
+    }
+
+    @Test
+    fun `a spawn standing on a wall is refused at construction`() {
+        // Slot 1 starts on 24, the far corner of a 5x5, so a wall there is the collision.
+        assertFailsWith<IllegalArgumentException> { setupWalled(intArrayOf(24)) }
     }
 
     @Test
@@ -255,4 +290,18 @@ class MatchSetupTest {
             setup.spawnCells(setup.grid()).toList(),
         )
     }
+
+    /** A 5x5 two-slot setup, spawned in opposite corners, whose map is the thing under test. */
+    private fun setupWalled(walls: IntArray): MatchSetup =
+        MatchSetup(
+            seed = 1,
+            rows = 5,
+            cols = 5,
+            rules = RulesConfig(),
+            budgetPerTurn = 0,
+            slots = List(2) { BotId("bot$it") },
+            turnOrder = intArrayOf(0, 1),
+            spawns = intArrayOf(0, 24),
+            walls = walls,
+        )
 }

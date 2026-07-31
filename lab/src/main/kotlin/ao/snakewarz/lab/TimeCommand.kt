@@ -24,11 +24,15 @@ internal class TimeCommand(
     val cols: Int,
     val seed: Long,
     val budgetPerTurn: Int,
+    val walls: IntArray,
     val passes: Int,
 ) : LabCommand {
     override fun run(registry: BotRegistry, log: (String) -> Unit) {
         val allowance = subject.budgetIn(budgetPerTurn)
-        log("[lab] $subject on ${rows}x$cols at an allowance of $allowance, best of $passes")
+        log(
+            "[lab] $subject on ${rows}x$cols with ${walls.size} walls at an allowance of " +
+                "$allowance, best of $passes",
+        )
 
         val setup = MatchSetup.create(
             rows = rows,
@@ -36,6 +40,7 @@ internal class TimeCommand(
             slots = listOf(subject.bot, SPARRING_PARTNER),
             seed = seed,
             budgetPerTurn = budgetPerTurn,
+            walls = walls,
             budgets = intArrayOf(allowance, 0),
             slotParams = listOf(subject.params, BotParams.EMPTY),
         )
@@ -61,7 +66,8 @@ internal class TimeCommand(
         log("[lab] ${subject.label}: ${best.inWholeMicroseconds / turns} us/turn over $turns turns")
     }
 
-    override fun toString(): String = "Time($subject, ${rows}x$cols, budget=$budgetPerTurn, passes=$passes)"
+    override fun toString(): String =
+        "Time($subject, ${rows}x$cols, ${walls.size} walls, budget=$budgetPerTurn, passes=$passes)"
 
     private companion object {
         /** Strongest of the bots that spend nothing, so it plays a real game and costs no clock. */

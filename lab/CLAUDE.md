@@ -19,8 +19,13 @@ coordinate descent up to about three knobs, SPSA past that — and `train` repla
 into positions and fits `eval=learned`'s weights to them, reading each one through `:bots`' own
 `PositionFeatures` so that the trainer and the bot cannot drift apart.
 
-Six things here are load-bearing and easy to undo by accident:
+Seven things here are load-bearing and easy to undo by accident:
 
+- **`RunHeader.comparabilityKey` carries the map, derived from the walls and never from a shape
+  name.** A batch on a walled board differs from one on a bare board in nothing else the header
+  records, so without it the two pool and every rating fitted over the pair describes neither. Two
+  places rebuild a `MatchSetup` field by field — `openingSetup` and `TournamentSchedule.setupFor` —
+  and a field either of them forgets is a batch that plays a different game from the one it logs.
 - **Openings default to `mirrored`.** Spawns do not depend on the seed, so under `fixed` a pairing of
   bots that draw no randomness plays four distinct games however many rounds are asked for. Every
   batch prints how many of its matches were distinct games; that line is the honest sample size.

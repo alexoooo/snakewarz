@@ -2,7 +2,7 @@
 
 **For:** touching `match/` — human input, the turn driver, stats, replays, tournaments.
 **Assumes:** [`../CLAUDE.md`](../CLAUDE.md) — the module graph, the forbidden dependency edges and
-the four non-obvious facts live there and are **not repeated here**.
+the five non-obvious facts live there and are **not repeated here**.
 **Enforced elsewhere:** `checkModulePurity` fails the build on `:match → :bots`; the driver resolves
 bots through the `BotRegistry` *interface* and `:app` injects the implementation.
 
@@ -22,15 +22,19 @@ will not survive `MatchRecord.verify`, because re-running a person is not a thin
 Every interactive slot reads the same `InputBuffer`, because there is one keyboard. A match takes at
 most one human, and `:ui` offers the seat for slot 1 only.
 
-**A match with a person in it is turn-based.** `StallPolicy.WAIT_FOR_INPUT` is the default of both
-`InteractiveBot` and `PlayableRegistry`, so a human slot answers `Pending` on every turn it has no
-key for, and `:ui` does not start `TurnScheduler` at all while `Match.interactive` — one keypress
-plays exactly the round it belongs to, and the transport is disabled because there is no clock to
-drive. When the player is eliminated `interactive` goes false, the scheduler takes over and the
-survivors finish the match on the clock. `Match.interactive` is deliberately not
-`bots.any { it.interactive }`: `ScriptedBot` claims to be interactive so that a partial recording
-parks rather than forfeits, so playback is excluded by the recording `Match.playback` hands the
-driver.
+**A match with a person in it is turn-based, and runs a clock only while they are holding one.**
+`StallPolicy.WAIT_FOR_INPUT` is the default of both `InteractiveBot` and `PlayableRegistry`, so a
+human slot answers `Pending` on every turn it has no input for. On the keyboard that is the whole
+story: `:ui` does not start `TurnScheduler`, one keypress plays exactly the round it belongs to, and
+the transport is disabled because there is nothing running to stop. A **drawn route** is the
+exception, and it is a `:ui` decision rather than a change here — a held drag fills the queue and
+starts the scheduler, so the snake walks the route at the speed on the slider, and letting go empties
+the queue and stops the clock. Nothing in this module knows the difference: the queue is full or it is
+not, and `AwaitingInput` is what an empty one produces either way. When the player is eliminated
+`interactive` goes false, the scheduler takes over and the survivors finish the match on the clock.
+`Match.interactive` is deliberately not `bots.any { it.interactive }`: `ScriptedBot` claims to be
+interactive so that a partial recording parks rather than forfeits, so playback is excluded by the
+recording `Match.playback` hands the driver.
 
 **A parked replay is parked for good, and stepping it again throws.** That park is the only place a
 waiting person and an exhausted script look alike, and they are not alike at all: no key exists
@@ -54,6 +58,68 @@ engine records `TRAPPED` whichever is played — so this is a move in the sense 
 make one, not a choice, and it is not the `MoveTracker` bug (which invented a *survivable* move
 nobody chose).
 
+### A drawn route is a plan, not a promise
+
+`PathPlanner` routes breadth-first from wherever the path currently ends to the square the pointer is
+on, over squares that are free **now** and are not already on the path. That is the whole contract,
+and each half of it is load-bearing:
+
+- **Breadth-first rather than "append the square if it is adjacent".** A finger jumps several squares
+  between pointer events and so does a fast mouse, so demanding adjacency would make a route stutter
+  and make touch nearly unusable. Routing also means the planner goes *round* a body and round a wall,
+  which is a shape the straight line between two squares cannot be assumed to have.
+- **Free now, and nothing predicts the board it will meet.** Tails retract and opponents move, so a
+  route that was clear when it was drawn can kill you by the time it is walked. That is the game.
+  `InputBuffer.take` is the other half of the bargain: a queued direction that has become illegal is
+  *discarded* rather than played, so a square somebody else took costs the rest of the route and not
+  the player's life.
+- **`extend` returning `false` is an ordinary answer, not a fault.** Off the board, onto a wall or a
+  body, into a pocket the path has sealed behind itself, or longer than the queue can hold all read
+  the same way: the path is left exactly as it was and the player keeps dragging.
+- **The path is anchored on the head and consumed as the snake walks it.** `advance()` drops the
+  square just left; `:ui` calls it on every move the player's slot makes and re-anchors when the
+  snake lands somewhere the route did not spell out — which really happens, because `take` discards a
+  queued direction that has gone illegal.
+
+**`InputBuffer` has two capacities because it serves two intents, and `replace` is the second one.**
+`push` collapses a repeat of the direction queued last, because a held arrow key fires `keydown` at
+the operating system's auto-repeat rate and would otherwise eat the next several turns the player
+meant; `DEFAULT_CAPACITY` is three, because a deep keyboard queue *reads as input lag* — every key
+waits behind the ones before it and the snake stops answering the one just pressed. `replace` swaps
+the whole queue as one intent and neither collapses nor drops: five squares east is five moves, not
+one, and swapping in whole is what makes letting go of a drag mean **stop**. `PATH_CAPACITY` is 512,
+which is deep without being a backlog because the player takes all of it back by lifting a finger, and
+is what `PathPlanner` bounds itself by. Both live here rather than in `:ui`, so a route can be planned
+and a queue driven on the JVM with no DOM anywhere near them.
+
+## The map is in the header, as squares
+
+`MatchSetup` carries `walls` beside the geometry, the rules, the spawns and the turn order, for the
+reason its KDoc gives for all of them: **a recorded match replays under the layout it was played
+under, never under today's defaults.** They are *playable* indices, `row * cols + col`, strictly
+ascending — the same canonical form `BoardMap.walls()` produces, so a generated map feeds a setup with
+no conversion, and ascending order buys duplicate detection in one pass, an `equals` that compares
+maps rather than orderings, and an array the spawn check can binary-search.
+
+**A shape id never travels.** Freezing one would make every generator's internals a compatibility
+contract for every URL anybody has ever shared; carrying the squares themselves means **a map shape
+can be redesigned or deleted without breaking a single shared link.** Run-length encoding was measured
+and rejected on the shape a map actually has: a 20x20 pillar lattice is about twenty runs a row, some
+four hundred bytes, against a raw bitmap's fifty. `docs/Maps.md` is the catalogue and how to add to it.
+
+Two knock-on rules live here rather than in `map/`:
+
+- **A spawn may not stand on a wall, and beyond seat 2 must be *reachable*.** `mostDistantSpawns`
+  seats slot 0 at the lowest open square and slot 1 at the highest — exact images of each other under
+  the half turn, which is where a two-seat opening's fairness comes from — and filters every later
+  candidate through `openRegionFrom` so nobody starts in a pocket the map sealed off. The scoring
+  metric stayed **Euclidean**: graph distance on a wall-free rectangle is Manhattan, a different
+  argmin, so switching would have moved every three-seat opening *on an empty board* and invalidated
+  every three-seat replay header already written. The escalation is available and unspent, and
+  `mostDistantSpawns`' KDoc names the condition.
+- **`MatchStats` counts the board's open squares, not its area.** A share of the board is a share of
+  what a snake could stand on; the geometry is not that quantity once a map exists.
+
 ## Replays arrive from strangers
 
 A `#r=` payload is the one input to this program nobody here wrote, so **every field the codec decodes
@@ -63,6 +129,33 @@ is bounded before anything allocates from it** — `BotId.MAX_LENGTH`, the three
 and the ordering is the whole of it: a check that runs after the array is a check that has already
 lost, and it loses as an `OutOfMemoryError` rather than the `IllegalArgumentException` `:app` catches
 to fall back to a fresh match.
+
+**The geometry bound runs at the read site, and that is not where it used to be.** `MatchSetup.init`
+checking `MAX_SIDE` was enough while nothing between the two varints and the constructor allocated.
+The wall bitmap does: it is `ceil(rows * cols / 8)` bytes off a pair a varint can inflate to a quarter
+of a billion squares. So `ReplayCodec.decode` range-tests `rows` and `cols` against the same constant
+immediately after reading them — the range form, because `+ 1` on a varint can wrap negative and a
+negative passes every ceiling downstream.
+
+### The version, the flags, and why an old link is byte-identical
+
+The header opens with a version byte and a flags byte. Bit 0 is a per-slot configuration block, bit 1
+a wall bitmap; `versionFor(flags)` is the **only** place that maps one to the other, and it says the
+version written is *the oldest that can express the record*. So a match nobody configured on a board
+with no map is still version 1 with no flags, byte for byte as it was before either feature existed —
+no link anybody has shared has changed, and a default match's URL is no longer than it used to be.
+
+Writing the newest version unconditionally would have cost every plain replay two bytes and a needless
+incompatibility. Writing a flag without raising the version would leave an older page reporting *"the
+flags byte is reserved and must be zero"*, which is true and useless. Together they let an older page
+say the version is unsupported, which somebody can act on. The decoder holds both ends: an unknown
+flag bit is refused, and so is a known bit at a version too old to have meant it.
+
+The bitmap itself is one bit per playable square, low bit of each byte first — the packing
+`DirectionStream` already uses for moves. Two rejections keep a map's spelling **unique**: bits set
+past the last square of the board, and a `MAPPED` flag over an empty wall set. Without them two
+payloads describe one map, `encode(decode(x))` stops being `x`, and a link can come back spelled
+differently from the way it was sent.
 
 A payload's **length** is bounded by `RulesConfig.maxTurns` — two bits a turn, so the longest match
 the rules allow is around 1,400 base64url characters and every real one is a fraction of that. If a
@@ -164,6 +257,37 @@ cannot swap places between targets.
 `expectedScore` is what makes a rating checkable rather than merely orderable: compare it with what
 happened and a cell that disagrees is a pairing the single number cannot describe. Those cells exist
 here, and `:lab`'s `rate` prints the worst of them.
+
+## The ladder is a table here, so it can be measured
+
+`ladder/` holds the ten single-player levels, and it is in `:match` for one reason: `:ui`, `:app`
+**and `:lab`** all see this module, while `:ui` may never see `:bots`. Putting the table here is what
+lets `:lab` play the exact match a player will play and *measure* that level 7 is harder than level 6.
+
+- **A `LadderLevel` is a whole match configuration, not a difficulty number.** Three things move from
+  rung to rung and only one of them is the bot: the geometry ramps 8x8 to 20x20, the map shape changes,
+  and a searcher's allowance grows. Each moves the game about as much as swapping the algorithm does.
+  `setup(seed, human)` builds an ordinary `MatchSetup` from all of it — human in slot 0, opponent in
+  slot 1, turn order still shuffled from the seed, because a level is meant to be hard rather than
+  unfair — so **a level is shareable, replayable and scrubbable exactly like a custom match**, and a
+  shared level link comes back as a custom match because a replay carries no level number.
+- **The opponent is a slug and its knobs are pinned.** A slug because this module has never seen a bot
+  class; pinned because a level is a character a player learns to beat, and a registry default moving
+  under it would quietly hand somebody a different opponent at the same number.
+- **`index` is frozen on release**, and harder than a `BotId` is: it is the key somebody's saved
+  progress is stored under. Renumbering the table moves every player's place in it.
+- **Six of the ten grant an allowance of zero**, which is the honest figure rather than a placeholder:
+  those bots spend nothing whatever they are handed, and writing a default there would imply their
+  difficulty has a knob in it.
+- **Only `scatter` reads the seed**, so nine of the levels are the same picture every time they are
+  opened — which is what makes a level a place a player learns rather than a fresh board.
+
+**The order is measured, and it is not the registry's.** `BotLadderTest` certifies its rungs on an
+empty 12x12 and that ordering survives neither a map nor a board size; `:lab`'s `ladder` subcommand
+plays every level's opponent on that level's own board, map and allowance against one fixed reference,
+and the ordering is right when the reference's score falls. `Ladder`'s KDoc names the two placements
+that look wrong without the measurement behind them, and [`Bots.md`](Bots.md#the-single-player-ladder-is-a-different-ordering-and-it-is-measured-per-level)
+carries the run.
 
 ## No worker, and where the seam would be
 

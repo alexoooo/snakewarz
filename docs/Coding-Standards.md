@@ -156,7 +156,8 @@ make a test compile.**
 quiet exception.
 
 Every module has `explicitApi()`. Anything outside a module's contract is `internal`; `:ui` exposes
-exactly two things, and `:bots`' search primitives are `internal` on purpose so they can be changed.
+exactly three things — `GameSession` and the two seams `ReplayLink` and `Portraits` — and `:bots`'
+search primitives are `internal` on purpose so they can be changed.
 
 **Why:** Adding a dependency is the cheapest-looking way to solve almost any problem and the one that
 cannot be undone later. `:match` never having seen a bot class is what keeps the replay codec free of
@@ -172,6 +173,14 @@ part of the replay format. Once released, none of them may be renamed.**
 They travel in the URL hash of every match anyone has shared, and nothing in the codec can repair a
 name that changed meaning. This is also why a `Choice` holds **names, never ordinals**:
 `eval=territory` survives somebody reordering the list the sidebar offers, and `eval=2` does not.
+
+**Two more identifiers are frozen without being in the payload, and their reasons are different.**
+A `MapShape.slug` reaches a `:lab` flag, a `:ui` picker and a ladder level, so it takes `BotId`'s
+charset discipline — but a *shape* is not in a replay at all, because the codec carries the wall
+bitmap itself. That is what buys the one freedom here: **a map shape can be redesigned or deleted
+without breaking a single shared link.** A `LadderLevel.index` is not in a replay either and is frozen
+harder than either: it is the key somebody's saved progress is stored under, in
+`localStorage["snakewarz.ladder.v1"]`, and renumbering the table moves every player's place in it.
 
 Display names are not identifiers and may be changed freely. Renaming is a *new* id plus whatever
 migration you are willing to write — usually not worth it.
@@ -276,6 +285,14 @@ Two things make the ordering matter rather than merely tidy:
   reader's browser instead — a confident, wrong diagnosis.
 - Integer arithmetic wraps. A size computed into a negative `Int` passes every ceiling downstream and
   fails at the array instead, which is why `Grid` checks its padded extent in `Long` arithmetic.
+
+**Where a bound lives moves when a new field allocates from it earlier.** `MatchSetup.MAX_SIDE` used
+to be enforced only by `MatchSetup.init`, which is late but harmless while nothing between the
+geometry and the constructor allocates. The wall bitmap does: `ReplayCodec` reads
+`ceil(rows * cols / 8)` bytes off a `rows`/`cols` pair a varint can inflate to a quarter of a billion
+squares. So the range test now runs at the **read site**, immediately after the two varints and before
+anything is sized from them — same constant, same message, a different line, and the range form is
+also what catches a `+ 1` that has wrapped negative.
 
 The parallel with [SW-07](#sw-07--a-search-pays-for-its-own-work) is exact, and is why this is a rule
 rather than a fix: charging after the work makes an allowance a record of what already happened, and
@@ -698,7 +715,7 @@ the test tree moves with it.
 - **`:ui` and `:app` have nowhere else to go**, so their `wasmJsTest` suites are the browser job's
   own reason to exist. Reach for the seam rather than the DOM where there is one: the two clocks take
   a timestamp so a test can be the clock, the hit-test is arithmetic over a bounding box, and
-  `SlotLabels` and `Palette` need no page at all.
+  `SlotLabels` and `Theme` need no page at all.
 - **A new bot needs no new test file.** `BotContractTest` sweeps `BotRegistry.entries`, so registering
   is what enrols a bot in the suite. Write a test of your own for behaviour the contract cannot state.
 

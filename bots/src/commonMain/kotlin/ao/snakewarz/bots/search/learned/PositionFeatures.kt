@@ -4,6 +4,7 @@ import ao.snakewarz.bots.search.puct.ChamberEval
 import ao.snakewarz.bots.search.puct.ChamberTree
 import ao.snakewarz.bots.search.puct.FillableSpace
 import ao.snakewarz.bots.search.puct.TempoOwnership
+import ao.snakewarz.core.grid.Cell
 import ao.snakewarz.core.grid.Direction
 import ao.snakewarz.core.grid.Grid
 import ao.snakewarz.core.rules.BoardView
@@ -27,6 +28,11 @@ import kotlin.math.abs
  * geometry and could not answer at all on a board it had never seen. Every reading below is therefore
  * a **ratio, a share or a flag**, so that the same number means the same thing on a 3x7 and on a
  * 200x200 — which is also what makes a linear model over them a reasonable thing to fit.
+ *
+ * A map is the same argument one step further, and it is why the denominators are
+ * [BoardView.openCount] rather than the geometry: what a share is a share *of* is the squares a
+ * snake could ever stand on, so walling a quarter of a board changes the denominator and leaves
+ * every reading in the range it was fitted over.
  *
  * ### What it costs, and why it is exactly [ChamberEval]'s bill
  *
@@ -128,15 +134,22 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
     private val growing = BooleanArray(slotCount)
     private val headRow = IntArray(slotCount)
     private val headCol = IntArray(slotCount)
+    private val headWalls = IntArray(slotCount)
     private val tailReach = IntArray(slotCount)
     private val fallback = DoubleArray(slotCount)
     private val chokepoints = DoubleArray(slotCount)
     private val imbalance = DoubleArray(slotCount)
     private val reach = DoubleArray(slotCount)
 
+    /** The one step to each side, so counting a head's walls needs no iterator. */
+    private val sides = IntArray(Direction.entries.size) { grid.offsetOf(Direction.entries[it]) }
+
     private var live = 0
     private var totalUsable = 0.0
     private var totalOwned = 0
+
+    /** Squares that are not permanently wall — what a share of the board is a share *of*. */
+    private var open = 0
     private var fill = 0.0
     private var progress = 0.0
 
@@ -153,6 +166,7 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
         live = 0
         totalUsable = 0.0
         totalOwned = 0
+        open = board.openCount
 
         for (slot in 0 until slotCount) {
             val snake = board.snake(SnakeId(slot))
@@ -167,6 +181,7 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
                 liberties[slot] = 0
                 length[slot] = 0
                 growing[slot] = false
+                headWalls[slot] = 0
                 fallback[slot] = 0.0
                 chokepoints[slot] = 0.0
                 imbalance[slot] = 0.0
@@ -194,13 +209,14 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
             growing[slot] = snake.growsOnNextMove
             headRow[slot] = grid.rowOf(head)
             headCol[slot] = grid.colOf(head)
+            headWalls[slot] = wallsBeside(board, head)
             tailReach[slot] = abs(grid.rowOf(snake.tail) - headRow[slot]) + abs(grid.colOf(snake.tail) - headCol[slot])
 
             totalUsable += usable[slot]
             totalOwned += owned[slot]
         }
 
-        fill = 1.0 - space.walkableCount().toDouble() / grid.playableCount
+        fill = 1.0 - space.walkableCount().toDouble() / open
         progress = (board.turnIndex.toDouble() / board.rules.maxTurns).coerceAtMost(1.0)
     }
 
@@ -249,7 +265,7 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
         val fair = if (live == 0) 1.0 else 1.0 / live
         val isolated = if (space.isolated(slot)) 1.0 else 0.0
         val diameter = (grid.rows + grid.cols).toDouble()
-        val playable = grid.playableCount.toDouble()
+        val open = this.open.toDouble()
 
         val usableShare = share(usable[slot], totalUsable, fair)
         val usableMargin = margin(usable[slot], rivalUsable)
@@ -258,8 +274,8 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
         into[USABLE_MARGIN] = usableMargin
         into[OWNED_SHARE] = share(owned[slot].toDouble(), totalOwned.toDouble(), fair)
         into[CHAIN_EFFICIENCY] = if (region[slot] == 0) 0.0 else usable[slot] / region[slot]
-        into[REGION_SHARE] = (region[slot] / playable).coerceAtMost(1.0)
-        into[RIVAL_REGION_SHARE] = (rivalRegion / playable).coerceAtMost(1.0)
+        into[REGION_SHARE] = (region[slot] / open).coerceAtMost(1.0)
+        into[RIVAL_REGION_SHARE] = (rivalRegion / open).coerceAtMost(1.0)
         into[SEALED] = sealedShare[slot]
         into[RIVAL_SEALED] = rivalSealed
         into[CHAMBERS] = chamberSplit[slot]
@@ -272,7 +288,7 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
         into[LENGTH_VS_ROOM] = length[slot] / (length[slot] + 2.0 * region[slot])
         into[LENGTH_MARGIN] = margin(length[slot].toDouble(), rivalLength.toDouble())
         into[ISOLATED] = isolated
-        into[HEAD_WALLS] = wallsAt(headRow[slot], headCol[slot])
+        into[HEAD_WALLS] = headWalls[slot] / LIBERTIES_MAX
         into[TAIL_DISTANCE] = tailReach[slot] / diameter
         into[RIVAL_DISTANCE] = if (rivalReach == Int.MAX_VALUE) 1.0 else rivalReach / diameter
         into[BOARD_FILL] = fill
@@ -302,13 +318,20 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
     private fun splitOf(chamberCount: Int): Double =
         if (chamberCount <= 1) 0.0 else 1.0 - 1.0 / chamberCount
 
-    private fun wallsAt(row: Int, col: Int): Double {
-        var edges = 0
-        if (row == 0) edges++
-        if (row == grid.rows - 1) edges++
-        if (col == 0) edges++
-        if (col == grid.cols - 1) edges++
-        return edges / LIBERTIES_MAX
+    /**
+     * Impassable squares beside [head] — the border ring and the map's obstacles alike.
+     *
+     * Read here rather than in [into] because this is where the board is, and the answer keeps until
+     * the next [measure] the way every other reading does.
+     */
+    private fun wallsBeside(board: BoardView, head: Cell): Int {
+        var walls = 0
+        for (side in sides.indices) {
+            if (board.isWall(Cell(head.index + sides[side]))) {
+                walls++
+            }
+        }
+        return walls
     }
 
     public companion object {
@@ -358,7 +381,7 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
         public const val ISOLATED: Int = 17
 
         /**
-         * Board edges the head sits against, as a share of the four sides a square has.
+         * Impassable squares beside the head, as a share of the four sides a square has.
          *
          * A fraction of four rather than of the two a corner can reach, because a board one square
          * wide puts all four against the wall and a reading that saturated at a corner would leave
@@ -370,7 +393,16 @@ public class PositionFeatures(private val grid: Grid, private val slotCount: Int
         public const val TAIL_DISTANCE: Int = 19
 
         public const val RIVAL_DISTANCE: Int = 20
+
+        /**
+         * How much of the board a walk can no longer set foot on, against the squares that are open.
+         *
+         * The denominator excludes the map, so what this counts is the snakes: an untouched board
+         * reads as their heads and nothing else, however much of it is wall. Against the geometry a
+         * map would arrive already looking part filled, which is the phase of a game it is not.
+         */
         public const val BOARD_FILL: Int = 21
+
         public const val TURN_PROGRESS: Int = 22
 
         /** [USABLE_MARGIN] where nobody can reach this snake any more, and zero while they can. */

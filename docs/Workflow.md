@@ -30,9 +30,14 @@ you have to know before you type a command you already think you know: never bac
 ./gradlew :lab:run --args="tune puct --knobs cpuct,territoryWeight"
 ./gradlew :lab:run --args="spsa puct:eval=chamber --knobs parityWeight,sealPenalty --budget 1000"
 ./gradlew :lab:run --args="train --rows 12 --cols 12 --hidden 16 --epochs 60"
+./gradlew :lab:run --args="ladder --rounds 200"
+
+# And the same questions asked on a board with walls in it.
+./gradlew :lab:run --args="play uct puct --map cross --rows 12 --cols 12 --rounds 100"
+./gradlew :lab:run --args="rate --board 12x12 --budget 1000 --map cross"
 ```
 
-## The nine subcommands, and which question each answers
+## The ten subcommands, and which question each answers
 
 They are separate because they are separate measurements, and one of them producing a number does not
 mean another would have produced the same one.
@@ -48,6 +53,12 @@ mean another would have produced the same one.
 | `tune` | what should this knob be, up to about three of them | — | a journal |
 | `spsa` | what should these ten knobs be | — | a journal |
 | `train` | **what should this value function's weights be** | the log's replays | a literal, on stdout |
+| `ladder` | **do the single-player levels actually get harder** | — | the match log |
+
+`ladder` is the only one that takes no board: every match it plays comes off a `Ladder` level, so the
+ten rows are ten different geometries and one fixed reference. Nothing else in the list can answer it
+— `rate` refuses to pool ten geometries, correctly, and `ab` compares two entrants on one board where
+two adjacent levels never share one. [`Bots.md`](Bots.md) carries the shipped run.
 
 `ab` is the first one to reach for when deciding whether to keep a change. `play` gives a matrix, and
 a matrix has to be read against a threshold somebody invented; `ab` plays until the evidence settles
@@ -55,17 +66,100 @@ and then says which hypothesis it settled on. It has one blind spot, it is not a
 [below](#ab-measures-what-two-entrants-do-to-each-other-which-is-not-always-the-change) is what it
 looks like and what to do instead.
 
-`rate` refuses to pool runs that are not comparable — a different board, allowance, openings mode or
-**build** is a different measurement — because a log accumulated over weeks would otherwise average
-yesterday's bots with today's under one name. `--pool true` overrides it and says so in the output.
+`rate` refuses to pool runs that are not comparable — a different board, allowance, openings mode,
+**map** or **build** is a different measurement — because a log accumulated over weeks would otherwise
+average yesterday's bots with today's under one name. `--pool true` overrides it and says so in the
+output.
+
+## Boards with walls in them
+
+`--map <shape>` draws interior walls, **one map for the whole run**, at that run's own
+`--rows`/`--cols` and `--seed`. It is on every subcommand that plays anything:
+
+| | takes `--map` | takes `--density` |
+|---|---|---|
+| `play`, `time`, `ab`, `tune`, `spsa` | yes | yes |
+| `rate` | **as a filter** | — |
+| `report`, `phases`, `train` | no — they read the log | — |
+| `ladder` | no — every board comes off the level | — |
+
+Four things about the flag are decisions rather than plumbing:
+
+- **`--map empty` is the default and draws nothing**, so a run that names it is byte-identical to a
+  run that says nothing. That is what lets every command in this document and every batch already in
+  the log keep its meaning.
+- **One map per run, not one per match.** A batch is then a comparison *on* a board rather than a
+  comparison *across* boards. `--map scatter` is the one shape that reads the seed, so it is
+  reproducible from the command line alone and two seeds are two different scatterings.
+- **`--density` needs `--map`**, because a density with no map behind it draws nothing and would read
+  back as a setting that took effect. Only `scatter` reads one; every other shape is a function of the
+  geometry.
+- **A shape refuses a board too small to express it**, by name, rather than drawing a degenerate
+  version — a cross with no arms is a bug in the game, not a small cross. `MapShape.minimumSide` is
+  the number, and [`Maps.md`](Maps.md) is the catalogue.
+
+### Fairness on a new map, before any strength number taken on it
+
+An asymmetric map turns seat advantage into map advantage, and a field run on one measures the map. So
+the standing question before a shape's first strength number is *is this board worth points on its
+own* — and the answer at two seats is **settled by construction rather than by a batch**:
+
+- `generateMap` mirrors every placement through the half turn `ρ(row, col) = (rows-1-row, cols-1-col)`
+  and then **asserts** the result — `checkSymmetric` that ρ maps the wall set onto itself, and
+  `checkEndsPair` that the lowest and the highest open squares are each other's image.
+- `mostDistantSpawns` seats slot 0 at the lowest open square and slot 1 at the highest. Those two
+  sentences are the same sentence: the two seats are exact images, so the opening is fair.
+- `GenerateMapTest` sweeps every shape at every size it can be drawn at, so **adding a shape to the
+  enum is what enrols it**. A shape that breaks either property fails the build rather than producing
+  a batch somebody has to interpret.
+
+**A null-strength `play` at two seats cannot check this and is not worth running.** Two things stop
+it. `play` refuses two identical entrants outright — *"which measures the seating and nothing else"* —
+so the pairing has to be spelled differently to be accepted at all; and under `HEAD_TO_HEAD` every
+seed is played from both seats, so two entrants that play alike split every board by construction and
+the matrix reads 50/50 whatever the map is doing. There is no seat column in `play`'s output to read
+instead.
+
+**What construction does not cover, and what to do about each:**
+
+| case | why ρ says nothing | what to do |
+|---|---|---|
+| a hand-drawn `BoardMap.of(...)` fixture | `BoardMap` demands ascending and in-range and nothing more | draw it symmetric, or do not quote a strength number off it |
+| a map decoded from somebody's replay | it is whatever they played on | same |
+| **three seats or more** | slots 2 and up come from the scored branch, which ρ constrains not at all | `--openings mirrored`, which is the default, and read [Measuring at three seats](#measuring-at-three-seats) before the number |
+
+The precedent for taking that last row seriously is `Openings.FIXED` at three seats, where three
+identical entrants scored **83.4 / 0.05 / 16.6%** by seat — a seat there is worth more than any bot in
+this repository.
+
+### A map is a different game, not a harder one
+
+**A map changes which bot is stronger, not merely by how much.** This is the single most expensive
+thing to rediscover here, and it is not a small effect:
+
+- On `cross` the top pair **inverts** — `uct` finishes above `puct` — and the whole field compresses
+  from **979 Elo to 479**. `wallhug` gains about **400 points**, because a map that gives a room
+  filler rooms to fill is a different question from the one an empty rectangle asks.
+- On `double-spiral` at 16x16, **`puct@250` beats `puct@1000` 77–23**, and loses **23–77** to it on an
+  empty board of the same size. More search is *worse* there: the corridor turns the game into a pure
+  filling race, and a deeper search finds no more of one.
+
+Two consequences follow, and both are worth writing on the wall:
+
+1. **Every empty-board measurement taken before Release 2 is an empty-board measurement.** Nothing in
+   the ladder, in `docs/Bots.md`'s tables or in a closed research agenda is a claim about a map. They
+   are not wrong; they are conditioned on a board nobody has to play on any more.
+2. **`RunHeader.comparabilityKey` carries the map**, derived from the walls and never from a shape
+   name, and `rate` refuses to pool across it. Do not reach for `--pool true` to make two maps average
+   — the average of an inversion is a number describing neither board.
 
 ## Openings, and the four-distinct-games problem
 
 **A `--openings fixed` batch of a hundred matches can be four games played twenty-five times.**
 
-Spawns do not depend on the seed at all — `mostDistantSpawns` puts two snakes in opposite corners on
-every board — and the seed's only other effect on the position is the turn order, which for two slots
-has two values. So a pairing of bots that draw no randomness plays at most four distinct games however
+Spawns do not depend on the seed at all — `mostDistantSpawns` seats slot 0 at the lowest open square
+and slot 1 at the highest, which on a bare board is two opposite corners — and the seed's only other
+effect on the position is the turn order, which for two slots has two values. So a pairing of bots that draw no randomness plays at most four distinct games however
 many rounds are asked for, and `puct` against `puct` is exactly such a pairing: the flagship
 invocation above was, until openings existed, measuring four games and reporting forty.
 
@@ -74,6 +168,15 @@ through the centre of the board. Point reflection maps the board onto itself and
 to its opposite, so neither side of the draw is the better one — two identical bots score exactly half
 on every board, which is the test that keeps it honest. `fixed` is kept because the shipped ladder was
 measured under it.
+
+**A map does not add a distinct game, and it is easy to assume it does.** `--map` is a function of the
+geometry and the run's own seed, so every match of a batch is played behind *the same* walls; the
+spawns are still the two ends of the board, and the turn order still has two values. Four games on
+`empty` is four games on `double-spiral`. Where this bites hardest is the ladder's lower rungs, which
+are **entirely** bots that draw no randomness — `random` excepted, five of the ten — so a `ladder` run
+whose reference is also deterministic measures four games per level however many rounds it is given.
+The shipped run in [`Bots.md`](Bots.md) uses `uct@100` for exactly that reason, and reports 200 of 200
+distinct games on nine of its ten rows.
 
 **Every batch prints how many of its matches were distinct games.** Read that number before any
 other. The two openings modes gave opposite answers to
@@ -84,10 +187,16 @@ distinct games, 15-25 against it over thirty-six.
 
 Every `play` and `ab` appends to `.lab/` (gitignored), which is what `rate` and `report` read.
 
-- `runs.tsv` — one row per batch: board, rules, allowance, openings, and a **build fingerprint**
-  (`git rev-parse --short HEAD`, plus `+dirty`). An expanded spec pins a bot's settings; nothing else
-  pins its code, and pooling across a change averages away the improvement that change was made to
-  measure.
+- `runs.tsv` — one row per batch: board, rules, allowance, openings, **the map**, and a **build
+  fingerprint** (`git rev-parse --short HEAD`, plus `+dirty`). The map is a fingerprint of the wall
+  squares — `empty`, or `40w1a2b3c4d` — and **never a shape name**, so a header cannot keep saying
+  `cross` after the generator was redrawn while every rating fitted across the change silently pools
+  two different games. `--map cross` narrows by *redrawing* cross at each run's own geometry and
+  seed and comparing keys, which is why a run played on the old cross stops matching rather than
+  being pooled under a name that no longer describes it. `rate` prints the shape's slug beside the
+  key wherever the walls still reproduce it, and names the map on every summary line, `empty`
+  included. An expanded spec pins a bot's settings; nothing else pins its code, and pooling across a
+  change averages away the improvement that change was made to measure.
 - `matches.tsv` — one row per **(match, seat)**, the match's own columns repeated on each. That
   denormalisation is deliberate: a run killed mid-write leaves a line that does not parse and gets
   dropped, rather than a dangling join.
@@ -97,6 +206,14 @@ Every `play` and `ab` appends to `.lab/` (gitignored), which is what `rate` and 
 An entrant is recorded **expanded** — every declared knob at the value it played under — so a log line
 keeps its meaning after a default moves. `rate` and `report` shorten it back down for display by
 dropping whatever matches the registry's defaults today.
+
+> **Known: `rate` dies with `Cannot round NaN value` when shortening collapses a field to one
+> entrant.** Two specs that differ only in ways that shorten away — `uct` beside `uct:budget=1000` at
+> a `--budget 1000` run, which is the null-strength pairing `play` will accept — log as two entrants
+> and rate as one, and a one-entrant field has no opponent to fit against. The line above the crash
+> says `1 entrants`, which is the tell. Nothing is corrupt; the batch is in the log and `report` reads
+> it. Use `--log` to give such a batch a directory of its own, or read the matrix `play` already
+> printed. It is not about maps — it reproduces on `--map empty`.
 
 ### Naming one back
 
@@ -532,7 +649,8 @@ Two things are only provable there, and both are worth the Karma startup in CI. 
 modules' `commonTest` suites recompile to wasm, which is what re-runs the golden hashes in a real
 browser and is [SW-02](Coding-Standards.md#sw-02--portable-arithmetic-only-in-bots)'s whole purpose.
 And `:ui` and `:app` have no other target at all, so their `wasmJsTest` suites — the two clocks, the
-hit-test, the labels, the palette, the replay fragment — run here or nowhere:
+hit-test, the labels, the theme, the focus handoff, the portrait slugs, the replay fragment — run here
+or nowhere:
 
 ```bash
 ./gradlew :ui:wasmJsBrowserTest :app:wasmJsBrowserTest -PbrowserTests=true
@@ -544,6 +662,13 @@ Prefer `jvmTest` while developing; most modules answer in seconds. **`:bots` doe
 couple of minutes, because `BotLadderTest` and `RolloutTruncationTest` play several hundred complete
 matches with a search bot in them, which is the point of both. Narrow with `--tests` while working on
 something else. A full cold `build` takes several minutes; the wasm toolchain is slow to warm up.
+
+**One test in the suite reads a wall clock, and it flakes.** `:bots`'
+`RolloutPolicyTest."a prior at its swept weights is priced before anything is built on it"` is a
+benchmark rather than an assertion about behaviour — it exists because a dearer rollout buys no fewer
+iterations, so all of its cost lands on the clock and a matrix at one allowance would not see it. It
+occasionally fails under Chrome on a loaded machine and passes on a re-run. Re-run it before believing
+it; a *repeatable* failure there is a real cost regression and is what the test is for.
 
 ## The ktlint deletion trap
 

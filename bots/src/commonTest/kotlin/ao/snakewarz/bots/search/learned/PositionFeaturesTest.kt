@@ -55,7 +55,8 @@ class PositionFeaturesTest {
     fun `every reading stays inside the unit range, on every board shape the contract runs`() {
         // The shapes BotContractTest seats a match on, plus the degenerate ones a search reaches at
         // the end of a game: a board with nothing free left is where a division by an empty region
-        // would first show up.
+        // would first show up. The walled pair are the same claims on a board that is not all
+        // playable, which is where a denominator and the ground a sweep can actually walk come apart.
         val boards = listOf(
             boardOf(1, 1, 0 to 0),
             boardOf(1, 5, 0 to 0, 0 to 4),
@@ -64,6 +65,8 @@ class PositionFeaturesTest {
             boardOf(8, 8, 0 to 0, 7 to 7, 0 to 7),
             boardOf(12, 12, 0 to 0, 11 to 11),
             boardOf(20, 20, 0 to 0, 19 to 19),
+            boardOf(3, 3, 0 to 0, 2 to 2, walls = listOf(1 to 1)),
+            boardOf(12, 12, 0 to 0, 11 to 11, walls = LATTICE),
         )
 
         for (board in boards) {
@@ -222,7 +225,58 @@ class PositionFeaturesTest {
         )
     }
 
+    @Test
+    fun `the head's walls are the sides it cannot leave by, map or board edge alike`() {
+        assertEquals(0.5, headWallsOn(boardOf(7, 7, 0 to 0)), "a corner is two sides")
+        assertEquals(0.25, headWallsOn(boardOf(7, 7, 0 to 3)), "an edge is one")
+        assertEquals(0.0, headWallsOn(boardOf(7, 7, 3 to 3)), "and inland is none")
+        assertEquals(1.0, headWallsOn(boardOf(1, 1, 0 to 0)), "a board one square across is all four")
+        assertEquals(0.5, headWallsOn(boardOf(1, 5, 0 to 2)), "as is the middle of a corridor")
+
+        // The reading a comparison against the board's extent cannot make: the same square, and the
+        // same answer, with the wall put there by the map instead of by the edge.
+        assertEquals(
+            headWallsOn(boardOf(7, 7, 0 to 3)),
+            headWallsOn(boardOf(7, 7, 3 to 3, walls = listOf(3 to 2))),
+            "a wall beside the head reads as an edge beside it",
+        )
+    }
+
+    @Test
+    fun `a fresh board reads as unfilled, however much of it is map`() {
+        // The failure that normalising by the geometry produces, and it is not subtle: the map's own
+        // squares read as ground somebody has already filled, so a match on a lattice opens at a fill
+        // an empty rectangle only reaches some way in. What fills a board is snakes, and on turn one
+        // that is the two heads.
+        val bare = rowFor(boardOf(12, 12, 0 to 0, 11 to 11))
+        val walled = rowFor(boardOf(12, 12, 0 to 0, 11 to 11, walls = LATTICE))
+        val open = 12 * 12 - LATTICE.size
+
+        assertEquals(2.0, bare[PositionFeatures.BOARD_FILL] * 12 * 12, 1e-9, "two heads and nothing else")
+        assertEquals(
+            2.0,
+            walled[PositionFeatures.BOARD_FILL] * open,
+            1e-9,
+            "the map counted as ${walled[PositionFeatures.BOARD_FILL] * open - 2.0} squares of fill",
+        )
+    }
+
+    @Test
+    fun `a share of the board is a share of the squares that are not wall`() {
+        // One snake on a connected map, so it owns everything there is to own and the region is the
+        // whole open board bar the square under its own head. Against the geometry the same position
+        // would read the map as ground this snake does not have.
+        val walls = listOf(2 to 2, 2 to 6, 6 to 2, 6 to 6)
+        val row = rowFor(boardOf(9, 9, 4 to 4, walls = walls))
+        val open = 9 * 9 - walls.size
+
+        assertEquals((open - 1).toDouble() / open, row[PositionFeatures.REGION_SHARE], 1e-12)
+        assertTrue(row[PositionFeatures.REGION_SHARE] <= 1.0, "a share above one is a clamp doing the work")
+    }
+
     // -- internals
+
+    private fun headWallsOn(board: Board): Double = rowFor(board)[PositionFeatures.HEAD_WALLS]
 
     private fun rowFor(board: Board): DoubleArray {
         val features = PositionFeatures(board.grid, board.snakeCount)
@@ -254,5 +308,18 @@ class PositionFeaturesTest {
                 else -> board.apply(id, Direction.NORTH)
             }
         }
+    }
+
+    private companion object {
+        /**
+         * A map for a 12x12: four pillars and a block in the middle, corners left for the spawns.
+         *
+         * Connected, so a lone snake reaches all of it, and symmetric under both reflections, so
+         * neither corner is the better seat.
+         */
+        val LATTICE = listOf(
+            3 to 3, 3 to 8, 8 to 3, 8 to 8,
+            5 to 5, 5 to 6, 6 to 5, 6 to 6,
+        )
     }
 }

@@ -5,6 +5,8 @@ import ao.snakewarz.core.rules.EliminationReason
 import ao.snakewarz.core.rules.MatchEnd
 import ao.snakewarz.core.snake.SnakeId
 import ao.snakewarz.match.Match
+import ao.snakewarz.match.MatchSetup
+import ao.snakewarz.match.TestRegistry
 import ao.snakewarz.match.matchInOrder
 import ao.snakewarz.match.matchOf
 import kotlin.test.Test
@@ -26,7 +28,7 @@ class MatchStatsTest {
         assertNull(stats.winner)
         assertFalse(stats.finished)
 
-        assertEquals(25, stats.playableCells)
+        assertEquals(25, stats.openCells)
         assertEquals(2, stats.occupiedCells)
         assertEquals(2.0 / 25, stats.fillRate)
 
@@ -37,6 +39,24 @@ class MatchStatsTest {
             assertNull(slot.fate)
             assertFalse(slot.winner)
         }
+    }
+
+    @Test
+    fun `how full the board is counts the map out`() {
+        // How full the board is has to be a share of what is open, or every figure a map is played
+        // on reads low by however much of the board was never anybody's to reach.
+        val setup = MatchSetup.create(
+            5,
+            5,
+            listOf(BotId("cycle"), BotId("south")),
+            seed = 1,
+            walls = intArrayOf(11, 12, 13),
+        )
+        val stats = Match(setup, TestRegistry.ALL).stats()
+
+        assertEquals(22, stats.openCells)
+        assertEquals(25, setup.rows * setup.cols, "the geometry is untouched; it is the denominator that moved")
+        assertEquals(2.0 / 22, stats.fillRate)
     }
 
     @Test

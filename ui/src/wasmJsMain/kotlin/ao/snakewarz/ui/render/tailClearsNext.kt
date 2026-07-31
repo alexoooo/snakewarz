@@ -5,7 +5,7 @@ import ao.snakewarz.core.snake.SnakeView
 
 /**
  * Whether [snake]'s oldest square opens up on its next move — the square the board fades at
- * [Palette.DYING_ALPHA], said in a form a label can put into words.
+ * [Theme.DYING_ALPHA], said in a form a label can put into words.
  *
  * One predicate rather than two. A board that faded a square while the label beside it said the
  * snake was still growing would be two accounts of one rule, and the reader would be right to

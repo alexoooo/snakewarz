@@ -21,42 +21,49 @@ file per audience. **Read the row that matches before you edit, not after the fi
 |---|---|---|
 | write any code at all | [`docs/Coding-Standards.md`](docs/Coding-Standards.md) | A rule set a review cites by id; several break a match *silently* |
 | add or change a bot, or touch `bot-api/` | [`docs/Bots.md`](docs/Bots.md) | A slug or knob name you rename sits in the replay URL of every match somebody shared |
-| touch `match/` — human input, stats, tournaments | [`docs/Match.md`](docs/Match.md) | A match with a person in it has no clock; add a counter to `Match` and the scoreboard grows a second source of truth |
+| touch `match/` — human input, stats, tournaments | [`docs/Match.md`](docs/Match.md) | A person's match runs a clock only while a path is held; add a counter to `Match` and the scoreboard grows a second source of truth |
+| add a map shape, or touch `match/map/` | [`docs/Maps.md`](docs/Maps.md) | A shape that is not half-turn symmetric hands one seat the better half of the board, and the two-seat opening's fairness is a *construction* rather than a measurement |
 | touch `ui/`, `index.html` or `styles.css` | [`docs/UI.md`](docs/UI.md) | The overlay is a second canvas painted whole; get the ordering wrong and every decoration vanishes the frame a batch repaints |
 | change the page shell, the boot path or Pages | [`docs/UI.md`](docs/UI.md#deployment) | `#app` revealed after the first measure sizes every board to the minimum cell |
 | run a build, a benchmark or `:lab` | [`docs/Workflow.md`](docs/Workflow.md) | A mistyped knob name silently measures the default and wastes however long the batch takes |
 | measure whether a change helped, or tune a knob | [`docs/Workflow.md`](docs/Workflow.md#deciding-whether-a-change-helped) | A batch of a hundred matches can be four games played twenty-five times, and nothing in a win matrix says so |
 | plan or run a research phase, or dispatch agents for one | [`docs/Research-Process.md`](docs/Research-Process.md) | A head-to-head between two settings of one bot is a style match-up; report it as strength and the agenda records the wrong sign — as one phase did, by +250 |
 | compare against the pre-rewrite Java | [`docs/Legacy.md`](docs/Legacy.md) | Several of its algorithms are dead-broken and look intentional |
+| ask why a shipped thing is shaped the way it is | [`docs/plans/README.md`](docs/plans/README.md) | Release 2's decisions — path release, the wall bitmap in the replay, where maps and the ladder live — were taken once and are recorded there, not re-argued |
 
-The module graph, the forbidden edges and the four non-obvious facts are **below, not in `docs/`**:
+The module graph, the forbidden edges and the five non-obvious facts are **below, not in `docs/`**:
 they are what you have to know before you know you need them.
 
 ## Current state
 
-**The rewrite is complete.** The rules engine, the bot contract, the match driver, the replay codec,
-the canvas renderer, the DOM chrome, a nine-bot ladder topped by an alpha-beta search, per-match stats
-and batch tournaments all exist and are verified, and the legacy Java is deleted
-— it lives at the `legacy-java-final` tag and nowhere else. You can play against the shipped bots,
-watch bots fight, scrub a recording, share a match as a URL, and run a win-rate matrix over a few
-hundred matches without the page stopping.
+**The rewrite is complete and Release 2 has shipped on top of it.** The rules engine, the bot
+contract, the match driver, the replay codec, the canvas renderer, the DOM chrome, a nine-bot registry
+ladder topped by an alpha-beta search, per-match stats and batch tournaments all exist and are
+verified, and the legacy Java is deleted — it lives at the `legacy-java-final` tag and nowhere else.
+Release 2 added interior walls and an eight-shape map catalogue end to end, a screen-and-panel game
+shell that works on a phone, drawn-path steering, and a ten-level single-player ladder whose progress
+is remembered. You can play against the shipped bots, walk a level, watch bots fight, scrub a
+recording, share a match as a URL, and run a win-rate matrix over a few hundred matches without the
+page stopping.
 
 | Path | Status |
 |---|---|
 | `core/` | `:core` module. Padded-grid primitives plus the rules engine, under `grid`, `snake`, `rules` and `random` — `Occupancy`, `SnakeBody`, `Board`, `MatchState`, `SplitMix64` — with `Budget` at the root |
 | `bot-api/` | `:bot-api` module. The contract at the root — `Bot`, `Decision`, `Turn`, `BotSetup` — over `registry` (`BotId`, `BotEntry`, `BotFactory`, `BotRegistry`), `knob`, what a bot lets you tune, and `scratch`, the search arena that makes the budget structural |
 | `bots/` | `:bots` module. `ShippedBots`, the `BotRegistry` implementation, at the root over ten bots. Each cluster keeps the primitive only it reads: `reactive.chase` holds `ChaseBot` with `ShortestPaths` and `nearestOpponent`, `search.uct` the trees' `portableLog` and `truncatedPlayout`, `search.puct` the `LeafEval` family with the `TempoOwnership` sweep and `FillableSpace` decomposition only the strongest of them reads, `search.learned` the one leaf whose weights were fitted rather than argued — `PositionFeatures`, the module's only public class besides the registry, over `LearnedNet` and the baked `LearnedWeights`. `search` itself keeps what every searcher reads — `randomPlayout`, `SpaceOwnership`, `EvaluationCost` — plus the flat baseline and `AlphaBetaBot`, the one exact search, which has no primitive of its own and borrows `search.puct`'s leaf. The one exception is `FloodFill`, which sits in `reactive.space` beside the two room-ranking bots and is read by nearly everything else as well: how much room a move leaves is the question every bot here asks in some form, and moving it would be churn rather than clarity |
-| `match/` | `:match` module. `Match` driver, `MatchSetup` and spawn placement at the root, over `replay` (`MatchRecord`, `ReplayCodec`), `stats`, `tournament`, and `human` — `InputBuffer`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM. `tournament` carries the schedule (`TournamentSchedule`), the scoring rule (`pairwiseOutcomes`) and the rating model (`fitRatings`) separately from the driver that uses them |
-| `ui/` | `:ui` module. `GameSession` — the only public class — over `render` (`BoardRenderer`, `Palette`), `chrome`, `model` and `schedule` (`TurnScheduler`, `TournamentRunner`) |
-| `app/` | `:app` module. `main()`, registry injection and `#r=` replay routing. Sixty lines, and that is the point |
-| `lab/` | `:lab` module. The JVM command line, and the whole measurement loop: `arena` plays a schedule in parallel from diversified openings, `log` keeps every match under a gitignored `.lab/`, `strength` fits ratings and runs the sequential test, `report` diagnoses losses and `Separation` splits a replayed match at the move the board came apart, `tune` searches knob space by coordinate descent and by SPSA, `train` replays logged matches into a corpus and fits `eval=learned`'s weights to it. The one place outside `:ui` where a clock and a `println` live |
+| `match/` | `:match` module. `Match` driver, `MatchSetup` and spawn placement at the root, over `replay` (`MatchRecord`, `ReplayCodec`), `stats`, `tournament`, `map` (`BoardMap`, `MapShape`, `generateMap`), `ladder` (`Ladder`, `LadderLevel`) and `human` — `InputBuffer`, `PathPlanner`, `StallPolicy`, `InteractiveBot`, `PlayableRegistry`. No time, no DOM. `tournament` carries the schedule (`TournamentSchedule`), the scoring rule (`pairwiseOutcomes`) and the rating model (`fitRatings`) separately from the driver that uses them |
+| `ui/` | `:ui` module. Three public declarations — `GameSession` and the two seams `ReplayLink` and `Portraits` — over `render` (`BoardRenderer`, `Theme`, `identicon`), `chrome` with `chrome/panel` under it (`Shell`, `HomeScreen`, `LadderScreen`, and one class per slide-out panel), `model` with `model/ladder` under it (`Screen`, `Mode`, `Panel`, `UiModel`, `LadderProgress`) and `schedule` (`TurnScheduler`, `TournamentRunner`) |
+| `app/` | `:app` module. `main()`, registry injection, `#r=` replay routing, and `portraitUrl` over `resources/portrait/*.svg` — one hand-drawn face per shipped slug. `main()` is under fifty lines, and that is the point |
+| `lab/` | `:lab` module. The JVM command line, and the whole measurement loop: `arena` plays a schedule in parallel from diversified openings, `log` keeps every match under a gitignored `.lab/` and fingerprints the map it was played on, `strength` fits ratings and runs the sequential test, `report` diagnoses losses and `Separation` splits a replayed match at the move the board came apart, `tune` searches knob space by coordinate descent and by SPSA, `train` replays logged matches into a corpus and fits `eval=learned`'s weights to it, and `ladder` plays each single-player level on its own board against one fixed reference. The one place outside `:ui` where a clock and a `println` live |
 | `build-logic/` | Convention plugins `snakewarz.pure`, `snakewarz.browser` and `snakewarz.tool`, sharing `registerModulePurityCheck` |
 
-Release 1 is feature-complete, so there is no remaining plan and nothing here is a stub waiting to be
-filled in. Everything since is new work on top of a finished thing. Where a decision was measured
-rather than argued, the number lives beside the constant it set — `UctBot.ROLLOUT_DEPTH`,
-`MatchSetup.DEFAULT_BUDGET_PER_TURN`, `TerritoryEval` — and [`docs/Bots.md`](docs/Bots.md) says which is
-where.
+Nothing here is a stub waiting to be filled in. Release 1 and Release 2 both shipped whole, and
+[`docs/plans/README.md`](docs/plans/README.md) is the record of the second — eighteen sessions, the
+decisions taken before them, and why they ran in that order. It is a *closed* plan, so read it to find
+out why something is the way it is, not to find out what is left. Where a decision was measured rather
+than argued, the number lives beside the constant it set — `UctBot.ROLLOUT_DEPTH`,
+`MatchSetup.DEFAULT_BUDGET_PER_TURN`, `TerritoryEval`, `Ladder` — and [`docs/Bots.md`](docs/Bots.md)
+says which is where.
 
 Do not assume anything else exists; check the tree.
 
@@ -69,6 +76,8 @@ registered in an explicit `BotRegistry`.
 
 Release 1, all of it shipped: live match view with play/pause/step/speed, human vs bot, deterministic
 seeded matches, shareable replays encoded in the URL hash, per-match stats, and batch tournaments.
+Release 2 on top of it: maps with interior walls, a screens-and-panels shell that fits a portrait
+phone, steering by dragging a route the snake walks while you hold, and a ten-level ladder.
 
 ## Module graph
 
@@ -111,7 +120,9 @@ These are the load-bearing constraint of the architecture. Do not add any of the
   implementation. This is what keeps the replay codec free of bot classes.
 - `:bots` → `:match`, `:ui`, `:app`. A bot must not be able to reach the clock or another slot's RNG.
 - `:ui` → `:bots`. The renderer paints a `BoardView` and the chrome names slots through the
-  `BotRegistry` interface, so nothing in `:ui` can tell a wall hugger from a human.
+  `BotRegistry` interface, so nothing in `:ui` can tell a wall hugger from a human. A bot's *picture*
+  is the same rule under pressure: `Portraits` is a seam taking a **slug**, `:app` fills it from its
+  own `resources/`, and an unknown slug gets a drawn identicon rather than a table of names here.
 - **Anything** → `:lab`. It is a measuring instrument, so it sits above everything and under nothing.
   It may see `:bots` and `:match` together; it may not see `:ui` or `:app`.
 
@@ -120,7 +131,7 @@ convention plugins and walks every `*CompileClasspath` — case-insensitively, b
 module spells its main one `compileClasspath` while a multiplatform one prefixes the target — and
 test source sets included.
 
-## Four non-obvious facts
+## Five non-obvious facts
 
 Getting any of these wrong silently breaks the game or its determinism.
 
@@ -153,6 +164,24 @@ is about to leave, even on a turn when that square is certain to clear. This is 
 `SimpleSnakesGame` tested the destination against a board built before the retraction — and letting the
 tail clear first is a materially different game, one where a snake can chase its own tail forever. It is
 `BoardRulesTest."a snake may not move into the square its own tail is about to leave"`.
+
+**5. An interior wall is the border ring's byte, and three things follow that nothing else states.**
+`Occupancy` stamps a map's squares with the same `WALL` code the padded ring carries, so legality costs
+no new branch and a map rides into every search arena through `copyFrom` for free. The consequences:
+
+- **`Occupancy.clear()` never overwrites a `WALL` byte.** Clearing is what `Board.reset()` does, and
+  re-stamping the map from the caller would be an ordering somebody could get wrong; keeping it in the
+  type that owns the bytes means every path that clears is a path that keeps the map.
+- **Walls are outside `Occupancy.hash` and inside `Board.hash`.** The ring never varies, so leaving it
+  out of the occupancy fingerprint is right — but two *different maps* would then hash identically.
+  `Board` folds a `wallKey` into its aux hash, so a key derived from `BoardView.hash` still tells two
+  maps apart, and `copyFrom` uses the same key to refuse a board played on another map.
+- **`Grid.playableCount` is not the denominator any evaluation wants; `BoardView.openCount` is.**
+  `playableCount` is `rows * cols` and stays pure geometry. `openCount` is the squares a snake could
+  ever stand on, and on a map the two differ — an appraisal normalising by the first starts a fresh
+  board looking part filled and never reaches its own extremes. The same trap has a second form: a
+  reading answered from a *row and a column* cannot see an interior wall at all, which is why
+  `MovePrior` asks `BoardView.isWall`.
 
 ## Coding standards
 
@@ -204,14 +233,24 @@ Standing rules. They override any default the harness carries.
 ./gradlew :app:wasmJsBrowserDistribution     # production bundle -> app/build/dist/wasmJs/productionExecutable
 ./gradlew :lab:run --args="play puct:eval=territory puct:eval=survival --rounds 40 --budget 2000"
 ./gradlew :lab:run --args="ab uct uct:exploration=2.5"   # is a change better? the one that decides
-./gradlew :lab:run --args="rate"                         # the ladder as Elo, from the match log
+./gradlew :lab:run --args="rate"                         # the field as Elo, from the match log
 ./gradlew :lab:run --args="spsa puct --knobs cpuct"      # a gradient over every numeric knob at once
+./gradlew :lab:run --args="play uct puct --map cross"    # every batch flag has a --map now
+./gradlew :lab:run --args="ladder --rounds 200"          # do the ten single-player levels get harder
 ```
 
 **Read the distinct-games line every batch prints before you read anything else.** Spawns do not
 depend on the seed, so under `--openings fixed` a pairing of bots that draw no randomness plays four
-distinct games however many rounds are asked for. `mirrored` is the default and
+distinct games however many rounds are asked for — and a fixed map does not add one, because a map is
+a function of the geometry rather than of the seed. `mirrored` is the default and
 [`docs/Workflow.md`](docs/Workflow.md) carries why.
+
+**`--map` is a new measurement, not a variation on an old one.** `play`, `time`, `ab`, `tune` and
+`spsa` all take one, `rate --map <shape>` narrows the log to it, and the map is part of
+`RunHeader.comparabilityKey` — derived from the walls, never from a shape name — so a walled batch and
+a bare one refuse to pool. That refusal is load-bearing: **a map changes which bot is stronger, not
+merely by how much.** [`docs/Workflow.md`](docs/Workflow.md#a-map-is-a-different-game-not-a-harder-one)
+and [`docs/Maps.md`](docs/Maps.md) carry the numbers.
 
 `:bots` tests take a couple of minutes because `BotLadderTest` plays several hundred complete matches;
 narrow with `--tests` while working on something else. The `[bench]` throughput runs, the `:lab`

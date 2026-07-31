@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Wall Hugger">
+    <!-- A square spiral winding inward, brightening as it goes: it keeps a wall on one side. -->
+    <rect width="32" height="32" rx="6" fill="#16191d"/>
+    <rect x="4" y="4" width="24" height="4" fill="#2b6046"/>
+    <rect x="24" y="8" width="4" height="16" fill="#3a7f5c"/>
+    <rect x="8" y="20" width="20" height="4" fill="#4c9f74"/>
+    <rect x="8" y="12" width="4" height="8" fill="#5fbf8a"/>
+    <rect x="12" y="12" width="8" height="4" fill="#7fe0a8"/>
+</svg>

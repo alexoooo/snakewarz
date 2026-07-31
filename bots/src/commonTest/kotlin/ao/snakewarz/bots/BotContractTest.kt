@@ -4,6 +4,7 @@ import ao.snakewarz.botapi.Decision
 import ao.snakewarz.botapi.knob.BotKnob
 import ao.snakewarz.botapi.knob.BotParams
 import ao.snakewarz.botapi.registry.BotEntry
+import ao.snakewarz.core.grid.Grid
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -168,6 +169,55 @@ class BotContractTest {
     }
 
     @Test
+    fun `and none of it changes when the board has a map drawn into it`() {
+        // Every primitive in this module asks the board whether a square is free, and an interior
+        // wall is a square that never was — so the claims above are expected to hold unchanged on a
+        // board with a shape in it, and this is what turns "expected" into evidence for all ten bots
+        // at the price of one fixture. That the loop returns at all is the termination claim: a bot
+        // that took a walled region for an empty one would spin here rather than fail.
+        forEachSetting { setting ->
+            for (seats in SEAT_COUNTS) {
+                val match = setting.match(rows = 12, cols = 12, seats = seats, seed = 606, walls = MAP)
+                match.run()
+
+                assertTrue(match.decisions.isNotEmpty(), "$setting played no turns at all on a map")
+                for (recorded in match.decisions) {
+                    assertTrue(
+                        recorded.budgetConsumed <= DEFAULT_BUDGET,
+                        "$setting spent ${recorded.budgetConsumed} of $DEFAULT_BUDGET on a map",
+                    )
+                    if (recorded.legal.isEmpty) {
+                        continue
+                    }
+
+                    val decision = recorded.decision
+                    assertTrue(
+                        decision is Decision.Move && decision.direction in recorded.legal,
+                        "$setting at $seats seats answered $decision on a map turn with ${recorded.legal} available",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `an empty map is the absence of one, which is what every golden hash is taken over`() {
+        // A map reaches a bot down two paths that have nothing to do with each other: a Zobrist key
+        // folded into `BoardView.hash`, and the denominator every share of the board is taken
+        // against. A map of no squares has to be the identity on both, or the pinned move streams
+        // stop describing the game the app plays. Asserted for the searchers because a tree is what
+        // one bit of a fingerprint can move.
+        for (entry in ShippedBots.entries.filter { it.search != null }) {
+            val plain = HeadlessMatch(listOf(entry, entry), rows = 12, cols = 12, seed = 4242)
+            val mapless = HeadlessMatch(listOf(entry, entry), rows = 12, cols = 12, seed = 4242, walls = IntArray(0))
+            plain.run()
+            mapless.run()
+
+            assertEquals(plain.moves(), mapless.moves(), "${entry.id} plays a different match on a map of nothing")
+        }
+    }
+
+    @Test
     fun `every knob at its declared default plays the match no knobs at all plays`() {
         // The drift gate. A knob is its own reader precisely so the number on the form and the
         // number in the field initializer cannot disagree — this catches the one way left to break
@@ -254,13 +304,21 @@ class BotContractTest {
      * can be pasted straight into a batch to reproduce it.
      */
     private class Setting(val entry: BotEntry, val params: BotParams, private val label: String) {
-        fun match(rows: Int, cols: Int, seats: Int, seed: Long, budgetPerTurn: Int = DEFAULT_BUDGET): HeadlessMatch =
+        fun match(
+            rows: Int,
+            cols: Int,
+            seats: Int,
+            seed: Long,
+            budgetPerTurn: Int = DEFAULT_BUDGET,
+            walls: IntArray = IntArray(0),
+        ): HeadlessMatch =
             HeadlessMatch(
                 List(seats) { entry },
                 rows = rows,
                 cols = cols,
                 seed = seed,
                 budgetPerTurn = budgetPerTurn,
+                walls = walls,
                 paramsPerSlot = List(seats) { params },
             )
 
@@ -285,5 +343,31 @@ class BotContractTest {
 
         /** The shapes a bot might be handed, from degenerate to the largest the app opens on. */
         val GEOMETRIES = listOf(1 to 1, 1 to 5, 2 to 2, 3 to 7, 20 to 20)
+
+        /**
+         * The map the sweep above is run on: two bars, four pillars and a block in the middle.
+         *
+         * Drawn rather than generated so a failure can be read against a picture. Connected, so no
+         * seat is walled into a room of its own before a move is played; the four corners are open,
+         * because that is where `cornerSpawns` puts the snakes; and symmetric under both
+         * reflections, so it is not a handicap on whoever draws a corner.
+         */
+        val MAP: IntArray = wallsOf(
+            Grid(12, 12),
+            listOf(
+                "............",
+                ".####..####.",
+                "............",
+                "..#......#..",
+                "..#..##..#..",
+                ".....##.....",
+                ".....##.....",
+                "..#..##..#..",
+                "..#......#..",
+                "............",
+                ".####..####.",
+                "............",
+            ),
+        )
     }
 }

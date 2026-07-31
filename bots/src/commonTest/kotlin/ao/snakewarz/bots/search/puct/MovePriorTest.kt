@@ -175,6 +175,46 @@ class MovePriorTest {
     }
 
     @Test
+    fun `the wall count is the border comparison, on every square of a board without a map`() {
+        // The equivalence no golden can see: `PuctBot.PRIOR_WALL` is zero at every shipped setting,
+        // so the branch is dead in every pinned move stream and an error in it would surface only in
+        // a batch somebody ran with the weight turned up. Asked of every square of five geometries,
+        // and to the Double rather than to the ranking, because the reading is a term in a sum.
+        for ((rows, cols) in listOf(1 to 1, 1 to 5, 5 to 1, 2 to 2, 7 to 7)) {
+            for (row in 0 until rows) {
+                for (col in 0 until cols) {
+                    val board = boardOf(rows, cols, row to col)
+                    assertEquals(
+                        borderPrior(board).toList(),
+                        priorOf(board, wall = 0.5).toList(),
+                        "the wall reading parts from the border on ${rows}x$cols at ($row, $col)",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `and beside an interior wall it counts that too, where a coordinate sees nothing`() {
+        // Head in the middle of a 5x5 with one square of map beside the square to its west, so no
+        // destination is anywhere near the border and the whole reading is the map.
+        //
+        //   . . . . .
+        //   . . . . .
+        //   # . H . .        the wall at (2, 0) is beside the destination at (2, 1)
+        //   . . . . .
+        //   . . . . .
+        val board = boardOf(5, 5, 2 to 2, walls = listOf(2 to 0))
+        val prior = priorOf(board, liberty = 0.0, wall = 1.0)
+
+        // Only west scores, so the shares are 2:1:1:1 over PRIOR_FLOOR.
+        assertEquals(0.4, prior[Direction.WEST.ordinal])
+        for (way in listOf(Direction.NORTH, Direction.EAST, Direction.SOUTH)) {
+            assertEquals(0.2, prior[way.ordinal], "$way is nowhere near a wall")
+        }
+    }
+
+    @Test
     fun `the temperature is the only thing that separates two identical rankings`() {
         // Both forms are monotone in the score, so the ordering cannot move. What moves is the gap,
         // and PUCT spends its allowance in proportion to exactly that.
@@ -213,6 +253,55 @@ class MovePriorTest {
     }
 
     // -- internals
+
+    /**
+     * The prior a comparison against the four board edges produces, spelled out in `(row, col)`.
+     *
+     * The oracle for the equivalence above, and it has to be written here rather than borrowed: on a
+     * board without a map the two readings are the same number, which is exactly why nothing else in
+     * the suite can tell them apart.
+     */
+    private fun borderPrior(board: Board, liberty: Double = 0.5, wall: Double = 0.5): DoubleArray {
+        val grid = board.grid
+        val mover = board.toAct
+        val head = board.snake(mover).head
+        val legal = board.legalMoves(mover)
+
+        val scores = DoubleArray(Direction.entries.size)
+        var total = 0.0
+
+        for (i in 0 until legal.size) {
+            val direction = legal.nth(i)
+            val destination = grid.step(head, direction)
+            val row = grid.rowOf(head) + direction.dRow
+            val col = grid.colOf(head) + direction.dCol
+
+            var liberties = 0
+            for (way in Direction.entries) {
+                if (board.isFree(grid.step(destination, way))) {
+                    liberties++
+                }
+            }
+
+            var edges = 0
+            if (row == 0) edges++
+            if (row == grid.rows - 1) edges++
+            if (col == 0) edges++
+            if (col == grid.cols - 1) edges++
+
+            // Associated the way the prior associates it, so this is the same Double and not merely
+            // the same quantity.
+            val score = MovePrior.PRIOR_FLOOR + (liberty * liberties + wall * edges)
+            scores[direction.ordinal] = score
+            total += score
+        }
+
+        for (i in 0 until legal.size) {
+            val ordinal = legal.nth(i).ordinal
+            scores[ordinal] = scores[ordinal] / total
+        }
+        return scores
+    }
 
     private fun priorOf(
         board: Board,

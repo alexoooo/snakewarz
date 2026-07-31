@@ -1,6 +1,9 @@
 package ao.snakewarz.ui.model
 
+import ao.snakewarz.match.ladder.Ladder
 import ao.snakewarz.match.stats.MatchStats
+import ao.snakewarz.ui.model.ladder.LadderProgress
+import ao.snakewarz.ui.render.Theme
 
 /**
  * Everything the chrome renders, computed once per frame rather than per turn.
@@ -15,6 +18,59 @@ import ao.snakewarz.match.stats.MatchStats
  * there is one set of numbers rather than two.
  */
 internal class UiModel(
+    /** Which of the three sections is showing. Exactly one is, and the other two are `hidden`. */
+    val screen: Screen,
+    /**
+     * The rung of the ladder on the board, or `null` for a match somebody configured.
+     *
+     * Deliberately not derivable from [screen]: a level and a custom match are both played on
+     * [Screen.GAME], so what makes one a level is the way in and is kept while the board is up. It is
+     * the level *number* rather than a flag because everything downstream wants it — the bar names
+     * the level, the verdict offers the one above it, and progress is keyed on it.
+     */
+    val level: Int?,
+    /**
+     * How far up the ladder this browser has got, which the level select and the menu both read.
+     *
+     * Carried on the model rather than looked up where it is wanted, so that the tiles, the Continue
+     * button and the verdict cannot disagree about what has been beaten within one frame.
+     */
+    val ladder: LadderProgress,
+    /**
+     * The player has just beaten [level].
+     *
+     * What turns the verdict from "try again" into "move on": the card offers [nextLevel] instead of
+     * a retry, and on the last rung it offers neither. Always false in a custom match, which has no
+     * level to clear.
+     */
+    val levelCleared: Boolean,
+    /** The panel slid over the board, or `null` when the board has the screen to itself. */
+    val openPanel: Panel?,
+    /**
+     * The colours in force — the player's theme, resolved against their system's light or dark.
+     *
+     * Here rather than read statically wherever a colour is wanted, because a theme can move a
+     * trail hue: a scoreboard swatch painted from a global would keep the old theme's colour until
+     * something else happened to redraw it, which is intermittent and looks like nothing.
+     */
+    val theme: Theme,
+    /**
+     * The verdict on the match the player just finished — *"You win"* — or `null` when there is
+     * none to give, which is most of the time.
+     *
+     * Non-null is what opens the result dialog, so dismissing it is a matter of this going back to
+     * `null` rather than of the chrome remembering anything. Only ever about a match somebody
+     * played by hand: a batch's matches are the tournament's and a recording has been watched
+     * before.
+     */
+    val result: String?,
+    /**
+     * The face of whoever won the match [result] is about, shown beside the verdict.
+     *
+     * `null` for a draw, where there is nobody to show, and `null` whenever [result] is — the dialog
+     * says who beat you or who you beat, so a match still being played has no face to put on it.
+     */
+    val resultPortrait: String?,
     /** Watching a recording rather than playing a match. Reveals the scrub bar. */
     val replay: Boolean,
     /**
@@ -30,6 +86,13 @@ internal class UiModel(
     val stats: MatchStats,
     /** What to call each seat of the match [stats] describes. Rebuilt only when that match changes. */
     val labels: SlotLabels,
+    /**
+     * The face of each of those seats. Decoration beside the name, never instead of it.
+     *
+     * Rebuilt when the match changes *or* the theme does, because a bot with no shipped art is drawn
+     * in its seat's trail colour.
+     */
+    val portraits: SlotPortraits,
     /** The snake under the pointer, or `null` when the pointer is not over one. */
     val hover: HoverInfo?,
     /**
@@ -46,4 +109,20 @@ internal class UiModel(
 
     /** A running batch owns the board, so the match transport has nothing to drive. */
     val batchRunning: Boolean get() = tournament?.running == true
+
+    /**
+     * What may be changed about the match on the board.
+     *
+     * Derived from [level] rather than stored beside it, because "this is a level" and "this is level
+     * seven" would otherwise be two answers to one question — and the pair could disagree.
+     */
+    val mode: Mode get() = if (level == null) Mode.CUSTOM else Mode.LADDER
+
+    /**
+     * The rung the verdict offers to move on to, or `null` where there is none.
+     *
+     * `null` on a loss, on a draw, in a custom match, and on the last rung — which is where the card
+     * offers Home and the verdict says the ladder is finished.
+     */
+    val nextLevel: Int? get() = level?.takeIf { levelCleared && it < Ladder.size }?.plus(1)
 }

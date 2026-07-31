@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="You">
+    <!-- The one seat that is not a bot, so the one portrait that is a figure rather than a method. -->
+    <rect width="32" height="32" rx="6" fill="#16191d"/>
+    <rect x="12" y="5" width="8" height="8" fill="#7fe0a8"/>
+    <rect x="9" y="17" width="14" height="4" fill="#5fbf8a"/>
+    <rect x="6" y="21" width="20" height="7" fill="#4c9f74"/>
+</svg>

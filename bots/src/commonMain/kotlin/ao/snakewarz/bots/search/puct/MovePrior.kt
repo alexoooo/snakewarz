@@ -37,11 +37,12 @@ import kotlin.math.abs
  *   the seal question — `ChamberEval.sealPenalty`'s, the one reading that carried the whole of that
  *   leaf's gain — asked at the prior instead of at the leaf, for eight board reads rather than a
  *   decomposition. `PuctBot.PRIOR_PINCH` weights it.
- * - **Board edge.** How many of the destination's blocked neighbours are the wall rather than a
- *   snake. Liberties count the two the same, and they are not the same: a body square clears when a
- *   tail retracts and the board never does. Independent of the liberty count rather than a rescaling
- *   of it — `(liberties, edges)` and `(liberties, bodies)` span the same plane, and liberties alone
- *   spans a line in it. `PuctBot.PRIOR_WALL` weights it.
+ * - **Wall.** How many of the destination's blocked neighbours are the wall rather than a
+ *   snake — the border ring and the map's own obstacles alike. Liberties count the two the same, and
+ *   they are not the same: a body square clears when a tail retracts and a wall never does.
+ *   Independent of the liberty count rather than a rescaling of it — `(liberties, walls)` and
+ *   `(liberties, bodies)` span the same plane, and liberties alone spans a line in it.
+ *   `PuctBot.PRIOR_WALL` weights it.
  * - **Tail following.** Whether the step closes on this snake's own tail. A grid step changes a
  *   Manhattan distance by exactly one, so the reading is a clean `+1` or `-1` rather than a
  *   magnitude. `PuctBot.PRIOR_TAIL` weights it.
@@ -62,7 +63,10 @@ import kotlin.math.abs
  * | reading | paired ratio, 5 seeds |
  * |---|---|
  * | pinch — the whole eight-square ring instead of four | **1.01x** |
- * | board edge and tail together — no extra board reads at all | **1.02x** |
+ * | wall and tail together | **1.02x** |
+ *
+ * The wall row prices that reading's arithmetic and not the four board reads it makes; the pinch row
+ * above is what four more reads per destination cost, and it is 1.01x.
  *
  * Both are at or under the resolution of a `time` run, and that is what the rate argument above
  * predicts from the other side: a leaf at this setting sweeps a 196-square board and takes every
@@ -164,7 +168,7 @@ internal class MovePrior(
     private val libertyWeight: Double,
     /** Taken off per extra group the destination's free neighbours fall into — see [cuts]. */
     private val pinchPenalty: Double,
-    /** What one board edge the destination sits against is worth. */
+    /** What one wall square beside the destination is worth. */
     private val wallBonus: Double,
     /** Added to a step that closes on this snake's own tail, and taken off one that does not. */
     private val tailBias: Double,
@@ -183,9 +187,6 @@ internal class MovePrior(
 
     /** One when the diagonals are read as well, two when only the orthogonals are wanted. */
     private val ringStep = if (pinching) 1 else 2
-
-    private val lastRow = grid.rows - 1
-    private val lastCol = grid.cols - 1
 
     /**
      * Writes `P(s,a)` for every direction in [legal] into [priors], indexed by [Direction.ordinal].
@@ -234,25 +235,27 @@ internal class MovePrior(
                 }
             }
 
-            if (walling || following) {
+            if (walling) {
+                // Asked of the board rather than answered from the coordinates: an interior wall of
+                // a map is as impassable as the border ring and is invisible to a row and a column.
+                var walls = 0
+                var side = 0
+                while (side < RING) {
+                    if (board.isWall(Cell(destination + ring[side]))) {
+                        walls++
+                    }
+                    side += 2
+                }
+                if (walls != 0) {
+                    score += wallBonus * walls
+                }
+            }
+
+            if (following) {
                 val row = headRow + direction.dRow
                 val col = headCol + direction.dCol
-
-                if (walling) {
-                    var edges = 0
-                    if (row == 0) edges++
-                    if (row == lastRow) edges++
-                    if (col == 0) edges++
-                    if (col == lastCol) edges++
-                    if (edges != 0) {
-                        score += wallBonus * edges
-                    }
-                }
-
-                if (following) {
-                    val after = abs(row - tailRow) + abs(col - tailCol)
-                    score += if (after < tailNow) tailBias else -tailBias
-                }
+                val after = abs(row - tailRow) + abs(col - tailCol)
+                score += if (after < tailNow) tailBias else -tailBias
             }
 
             priors[direction.ordinal] = score

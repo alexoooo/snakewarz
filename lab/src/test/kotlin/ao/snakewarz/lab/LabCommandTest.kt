@@ -7,7 +7,11 @@ import ao.snakewarz.lab.arena.Openings
 import ao.snakewarz.lab.log.Replays
 import ao.snakewarz.lab.tune.SpsaJournal
 import ao.snakewarz.match.MatchSetup
+import ao.snakewarz.match.map.MapShape
+import ao.snakewarz.match.map.generateMap
+import ao.snakewarz.match.tournament.TournamentConfig
 import ao.snakewarz.match.tournament.TournamentFormat
+import ao.snakewarz.match.tournament.TournamentSchedule
 import java.nio.file.Files
 import kotlin.io.path.readLines
 import kotlin.test.Test
@@ -192,6 +196,103 @@ class LabCommandTest {
     }
 
     @Test
+    fun `a map is drawn at the run's own geometry and reaches the schedule`() {
+        val command = LabCommand.of(
+            "play uct space --rows 12 --cols 12 --map cross --seed 4".split(' '),
+            ShippedBots,
+        ) as PlayCommand
+
+        assertEquals(generateMap(12, 12, MapShape.CROSS).walls().toList(), command.config.walls().toList())
+        assertEquals(command.config.walls().toList(), TournamentSchedule(command.config).setupFor(0).walls().toList())
+    }
+
+    @Test
+    fun `no map at all is the same run as the empty map, byte for byte`() {
+        // What lets every command written before maps existed keep its meaning, and every batch
+        // already in the log stay comparable with a new one that spells the default out.
+        val bare = LabCommand.of("play uct space --rows 12 --cols 12".split(' '), ShippedBots) as PlayCommand
+        val named = LabCommand.of(
+            "play uct space --rows 12 --cols 12 --map empty".split(' '),
+            ShippedBots,
+        ) as PlayCommand
+
+        assertEquals(0, bare.config.wallCount)
+        assertEquals(bare.config.walls().toList(), named.config.walls().toList())
+        assertEquals(
+            TournamentSchedule(bare.config).setupFor(0),
+            TournamentSchedule(named.config).setupFor(0),
+        )
+    }
+
+    @Test
+    fun `a map nobody has heard of names the ones there are`() {
+        val failure = assertFailsWith<IllegalStateException> {
+            LabCommand.of("play uct space --map crross".split(' '), ShippedBots)
+        }
+
+        assertContains(failure.message.orEmpty(), "crross")
+        assertContains(failure.message.orEmpty(), "double-spiral")
+    }
+
+    @Test
+    fun `a board too small for a shape refuses by name rather than drawing half of one`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of("play uct space --map double-spiral --rows 12 --cols 12".split(' '), ShippedBots)
+        }
+
+        // A `main` catches this, so what a person sees is the sentence rather than a stack trace.
+        assertContains(failure.message.orEmpty(), "double-spiral")
+        assertContains(failure.message.orEmpty(), "13")
+    }
+
+    @Test
+    fun `a density with no map behind it is refused rather than silently placing nothing`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of("play uct space --density 0.2".split(' '), ShippedBots)
+        }
+
+        assertContains(failure.message.orEmpty(), "--density")
+
+        val scattered = LabCommand.of(
+            "play uct space --map scatter --density 0.2 --rows 12 --cols 12".split(' '),
+            ShippedBots,
+        ) as PlayCommand
+        val shipped = LabCommand.of(
+            "play uct space --map scatter --rows 12 --cols 12".split(' '),
+            ShippedBots,
+        ) as PlayCommand
+
+        assertTrue(scattered.config.wallCount > shipped.config.wallCount, "a density has to reach the shape")
+    }
+
+    @Test
+    fun `every subcommand that plays a board can be given a map to play it on`() {
+        val time = LabCommand.of("time uct --map ring --rows 12 --cols 12".split(' '), ShippedBots) as TimeCommand
+        val ab = LabCommand.of("ab uct space --map ring --rows 12 --cols 12".split(' '), ShippedBots) as AbCommand
+        val tune = LabCommand.of(
+            "tune puct --knobs cpuct --map ring --rows 12 --cols 12".split(' '),
+            ShippedBots,
+        ) as TuneCommand
+        val spsa = LabCommand.of(
+            "spsa puct --knobs cpuct --map ring --rows 12 --cols 12".split(' '),
+            ShippedBots,
+        ) as SpsaCommand
+
+        val ring = generateMap(12, 12, MapShape.RING).walls().toList()
+        assertEquals(ring, time.walls.toList())
+        assertEquals(ring, ab.walls.toList())
+        assertEquals(ring, tune.walls.toList())
+        assertEquals(ring, spsa.walls.toList())
+    }
+
+    @Test
+    fun `rate narrows the log by map, exactly as it narrows it by board`() {
+        val command = LabCommand.of(listOf("rate", "--map", "cross"), ShippedBots) as RateCommand
+
+        assertEquals(mapOf("map" to "cross"), command.filters)
+    }
+
+    @Test
     fun `rate reads the log rather than playing, so it takes no entrants`() {
         assertFailsWith<IllegalArgumentException> { LabCommand.of(listOf("rate", "uct"), ShippedBots) }
         assertFailsWith<IllegalStateException> { LabCommand.of(listOf("rate", "--log", "none"), ShippedBots) }
@@ -288,6 +389,52 @@ class LabCommandTest {
         }
 
         assertContains(failure.message.orEmpty(), "declares no knobs")
+    }
+
+    @Test
+    fun `ladder takes a reference and a round count, and no board of its own`() {
+        val command = LabCommand.of("ladder --against uct:budget=100 --rounds 4".split(' '), ShippedBots)
+            as LadderCommand
+
+        assertEquals(BotId("uct"), command.reference.bot)
+        assertEquals(100, command.reference.budgetPerTurn)
+        assertEquals(4, command.rounds)
+
+        // Every board a ladder run plays comes off the level, so a `--rows` here would measure ten
+        // levels on a board none of them is played on.
+        val board = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of("ladder --rows 12".split(' '), ShippedBots)
+        }
+        assertContains(board.message.orEmpty(), "--rows")
+    }
+
+    @Test
+    fun `a ladder reference nobody has heard of names the ones there are`() {
+        val failure = assertFailsWith<IllegalStateException> {
+            LabCommand.of("ladder --against nosuchbot".split(' '), ShippedBots)
+        }
+
+        assertContains(failure.message.orEmpty(), "nosuchbot")
+        assertContains(failure.message.orEmpty(), "uct")
+    }
+
+    @Test
+    fun `a ladder reference left unset is pinned rather than taking each level's own allowance`() {
+        val command = LabCommand.of(listOf("ladder"), ShippedBots) as LadderCommand
+
+        assertEquals(LadderCommand.DEFAULT_REFERENCE, command.reference.bot.slug)
+        assertEquals(LadderCommand.REFERENCE_BUDGET, command.reference.budgetPerTurn)
+        assertEquals(TournamentConfig.DEFAULT_ROUNDS, command.rounds)
+        assertEquals(Openings.MIRRORED, command.openings)
+    }
+
+    @Test
+    fun `ladder plays the levels rather than a field, so it takes no entrants`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of(listOf("ladder", "uct"), ShippedBots)
+        }
+
+        assertContains(failure.message.orEmpty(), "--against")
     }
 
     @Test

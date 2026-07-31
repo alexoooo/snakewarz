@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Space Filler">
+    <!-- A flood spreading out of one corner and fading: it counts the room a move leaves. -->
+    <rect width="32" height="32" rx="6" fill="#16191d"/>
+    <rect x="4" y="4" width="7" height="7" fill="#7fe0a8"/>
+    <rect x="12" y="4" width="7" height="7" fill="#5fbf8a"/>
+    <rect x="20" y="4" width="7" height="7" fill="#4c9f74"/>
+    <rect x="4" y="12" width="7" height="7" fill="#5fbf8a"/>
+    <rect x="12" y="12" width="7" height="7" fill="#4c9f74"/>
+    <rect x="20" y="12" width="7" height="7" fill="#3a7f5c"/>
+    <rect x="4" y="20" width="7" height="7" fill="#4c9f74"/>
+    <rect x="12" y="20" width="7" height="7" fill="#3a7f5c"/>
+    <rect x="20" y="20" width="7" height="7" fill="#2b6046"/>
+</svg>

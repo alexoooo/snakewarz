@@ -4,6 +4,7 @@ import ao.snakewarz.core.random.SplitMix64
 import ao.snakewarz.core.snake.SnakeId
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
@@ -124,9 +125,44 @@ class OccupancyTest {
     }
 
     @Test
+    fun `a wall of the map is the ring's byte on a playable square`() {
+        val grid = Grid(rows = 3, cols = 3)
+        val occupancy = Occupancy(grid)
+        val walled = grid.cellAt(0, 1)
+
+        occupancy.wall(walled)
+
+        assertTrue(occupancy.isWall(walled))
+        assertFalse(occupancy.isFree(walled))
+        assertEquals(SnakeId.NONE, occupancy.ownerOf(walled), "a wall has no owner to report")
+        assertEquals(0L, occupancy.hash, "the map is as constant as the ring, and as absent from the hash")
+        assertEquals(
+            DirectionSet.of(Direction.SOUTH),
+            occupancy.freeNeighbors(grid.cellAt(0, 0)),
+            "a wall of the map blocks exactly like the ring",
+        )
+    }
+
+    @Test
+    fun `walling refuses any square that is not already empty`() {
+        val grid = Grid(rows = 4, cols = 4)
+        val occupancy = Occupancy(grid)
+        val taken = grid.cellAt(2, 2)
+        val walled = grid.cellAt(1, 1)
+
+        occupancy.occupy(taken, SnakeId(0))
+        occupancy.wall(walled)
+
+        assertFailsWith<IllegalArgumentException>("a square a snake stands on") { occupancy.wall(taken) }
+        assertFailsWith<IllegalArgumentException>("the same square twice") { occupancy.wall(walled) }
+        assertFailsWith<IllegalArgumentException>("a square of the ring") { occupancy.wall(Cell(0)) }
+    }
+
+    @Test
     fun `copyFrom reproduces contents and hash, and clear leaves the walls alone`() {
         val grid = Grid(rows = 4, cols = 4)
         val source = Occupancy(grid)
+        source.wall(grid.cellAt(1, 2))
         source.occupy(grid.cellAt(0, 0), SnakeId(0))
         source.occupy(grid.cellAt(3, 3), SnakeId(1))
 
@@ -137,6 +173,7 @@ class OccupancyTest {
         assertEquals(source.hash, copy.hash)
         assertEquals(SnakeId(0), copy.ownerOf(grid.cellAt(0, 0)))
         assertEquals(SnakeId(1), copy.ownerOf(grid.cellAt(3, 3)))
+        assertTrue(copy.isWall(grid.cellAt(1, 2)), "the map rides along with the bytes")
         assertTrue(copy.isFree(grid.cellAt(2, 2)), "the copy must not keep its own old contents")
 
         copy.clear()
@@ -144,5 +181,6 @@ class OccupancyTest {
         assertTrue(copy.isFree(grid.cellAt(0, 0)))
         assertTrue(copy.isWall(Cell(0)), "clearing must not open a hole in the wall ring")
         assertTrue(copy.isWall(Cell(grid.cellCount - 1)))
+        assertTrue(copy.isWall(grid.cellAt(1, 2)), "nor in the map")
     }
 }
