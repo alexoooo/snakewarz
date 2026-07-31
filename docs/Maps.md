@@ -24,12 +24,12 @@ Two types, and the split between them is what the replay format rests on.
 carries the bitmap itself, and the consequence is the freedom worth protecting: **a shape can be
 redesigned or deleted without breaking a single link anybody has shared.** A `MapShape.slug` is still
 frozen on release under [SW-05](Coding-Standards.md#sw-05--released-identifiers-are-frozen), because
-it reaches a `:lab` flag, a `:ui` picker and a ladder level — but not because it is in a URL, because
+it reaches a `:lab` flag, a `:ui` picker and a gauntlet level — but not because it is in a URL, because
 it is not.
 
 ## The catalogue
 
-Eight shapes, in the order `MapShape` declares them. `minimumSide` is the smallest board the shape can
+Eleven shapes, in the order `MapShape` declares them. `minimumSide` is the smallest board the shape can
 express itself on; `generateMap` refuses anything smaller **by name** rather than emitting a
 degenerate map, because a cross with no arms and a spiral with half a turn both look like bugs in the
 *game* rather than like small versions of themselves.
@@ -37,17 +37,22 @@ degenerate map, because a cross with no arms and a spiral with half a turn both 
 | slug | min side | the picture | what it is *for* |
 |---|---|---|---|
 | `empty` | 1 | a bare rectangle | the incumbent, and the neutral setting every wall test is measured against |
+| `arena` | 8 | a solid block at the centre and four satellite squares | the most open thing here after `empty`: a game about **position** rather than about corridors |
 | `pillars` | 5 | lone squares on a lattice of period 3, inset one from the border | barely changes how the board plays and changes its **colour balance**, which is what `ChamberEval`'s parity term is about |
+| `pinwheel` | 11 | four straight arms turning about the centre, none of them meeting | wide lanes, and the open positional board a person can read |
 | `ring` | 7 | a hollow rectangle inset from the border, one gap a side | an inside and an outside |
 | `cross` | 7 | one horizontal and one vertical bar, broken across the middle | four rooms joined at a chokepoint — and the shape that **lifts a room-filler enormously** |
-| `diagonals` | 9 | parallel anti-diagonal bars, each opened at its middle | breaks the axis-aligned assumption in `MovePrior`'s wall reading and in `SurvivalHorizon`'s Manhattan proxy for tail distance |
-| `rooms` | 11 | chambers on a grid of corridors, one doorway per shared wall | where a chamber decomposition earns its keep |
-| `double-spiral` | 13 | two interleaved arms winding out from the centre | one long corridor: close to pure space-filling, parity dominates, and **more search is worse** |
-| `scatter` | 5 | isolated squares to a requested density | the randomiser — the one shape that reads a seed, for a field that is not four games |
+| `diagonals` | 10 | parallel anti-diagonal bars, each opened three or four squares wide at its middle | breaks the axis-aligned assumption in `MovePrior`'s wall reading and in `SurvivalHorizon`'s Manhattan proxy for tail distance |
+| `rooms` | 14 | chambers on a grid of corridors, a doorway two or three squares wide per shared wall | where a chamber decomposition earns its keep |
+| `double-spiral` | 13 | two interleaved arms winding out from the centre, two squares of corridor between them | one long corridor: close to pure space-filling, parity dominates, and **more search is worse** |
+| `scatter` | 5 | isolated squares to a requested density | the randomiser — for a field that is not four games |
+| `islands` | 9 | isolated blocks of mixed size to a requested density | `scatter` with something to hide behind, and the second board that is different every seed |
 
-`scatter` is the only shape that reads `seed`, and the only one that reads `density`. Everything else
-is a function of the geometry alone, which is exactly what makes a level a board a player learns
-rather than a fresh one each time.
+`scatter` and `islands` are the only shapes that read `seed`, and the only ones that read `density`.
+Everything else is a function of the geometry alone, which is exactly what makes a level a board a
+player learns rather than a fresh one each time. `islands` ships at a lower default density than
+`scatter`: a block keeps a free square from every edge, so it has the interior to work in and not the
+whole board.
 
 **Two shapes have their KDoc reasons on the geometry itself**, and both are the kind of thing that
 looks arbitrary until it is stated:
@@ -107,12 +112,25 @@ Each shape earns it differently, and the argument matters more than the check:
   in the board's first half is offered exactly once in a shuffled order, so the walk terminates
   whatever is asked of it. A density the rule cannot reach therefore **fails, reporting what it
   managed**, rather than sampling until it passes.
+- `islands` places isolated *blocks*, and two blocks between them **can** cut a rectangle in half, so
+  the argument has to be made differently: `HalfBoard.placeIsolatedBlock` also keeps a free square
+  between every block and every edge. A free border ring plus rectangles that never touch is enough —
+  the ring of squares immediately round a block is entirely open and 4-connected, so a walk blocked
+  going up follows it to a strictly lower row and repeats until it reaches row 0. The shape offers
+  every block size at each candidate rather than only the one it drew, which is what keeps a density
+  it has the room for from failing on a *seed*.
+- `arena` places its centre block and its satellites through the same method, so it inherits that
+  argument rather than making one. The placements are a function of the size alone, so a board that
+  cannot hold them is a `minimumSide` that is wrong: they are `check`s.
 - `ring` and `cross` are drawn with their gaps in them.
-- `diagonals` opens every bar at its middle, and ρ reverses a bar end for end, so the middle is the
-  one position that lands on the middle of the image bar. The openings line up into a corridor along
-  the board's other diagonal.
-- `rooms` puts a doorway at the middle of every band a wall line crosses, so the chamber graph *is*
+- `diagonals` opens every bar on its middle, and ρ reverses a bar end for end, so a run centred on
+  the middle is the one that lands on the image bar's opening. The openings line up into a corridor
+  along the board's other diagonal. A bar no longer than its own opening simply does not appear.
+- `rooms` puts a doorway on the middle of every band a wall line crosses, so the chamber graph *is*
   the grid. Connectivity is a construction, not a check that happened to pass.
+- `pinwheel`'s four arms stop short of each other at every corner — the horizontal arm ends on the
+  centre column and the vertical arm stands past it — so the loop they nearly draw is broken four
+  times and encloses nothing.
 - `double-spiral`'s arm visits each inset on **one** side only, and its image visits that inset a half
   turn away — so an inset is covered on two opposite sides at most, and an opposite pair encloses
   nothing.
@@ -122,9 +140,17 @@ the centre of the board rather than a wall. A wall through the centre is one squ
 side and two on an even one, so the middle chamber of a 12-row board would be a different shape from
 the middle chamber of a 13-row one.
 
+**A doorway wider than one square is two-or-three and never a flat two, and `diagonals`' opening is
+three-or-four for the same reason.** ρ reverses a band or a bar end for end, so only a run *centred*
+on its middle lands on its own image. An even-length band has no single middle square, so a centred
+run in it has even length; an odd-length one does not. A flat two on an odd band would put its
+doorway a square off its own image, and the mirror would open a second doorway rather than the same
+one. That is also what sets both shapes' `minimumSide`: a band or a bar no wider than its own opening
+leaves no wall behind at all, and a lattice of crossing points is not `rooms`.
+
 ## Adding a shape
 
-Six steps, and the first four are one file each.
+Seven steps, and the first four are one file each.
 
 1. **Add the enum constant** to `MapShape` with its slug and `minimumSide`. Lowercase letters, digits
    and hyphens — `BotId`'s charset, safe in a URL and in a filename without escaping — and
@@ -134,18 +160,25 @@ Six steps, and the first four are one file each.
    `HalfBoard` and let the mirror do the symmetry; do not try to be symmetric by hand.
 3. **Add its `<option>`** to the map picker in `index.html`. `SetupPanel` looks each shape's option up
    by slug at boot and **fails with the shape's own name** if it is missing, so this is a startup
-   error rather than a picker that quietly offers eight of nine.
-4. **Nothing else.** `GenerateMapTest` sweeps `MapShape.entries` at every size, so the enum entry is
+   error rather than a picker that quietly offers ten of eleven.
+4. **Add the same `<option>` to `SetupPanelTest.SKELETON`.** That skeleton is the page the browser
+   suite builds the panel against, and the lookup above runs in its constructor — so a shape missing
+   from it fails *every* case in that file, at construction, naming the shape. It is the one step
+   that is not obvious from the change and the one a green JVM run will not tell you about.
+5. **Nothing else.** `GenerateMapTest` sweeps `MapShape.entries` at every size, so the enum entry is
    what enrols the shape in the symmetry, one-region, ends-pair and determinism tests. `:lab`'s
    `--map` lists it. `rate --map` narrows to it. No codec change, ever — a shape is not in a replay.
 
 Then the two things a new shape has to answer for before a number is quoted on it:
 
-5. **Check what a lattice anchor does.** A period-`p` lattice is ρ-invariant only at the right offset;
+6. **Check what a lattice anchor does.** A period-`p` lattice is ρ-invariant only at the right offset;
    `symmetricAnchor` solves `2a ≡ extent - 1 (mod p)` by trying every residue. Start a pattern at a
    fixed offset instead and the mirrored half lands *between* the drawn half's rows — symmetric, and
-   visibly not one lattice.
-6. **Measure it, and expect an inversion.** See below.
+   visibly not one lattice. **An even period costs a board whose two sides differ in parity**: `2a` is
+   even, so `extent - 1` has to be, and no residue survives where it is not. `diagonals` pays that
+   price for a spacing of six — it refuses a 12x13 board by name — and every board the picker, the
+   gauntlet and the sweep offer is square.
+7. **Measure it, and expect an inversion.** See below.
 
 ## A shape is a new question, not a new difficulty
 
@@ -154,9 +187,17 @@ invert something until measured. On `cross` the top pair inverts and the field c
 to 479 while `wallhug` gains about 400; on `double-spiral` at 16x16, `puct` at a quarter allowance
 beats itself at the full one 77–23 and loses 23–77 on a bare board of the same size.
 
-That is why the ladder's map assignments are measurements rather than a difficulty ramp —
-`Ladder`'s KDoc names the two that look misplaced without the run behind them — and why
+> **Both numbers were taken before 2026-07-31, and one of the two shapes has been redrawn since.**
+> `cross` is unchanged, so its figure stands. `double-spiral`'s corridors alternated one and two
+> squares and are now a uniform two — which is precisely the property the 77–23 rested on, a corridor
+> tight enough to turn the game into a filling race. Treat that figure as the reason to measure a
+> redraw rather than as a reading of the shape that ships today. The same applies to `rooms` and
+> `diagonals` wherever a number is quoted on them: three shapes were redrawn and three added in one
+> change, and `Gauntlet`'s KDoc carries which of its placements are consequently guesses.
+
+That is why the gauntlet's map assignments are measurements rather than a difficulty ramp —
+`Gauntlet`'s KDoc names the two that look misplaced without the run behind them — and why
 `RunHeader.comparabilityKey` carries the map so `rate` refuses to pool across it.
 [`Workflow.md`](Workflow.md#boards-with-walls-in-them) is what to read before running the batch, and
-[`Bots.md`](Bots.md#the-single-player-ladder-is-a-different-ordering-and-it-is-measured-per-level)
+[`Bots.md`](Bots.md#the-single-player-gauntlet-is-a-different-ordering-and-it-is-measured-per-level)
 carries the numbers.

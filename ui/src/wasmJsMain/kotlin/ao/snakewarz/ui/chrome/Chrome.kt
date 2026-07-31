@@ -4,7 +4,7 @@ import ao.snakewarz.botapi.registry.BotRegistry
 import ao.snakewarz.core.grid.Direction
 import ao.snakewarz.core.rules.EliminationReason
 import ao.snakewarz.match.MatchSetup
-import ao.snakewarz.match.ladder.Ladder
+import ao.snakewarz.match.gauntlet.Gauntlet
 import ao.snakewarz.match.stats.SlotStats
 import ao.snakewarz.ui.chrome.panel.SettingsPanel
 import ao.snakewarz.ui.chrome.panel.SetupPanel
@@ -37,7 +37,7 @@ import org.w3c.dom.events.MouseEvent
  *
  * What is *here* is the game screen: the board, the transport, the scrub row, the status line, the
  * seat cards and the keyboard. Which screen is showing and what is layered over it belongs to
- * [Shell], the modes on offer to [HomeScreen], the level select to [LadderScreen], and everything
+ * [Shell], the modes on offer to [HomeScreen], the level select to [GauntletScreen], and everything
  * dense to the four panels — all of them rendered from the same model on the way through [render].
  */
 internal class Chrome(
@@ -47,7 +47,7 @@ internal class Chrome(
 ) {
     private val shell = Shell(dispatch)
     private val home = HomeScreen(dispatch)
-    private val ladder = LadderScreen(registry, portraits, dispatch)
+    private val gauntlet = GauntletScreen(registry, portraits, dispatch)
     private val setupPanel = SetupPanel(registry, dispatch)
     private val tournamentPanel = TournamentPanel(dispatch)
     private val sharePanel = SharePanel(dispatch)
@@ -120,6 +120,9 @@ internal class Chrome(
 
     fun readOptions(): MatchOptions = setupPanel.readOptions()
 
+    /** Draws a fresh seed into the form, so that the next [readOptions] is a game nobody has played. */
+    fun reseed(): Unit = setupPanel.reseed()
+
     /**
      * The two forms, read as one: the field comes off the seats and the schedule off the tournament
      * panel, which is why neither of them owns the whole answer.
@@ -134,9 +137,9 @@ internal class Chrome(
     fun render(model: UiModel) {
         // Ahead of the shell, and that ordering is load-bearing: the level select marks the tile it
         // would open `[data-focus]`, and the shell takes the focus to it on the very frame the
-        // screen arrives. Render them the other way round and arriving on the ladder by keyboard
+        // screen arrives. Render them the other way round and arriving on the gauntlet by keyboard
         // lands on whichever tile was open last time.
-        ladder.render(model)
+        gauntlet.render(model)
 
         shell.render(model)
         home.render(model)
@@ -157,7 +160,7 @@ internal class Chrome(
         // two snakes on a rectangle, and the title is the only thing that tells them apart. A custom
         // match is named by its seats already, so the bar goes back to naming the game. One line
         // either way — the bar's height is what the board's track is measured against.
-        wordmark.textContent = model.level?.let { "Level $it — ${Ladder.levelAt(it).title}" } ?: GAME_NAME
+        wordmark.textContent = model.level?.let { "Level $it — ${Gauntlet.levelAt(it).title}" } ?: GAME_NAME
 
         // Rounds rather than turns, and the difference is whose count it is. A turn is one snake
         // moving, so a four-way match counts four of them per move and the number means nothing to

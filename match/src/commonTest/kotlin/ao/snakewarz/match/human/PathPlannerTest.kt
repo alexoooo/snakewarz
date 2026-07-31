@@ -20,13 +20,33 @@ class PathPlannerTest {
         val planner = PathPlanner(grid)
         planner.begin(grid.cellAt(4, 0))
 
-        assertTrue(planner.extend(openBoard(grid), grid.cellAt(4, 4)))
+        assertTrue(planner.route(openBoard(grid), grid.cellAt(4, 4)))
 
         assertPath(grid, planner, 4 to 0, 4 to 1, 4 to 2, 4 to 3, 4 to 4)
         assertEquals(4, planner.moveCount)
         for (i in 0 until planner.moveCount) {
             assertEquals(Direction.EAST.ordinal, planner.directions[i], "move $i")
         }
+    }
+
+    @Test
+    fun `a route turns once rather than stepping diagonally`() {
+        // The backward reconstruction prefers the predecessor continuing the direction just taken, so
+        // a shortest route comes out as an L. A staircase is what a drag draws, and only a drag.
+        val grid = Grid(9, 9)
+        val planner = PathPlanner(grid)
+        planner.begin(grid.cellAt(0, 0))
+
+        assertTrue(planner.route(openBoard(grid), grid.cellAt(3, 5)))
+
+        assertEquals(8, planner.moveCount, "three rows and five columns, however they are ordered")
+        var turns = 0
+        for (i in 1 until planner.moveCount) {
+            if (planner.directions[i] != planner.directions[i - 1]) {
+                turns++
+            }
+        }
+        assertEquals(1, turns, "an L has exactly one corner")
     }
 
     @Test
@@ -49,14 +69,47 @@ class PathPlannerTest {
 
     @Test
     fun `a route around a snake body is found`() {
-        // A body blocks a route exactly as a wall does, and both are read through the one question
-        // BoardView.isFree answers -- so neither is a case the planner has to know about.
+        // A body blocks a route exactly as a wall does when it will not have retracted in time, and
+        // both are read through Clearance rather than being cases the search knows about.
         val grid = Grid(5, 5)
-        val board = Board(grid, intArrayOf(grid.cellAt(0, 2).index))
-        repeat(4) { board.apply(SnakeId(0), Direction.SOUTH) }
+        val board = Board(grid, intArrayOf(grid.cellAt(4, 3).index))
+        board.apply(SnakeId(0), Direction.WEST)
+        repeat(2) { board.apply(SnakeId(0), Direction.NORTH) }
 
-        assertEquals(3, board.snake(SnakeId(0)).length, "snakes grow at half speed, so four moves is three squares")
+        val snake = board.snake(SnakeId(0))
+        assertEquals(grid.cellAt(2, 2), snake.head)
+        assertEquals(grid.cellAt(3, 2), snake.tail)
         assertDetourAroundColumnTwo(grid, board)
+    }
+
+    @Test
+    fun `a route walks through a body square that will have cleared by the time it is reached`() {
+        val grid = Grid(7, 7)
+        val board = corridorBoard(grid)
+        val planner = PathPlanner(grid)
+        planner.begin(grid.cellAt(3, 0))
+
+        assertTrue(planner.route(board, grid.cellAt(3, 6)))
+
+        assertEquals(6, planner.moveCount, "straight along row 3, through the gap in column 3")
+        assertEquals(grid.cellAt(3, 3), planner.cellAt(3), "the head sitting there has three moves to leave")
+    }
+
+    @Test
+    fun `a route goes round the same square when it would be reached one move too early`() {
+        // Same board, same square, one step closer: clearance is 2, so arrival 2 is refused and the
+        // only remaining way across the board is the gap at the top.
+        val grid = Grid(7, 7)
+        val board = corridorBoard(grid)
+        val planner = PathPlanner(grid)
+        planner.begin(grid.cellAt(3, 1))
+
+        assertTrue(planner.route(board, grid.cellAt(3, 6)))
+
+        assertEquals(11, planner.moveCount, "up, across the top gap and down again")
+        for (i in 0 until planner.cellCount) {
+            assertNotEquals(grid.cellAt(3, 3), planner.cellAt(i), "square $i sits on a head that has not moved yet")
+        }
     }
 
     @Test
@@ -69,9 +122,9 @@ class PathPlannerTest {
         )
         val planner = PathPlanner(grid)
         planner.begin(grid.cellAt(2, 2))
-        assertTrue(planner.extend(board, grid.cellAt(2, 4)))
+        assertTrue(planner.route(board, grid.cellAt(2, 4)))
 
-        assertFalse(planner.extend(board, grid.cellAt(0, 0)), "the corner is walled off from everything")
+        assertFalse(planner.route(board, grid.cellAt(0, 0)), "the corner is walled off from everything")
 
         assertPath(grid, planner, 2 to 2, 2 to 3, 2 to 4)
         assertEquals(Direction.EAST.ordinal, planner.directions[0])
@@ -86,55 +139,136 @@ class PathPlannerTest {
         val planner = PathPlanner(grid)
         planner.begin(grid.cellAt(2, 2))
 
-        assertFalse(planner.extend(board, grid.cellAt(-1, 2)), "the padded ring is not a square to aim at")
-        assertFalse(planner.extend(board, Cell.NONE))
+        assertFalse(planner.route(board, grid.cellAt(-1, 2)), "the padded ring is not a square to aim at")
+        assertFalse(planner.route(board, Cell.NONE))
+        assertEquals(0, planner.trace(board, Cell.NONE))
 
         assertEquals(1, planner.cellCount)
         assertTrue(planner.isEmpty)
     }
 
     @Test
-    fun `a route never crosses the path already drawn`() {
-        // A snake walking its own route would be walking into its own body, so the route has to go
-        // the long way round rather than back along itself.
-        val grid = Grid(7, 7)
+    fun `the anchor itself is a route, and it exists`() {
+        // What lets a press on your own head take hold and play nothing, which is how a freehand
+        // drawing starts.
+        val grid = Grid(5, 5)
         val board = openBoard(grid)
         val planner = PathPlanner(grid)
-        planner.begin(grid.cellAt(3, 3))
-        assertTrue(planner.extend(board, grid.cellAt(3, 6)))
+        planner.begin(grid.cellAt(2, 2))
+        assertTrue(planner.route(board, grid.cellAt(2, 4)))
 
-        assertTrue(planner.extend(board, grid.cellAt(3, 0)))
+        assertTrue(planner.route(board, grid.cellAt(2, 2)))
 
-        assertEquals(grid.cellAt(3, 0), planner.cellAt(planner.cellCount - 1))
-        assertEquals(11, planner.moveCount, "three squares out, then eight back around the far side")
-        for (i in 0 until planner.cellCount) {
-            for (j in i + 1 until planner.cellCount) {
-                assertNotEquals(planner.cellAt(i), planner.cellAt(j), "square $i is square $j all over again")
-            }
+        assertEquals(1, planner.cellCount)
+        assertTrue(planner.isEmpty)
+    }
+
+    @Test
+    fun `a route is what its anchor and target say, not what was drawn before it`() {
+        val grid = Grid(9, 9)
+        val board = openBoard(grid)
+
+        val redrawn = PathPlanner(grid)
+        redrawn.begin(grid.cellAt(4, 0))
+        assertTrue(redrawn.route(board, grid.cellAt(4, 3)))
+        assertTrue(redrawn.route(board, grid.cellAt(4, 7)))
+
+        val straight = PathPlanner(grid)
+        straight.begin(grid.cellAt(4, 0))
+        assertTrue(straight.route(board, grid.cellAt(4, 7)))
+
+        assertEquals(straight.cellCount, redrawn.cellCount)
+        for (i in 0 until straight.cellCount) {
+            assertEquals(straight.cellAt(i), redrawn.cellAt(i), "square $i")
+        }
+        for (i in 0 until straight.moveCount) {
+            assertEquals(straight.directions[i], redrawn.directions[i], "move $i")
         }
     }
 
     @Test
-    fun `a drag that pauses and resumes draws what one that did not would have`() {
+    fun `a trace draws the staircase between two squares`() {
         val grid = Grid(9, 9)
+        val planner = PathPlanner(grid)
+        planner.begin(grid.cellAt(0, 0))
+
+        assertEquals(8, planner.trace(openBoard(grid), grid.cellAt(3, 5)))
+
+        val expected = intArrayOf(
+            Direction.EAST.ordinal,
+            Direction.EAST.ordinal,
+            Direction.SOUTH.ordinal,
+            Direction.EAST.ordinal,
+            Direction.SOUTH.ordinal,
+            Direction.EAST.ordinal,
+            Direction.SOUTH.ordinal,
+            Direction.EAST.ordinal,
+        )
+        assertEquals(expected.size, planner.moveCount)
+        for (i in expected.indices) {
+            assertEquals(expected[i], planner.directions[i], "move $i")
+        }
+        for (i in 1 until planner.cellCount) {
+            val step = planner.cellAt(i).index - planner.cellAt(i - 1).index
+            assertTrue(step == 1 || step == -1 || step == grid.stride || step == -grid.stride, "square $i")
+        }
+    }
+
+    @Test
+    fun `a trace truncates rather than detours`() {
+        // No search, so a drag can neither detour nor jump: the line stops at the obstruction and the
+        // far side of it is never drawn, however long the pointer stays over there.
+        val grid = Grid(7, 7)
+        val board = Board(
+            grid,
+            intArrayOf(grid.cellAt(6, 6).index),
+            wallCells = intArrayOf(grid.cellAt(0, 3).index),
+        )
+        val planner = PathPlanner(grid)
+        planner.begin(grid.cellAt(0, 0))
+
+        assertEquals(2, planner.trace(board, grid.cellAt(0, 6)))
+
+        assertPath(grid, planner, 0 to 0, 0 to 1, 0 to 2)
+        assertEquals(0, planner.trace(board, grid.cellAt(0, 6)), "the pointer is still past the wall")
+        assertEquals(3, planner.cellCount)
+    }
+
+    @Test
+    fun `a trace back over the path shortens it`() {
+        val grid = Grid(7, 7)
         val board = openBoard(grid)
+        val planner = PathPlanner(grid)
+        planner.begin(grid.cellAt(3, 3))
+        assertEquals(3, planner.trace(board, grid.cellAt(3, 6)))
 
-        val paused = PathPlanner(grid)
-        paused.begin(grid.cellAt(4, 0))
-        assertTrue(paused.extend(board, grid.cellAt(4, 3)))
-        assertTrue(paused.extend(board, grid.cellAt(4, 7)))
+        assertEquals(0, planner.trace(board, grid.cellAt(3, 4)), "dragging back appends nothing")
 
-        val straight = PathPlanner(grid)
-        straight.begin(grid.cellAt(4, 0))
-        assertTrue(straight.extend(board, grid.cellAt(4, 7)))
+        assertPath(grid, planner, 3 to 3, 3 to 4)
+        assertEquals(Direction.EAST.ordinal, planner.directions[0])
+    }
 
-        assertEquals(straight.cellCount, paused.cellCount)
-        for (i in 0 until straight.cellCount) {
-            assertEquals(straight.cellAt(i), paused.cellAt(i), "square $i")
-        }
-        for (i in 0 until straight.moveCount) {
-            assertEquals(straight.directions[i], paused.directions[i], "move $i")
-        }
+    @Test
+    fun `revalidate cuts the route at the square somebody else took`() {
+        val grid = Grid(7, 7)
+        // The opponent acts first, so the route is cut by a move the player has not answered yet.
+        val board = Board(
+            grid,
+            intArrayOf(grid.cellAt(3, 0).index, grid.cellAt(2, 2).index),
+            turnOrder = intArrayOf(1, 0),
+        )
+        val planner = PathPlanner(grid)
+        planner.begin(grid.cellAt(3, 0))
+        assertTrue(planner.route(board, grid.cellAt(3, 4)))
+        assertPath(grid, planner, 3 to 0, 3 to 1, 3 to 2, 3 to 3, 3 to 4)
+        assertFalse(planner.revalidate(board), "nothing has moved since it was drawn")
+
+        board.apply(SnakeId(1), Direction.SOUTH)
+
+        assertTrue(planner.revalidate(board))
+        assertPath(grid, planner, 3 to 0, 3 to 1)
+        assertEquals(1, planner.moveCount)
+        assertEquals(Direction.EAST.ordinal, planner.directions[0])
     }
 
     @Test
@@ -142,7 +276,7 @@ class PathPlannerTest {
         val grid = Grid(9, 9)
         val planner = PathPlanner(grid)
         planner.begin(grid.cellAt(4, 0))
-        assertTrue(planner.extend(openBoard(grid), grid.cellAt(4, 3)))
+        assertTrue(planner.route(openBoard(grid), grid.cellAt(4, 3)))
 
         planner.advance()
 
@@ -170,7 +304,7 @@ class PathPlannerTest {
         )
         val planner = PathPlanner(grid)
         planner.begin(grid.cellAt(3, 2))
-        assertTrue(planner.extend(board, grid.cellAt(3, 4)))
+        assertTrue(planner.route(board, grid.cellAt(3, 4)))
 
         val buffer = InputBuffer(InputBuffer.PATH_CAPACITY)
         buffer.replace(planner.directions, planner.moveCount)
@@ -196,7 +330,7 @@ class PathPlannerTest {
 
         repeat(5_000) {
             planner.begin(grid.cellAt(4, 0))
-            assertTrue(planner.extend(board, grid.cellAt(4, 8)))
+            assertTrue(planner.route(board, grid.cellAt(4, 8)))
         }
 
         assertEquals(9, planner.cellCount)
@@ -207,12 +341,32 @@ class PathPlannerTest {
     private fun openBoard(grid: Grid): Board =
         Board(grid, intArrayOf(grid.cellAt(grid.rows - 1, grid.cols - 1).index))
 
-    /** Column 2 of a 5x5 is impassable from row 2 down, however it came to be, so a route goes over the top. */
+    /**
+     * A 7x7 split by a wall down column 3, open at row 0 and at row 3 — and a head parked on the row
+     * 3 gap that takes two of its own moves to leave.
+     */
+    private fun corridorBoard(grid: Grid): Board {
+        val board = Board(
+            grid,
+            intArrayOf(grid.cellAt(3, 4).index),
+            wallCells = intArrayOf(
+                grid.cellAt(1, 3).index,
+                grid.cellAt(2, 3).index,
+                grid.cellAt(4, 3).index,
+                grid.cellAt(5, 3).index,
+                grid.cellAt(6, 3).index,
+            ),
+        )
+        board.apply(SnakeId(0), Direction.WEST)
+        return board
+    }
+
+    /** A 5x5 whose column 2 cannot be crossed on row 2 in time, however it came to be, routes over the top. */
     private fun assertDetourAroundColumnTwo(grid: Grid, board: Board) {
         val planner = PathPlanner(grid)
         planner.begin(grid.cellAt(2, 1))
 
-        assertTrue(planner.extend(board, grid.cellAt(2, 3)))
+        assertTrue(planner.route(board, grid.cellAt(2, 3)))
 
         assertPath(grid, planner, 2 to 1, 1 to 1, 1 to 2, 1 to 3, 2 to 3)
     }

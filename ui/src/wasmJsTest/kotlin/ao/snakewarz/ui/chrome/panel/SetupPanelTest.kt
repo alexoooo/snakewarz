@@ -130,14 +130,46 @@ class SetupPanelTest {
     }
 
     @Test
-    fun `the map picker offers only the shapes the chosen board can draw`() {
+    fun `the map picker offers only the shapes the chosen board can draw, and says what they want`() {
         val size = document.getElementById("size") as HTMLSelectElement
         size.value = "8"
         size.dispatchEvent(Event("change"))
 
-        // Rooms wants eleven squares a side, so on an 8x8 leaving it pickable is a Start that throws.
-        assertTrue(option(MapShape.ROOMS).disabled, "rooms needs ${MapShape.ROOMS.minimumSide}")
+        // Rooms wants a band wider than its own door, so on an 8x8 leaving it pickable is a Start
+        // that throws. The number is read off the shape rather than written here, because a redrawn
+        // shape moves it and this test is about the label rather than about the figure in it.
+        val wants = MapShape.ROOMS.minimumSide
+        assertTrue(option(MapShape.ROOMS).disabled, "rooms needs $wants")
+        assertEquals("Rooms — needs $wants × $wants", option(MapShape.ROOMS).textContent)
         assertTrue(!option(MapShape.PILLARS).disabled, "pillars fits")
+        assertEquals("Pillars", option(MapShape.PILLARS).textContent, "so it says nothing extra")
+
+        size.value = "20"
+        size.dispatchEvent(Event("change"))
+
+        // The base label is the markup's and is captured once, so the suffix comes back off rather
+        // than accumulating on a picker that has been resized twice.
+        assertEquals("Rooms", option(MapShape.ROOMS).textContent)
+    }
+
+    @Test
+    fun `shrinking the board previews the map it fell back to, not the one it cannot draw`() {
+        val size = document.getElementById("size") as HTMLSelectElement
+        val map = document.getElementById("map") as HTMLSelectElement
+
+        size.value = "20"
+        size.dispatchEvent(Event("change"))
+        map.value = MapShape.ROOMS.slug
+        map.dispatchEvent(Event("change"))
+
+        size.value = "8"
+        size.dispatchEvent(Event("change"))
+
+        // `generateMap` refuses rooms on an 8x8, so a preview raised before the picker was regated
+        // would throw rather than draw — which is the whole of why that dispatch goes last.
+        val preview = intents.filterIsInstance<UiIntent.PreviewSetup>().last()
+        assertEquals(8, preview.options.rows)
+        assertEquals(0, preview.options.walls.size, "an 8x8 cannot draw rooms, so it drew nothing")
     }
 
     // -- internals
@@ -222,13 +254,16 @@ class SetupPanelTest {
             </select>
             <select id="map">
               <option value="empty" selected>Empty</option>
+              <option value="arena">Arena</option>
               <option value="pillars">Pillars</option>
+              <option value="pinwheel">Pinwheel</option>
               <option value="ring">Ring</option>
               <option value="cross">Cross</option>
               <option value="diagonals">Diagonals</option>
               <option value="rooms">Rooms</option>
               <option value="double-spiral">Double spiral</option>
               <option value="scatter">Scatter</option>
+              <option value="islands">Islands</option>
               <option id="map-from-replay" value="from-replay" hidden>from replay</option>
             </select>
             <select id="bot-0"></select>

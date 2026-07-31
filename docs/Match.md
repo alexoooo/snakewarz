@@ -60,26 +60,43 @@ nobody chose).
 
 ### A drawn route is a plan, not a promise
 
-`PathPlanner` routes breadth-first from wherever the path currently ends to the square the pointer is
-on, over squares that are free **now** and are not already on the path. That is the whole contract,
-and each half of it is load-bearing:
+`PathPlanner` draws two different things. A press calls `route`, which searches from the anchor under
+the head to the square the pointer named; a drag calls `trace`, which draws the line from the route's
+end towards the pointer and cuts it where it is blocked. Each part of that is load-bearing:
 
-- **Breadth-first rather than "append the square if it is adjacent".** A finger jumps several squares
-  between pointer events and so does a fast mouse, so demanding adjacency would make a route stutter
-  and make touch nearly unusable. Routing also means the planner goes *round* a body and round a wall,
-  which is a shape the straight line between two squares cannot be assumed to have.
-- **Free now, and nothing predicts the board it will meet.** Tails retract and opponents move, so a
-  route that was clear when it was drawn can kill you by the time it is walked. That is the game.
-  `InputBuffer.take` is the other half of the bargain: a queued direction that has become illegal is
-  *discarded* rather than played, so a square somebody else took costs the rest of the route and not
-  the player's life.
-- **`extend` returning `false` is an ordinary answer, not a fault.** Off the board, onto a wall or a
-  body, into a pocket the path has sealed behind itself, or longer than the queue can hold all read
-  the same way: the path is left exactly as it was and the player keeps dragging.
+- **`route` is breadth-first rather than "append the square if it is adjacent".** A press names where
+  to go rather than how, so the answer has to go *round* a body and round a wall — a shape the
+  straight line between two squares cannot be assumed to have. `trace` is the opposite on purpose: a
+  4-connected staircase with no search in it, because a drag names the way and must not be allowed to
+  detour or to jump.
+- **A square is passable at plan index `i` if it is free now, or its owner is alive and will have
+  retracted past it within `i - 1` of that snake's own moves.** `Clearance` is that arithmetic, and
+  **two unrelated reasons produce the same `i - 1`** — collapse them into one and whichever is fixed
+  is lost. For your own body it is an *ordering rule*: `Board.apply` reads `isFree(target)` before the
+  tail retracts, so your tail has clearance 1 and the route may enter it at step 2 and not at step 1.
+  For everyone else it is a *move count*: a retraction is visible the moment that snake's own move is
+  done, and an opponent has made `i - 1` or `i` moves depending where it sits in the cyclic to-act
+  order from the current `board.toAct` — which is not its slot index, because a route can be begun
+  mid-round. `i - 1` assumes fewer retractions, so it believes more squares occupied. Conservative,
+  always, and conservative is the only safe direction: `InputBuffer.take` answers a discarded
+  direction with *the next legal one from the same route*, so an over-optimistic plan makes the snake
+  skip to a later leg rather than stop.
+- **Three things are still unpredicted, and each is deliberate.** An opponent's future head — a square
+  free now is assumed free forever; a dead snake, whose body freezes where it fell; and
+  `growEveryNthMove == 1`, classic Tron, where no trail ever clears. `InputBuffer.take` remains the
+  other half of the bargain: a queued direction that has become illegal is *discarded* rather than
+  played, so a square somebody else took costs the rest of the route and not the player's life.
+- **`route` returning `false` is an ordinary answer, not a fault**, and so is `trace` appending `0`.
+  Off the board, onto a wall, into a pocket, or longer than the queue can hold all read the same way:
+  the path is left exactly as it was. The one answer that is not a refusal is a press on your own
+  head — a zero-length route *exists*, which is what lets a freehand drawing start from nothing.
+- **`revalidate` truncates rather than replans.** Everything past the first square that will still be
+  held when the snake could reach it is dropped, once per step, so a held route stays honest as
+  opponents move across it. Truncating to a bare anchor is not a state of its own: `InteractiveBot`
+  answers `Pending` and the clock above waits.
 - **The path is anchored on the head and consumed as the snake walks it.** `advance()` drops the
   square just left; `:ui` calls it on every move the player's slot makes and re-anchors when the
-  snake lands somewhere the route did not spell out — which really happens, because `take` discards a
-  queued direction that has gone illegal.
+  snake lands somewhere the route did not spell out.
 
 **`InputBuffer` has two capacities because it serves two intents, and `replace` is the second one.**
 `push` collapses a repeat of the direction queued last, because a held arrow key fires `keydown` at
@@ -258,15 +275,16 @@ cannot swap places between targets.
 happened and a cell that disagrees is a pairing the single number cannot describe. Those cells exist
 here, and `:lab`'s `rate` prints the worst of them.
 
-## The ladder is a table here, so it can be measured
+## The gauntlet is a table here, so it can be measured
 
-`ladder/` holds the ten single-player levels, and it is in `:match` for one reason: `:ui`, `:app`
+`gauntlet/` holds the eleven single-player levels, and it is in `:match` for one reason: `:ui`, `:app`
 **and `:lab`** all see this module, while `:ui` may never see `:bots`. Putting the table here is what
 lets `:lab` play the exact match a player will play and *measure* that level 7 is harder than level 6.
 
-- **A `LadderLevel` is a whole match configuration, not a difficulty number.** Three things move from
-  rung to rung and only one of them is the bot: the geometry ramps 8x8 to 20x20, the map shape changes,
-  and a searcher's allowance grows. Each moves the game about as much as swapping the algorithm does.
+- **A `GauntletLevel` is a whole match configuration, not a difficulty number.** Three things move from
+  rung to rung and only one of them is the bot: the geometry ramps 8x8 to 20x20 over the first ten and
+  drops back to 8x8 for the boss, the map shape changes, and a searcher's allowance grows. Each moves
+  the game about as much as swapping the algorithm does.
   `setup(seed, human)` builds an ordinary `MatchSetup` from all of it — human in slot 0, opponent in
   slot 1, turn order still shuffled from the seed, because a level is meant to be hard rather than
   unfair — so **a level is shareable, replayable and scrubbable exactly like a custom match**, and a
@@ -276,18 +294,23 @@ lets `:lab` play the exact match a player will play and *measure* that level 7 i
   under it would quietly hand somebody a different opponent at the same number.
 - **`index` is frozen on release**, and harder than a `BotId` is: it is the key somebody's saved
   progress is stored under. Renumbering the table moves every player's place in it.
-- **Six of the ten grant an allowance of zero**, which is the honest figure rather than a placeholder:
-  those bots spend nothing whatever they are handed, and writing a default there would imply their
-  difficulty has a knob in it.
-- **Only `scatter` reads the seed**, so nine of the levels are the same picture every time they are
+- **Six of the eleven grant an allowance of zero**, which is the honest figure rather than a
+  placeholder: those bots spend nothing whatever they are handed, and writing a default there would
+  imply their difficulty has a knob in it.
+- **Only `scatter` reads the seed**, so ten of the levels are the same picture every time they are
   opened — which is what makes a level a place a player learns rather than a fresh board.
 
-**The order is measured, and it is not the registry's.** `BotLadderTest` certifies its rungs on an
-empty 12x12 and that ordering survives neither a map nor a board size; `:lab`'s `ladder` subcommand
-plays every level's opponent on that level's own board, map and allowance against one fixed reference,
-and the ordering is right when the reference's score falls. `Ladder`'s KDoc names the two placements
-that look wrong without the measurement behind them, and [`Bots.md`](Bots.md#the-single-player-ladder-is-a-different-ordering-and-it-is-measured-per-level)
-carries the run.
+**The order is measured per level and is not the registry's — but the table shipping today is a
+hypothesis rather than a reading.** `BotLadderTest` certifies its rungs on an empty 12x12 and that
+ordering survives neither a map nor a board size; `:lab`'s `gauntlet` subcommand plays every level's
+opponent on that level's own board, map and allowance against one fixed reference, and the ordering is
+right when the reference's score falls. That run was taken on the ten-level table and on the old
+drawings of `rooms`, `diagonals` and `double-spiral`. Release 3 redrew those three, added three more,
+moved four levels onto different maps and added an eleventh on top — so **only `cross` at level 2,
+`pillars` at level 3 and `ring` at level 5 still stand on a number**, and the rest is an intention
+until the subcommand is re-run. `Gauntlet`'s KDoc says which placements are now guesses and which two
+the measurement placed, and [`Bots.md`](Bots.md#the-single-player-gauntlet-is-a-different-ordering-and-it-is-measured-per-level)
+carries the run, kept and labelled stale rather than deleted.
 
 ## No worker, and where the seam would be
 

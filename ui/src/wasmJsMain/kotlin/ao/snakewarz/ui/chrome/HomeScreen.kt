@@ -22,7 +22,7 @@ import org.w3c.dom.HTMLButtonElement
 internal class HomeScreen(dispatch: (UiIntent) -> Unit) {
     private val continueButton: HTMLButtonElement = elementById("home-continue")
     private val customButton: HTMLButtonElement = elementById("home-custom")
-    private val ladderButton: HTMLButtonElement = elementById("home-ladder")
+    private val gauntletButton: HTMLButtonElement = elementById("home-gauntlet")
     private val replayButton: HTMLButtonElement = elementById("home-replay")
 
     /** Which level Continue resumes, read at the press rather than captured when it was rendered. */
@@ -30,18 +30,21 @@ internal class HomeScreen(dispatch: (UiIntent) -> Unit) {
 
     init {
         continueButton.addEventListener("click") { dispatch(UiIntent.StartLevel(resume)) }
-        customButton.addEventListener("click") { dispatch(UiIntent.Navigate(Screen.GAME)) }
-        ladderButton.addEventListener("click") { dispatch(UiIntent.Navigate(Screen.LADDER)) }
+        // Custom means "start one", so it replaces the match rather than merely showing the board
+        // that is already there. Watch replay below means the opposite — "show me the recording I
+        // have" — which is why the two buttons beside each other dispatch different things.
+        customButton.addEventListener("click") { dispatch(UiIntent.StartCustom) }
+        gauntletButton.addEventListener("click") { dispatch(UiIntent.Navigate(Screen.GAUNTLET)) }
         replayButton.addEventListener("click") { dispatch(UiIntent.Navigate(Screen.GAME)) }
     }
 
     fun render(model: UiModel) {
-        val started = model.ladder.started
-        resume = model.ladder.highest
+        val started = model.gauntlet.started
+        resume = model.gauntlet.highest
 
         continueButton.hidden = !started
         continueButton.textContent = "Continue — Level $resume"
-        ladderButton.className = if (started) LADDER_CLASS else "$LADDER_CLASS primary"
+        gauntletButton.className = if (started) GAUNTLET_CLASS else "$GAUNTLET_CLASS primary"
 
         replayButton.hidden = !model.replay
     }
@@ -51,7 +54,7 @@ internal class HomeScreen(dispatch: (UiIntent) -> Unit) {
     private companion object {
         const val FIRST_LEVEL = 1
 
-        /** What `#home-ladder` is without the primary fill, which Continue takes off it. */
-        const val LADDER_CLASS = "wide"
+        /** What `#home-gauntlet` is without the primary fill, which Continue takes off it. */
+        const val GAUNTLET_CLASS = "wide"
     }
 }

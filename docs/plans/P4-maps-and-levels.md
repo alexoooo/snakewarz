@@ -192,7 +192,8 @@ measurement goes on the next research agenda:
 ## Verification
 
 ```bash
-./gradlew jvmTest --tests "*GenerateMap*" --tests "*BoardMap*" --tests "*Gauntlet*" --tests "*OpeningSetup*"
+./gradlew :match:jvmTest --tests "*GenerateMap*" --tests "*BoardMap*" --tests "*Gauntlet*"
+./gradlew :lab:test      --tests "*Gauntlet*" --tests "*OpeningSetup*"   # `--tests` has to be scoped per module
 ./gradlew allTests -PbrowserTests=true                  # SetupPanelTest's SKELETON
 ./gradlew :lab:run --args="gauntlet --rounds 40"        # draws every level's map for real
 ./gradlew :lab:run --args="play uct puct --map islands" # and each new shape on its own

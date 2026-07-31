@@ -1,9 +1,34 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Flat Monte Carlo">
-    <!-- One straight column per legal move and nothing joining them: samples, with no tree. -->
-    <rect width="32" height="32" rx="6" fill="#16191d"/>
-    <rect x="5" y="13" width="4" height="11" fill="#3a7f5c"/>
-    <rect x="11" y="7" width="4" height="17" fill="#4c9f74"/>
-    <rect x="17" y="11" width="4" height="13" fill="#5fbf8a"/>
-    <rect x="23" y="9" width="4" height="15" fill="#7fe0a8"/>
-    <rect x="4" y="24" width="24" height="4" fill="#3a7f5c"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Flat Monte Carlo">
+    <!--
+      The Gambler. A brim pulled down over the eyes, and behind it the samples it played out: one
+      straight column per legal move, nothing joining them, and the tallest lit. It takes that one.
+    -->
+    <defs>
+        <clipPath id="tile">
+            <rect width="96" height="96" rx="18"/>
+        </clipPath>
+    </defs>
+    <rect width="96" height="96" rx="18" fill="#16191d"/>
+    <g clip-path="url(#tile)">
+        <rect x="4" y="34" width="14" height="62" fill="#22503c"/>
+        <rect x="24" y="22" width="14" height="74" fill="#2b6046"/>
+        <rect x="58" y="28" width="14" height="68" fill="#2b6046"/>
+        <rect x="78" y="14" width="14" height="82" fill="#3a7f5c"/>
+
+        <path d="M6 96V80l22-8h40l22 8v16z" fill="#2b6046"/>
+        <path d="M6 96V80l22-8h20v24z" fill="#3a7f5c"/>
+        <rect x="40" y="60" width="16" height="14" fill="#22503c"/>
+
+        <rect x="26" y="28" width="44" height="38" fill="#4c9f74"/>
+        <rect x="60" y="34" width="10" height="32" fill="#3a7f5c"/>
+
+        <!-- The brim, and the shadow it throws over everything above the mouth. -->
+        <rect x="8" y="26" width="80" height="8" fill="#22503c"/>
+        <rect x="28" y="10" width="40" height="16" fill="#2b6046"/>
+        <rect x="28" y="10" width="40" height="4" fill="#3a7f5c"/>
+        <rect x="26" y="34" width="44" height="10" fill="#0e1114"/>
+        <rect x="31" y="37" width="12" height="5" fill="#a8f0c8"/>
+        <rect x="53" y="37" width="12" height="5" fill="#a8f0c8"/>
+        <rect x="38" y="54" width="20" height="4" fill="#22503c"/>
+    </g>
 </svg>

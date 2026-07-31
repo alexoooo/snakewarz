@@ -42,6 +42,31 @@
     }
 }
 
+/*
+ * The other thing the system tells us, beside the scheme, and it is answered here rather than beside
+ * the motion at the end of the file on purpose: the guard belongs with the page's other statement
+ * about what the reader's machine has asked for, and `!important` means it wins wherever it sits.
+ *
+ * Not `animation: none`, which would leave an element stuck at the first frame of an entrance -- an
+ * almost-zero duration runs the whole thing and lands on the finished state, so a screen that
+ * animates in still arrives. What goes away is the movement, which is the whole of what was asked
+ * for.
+ *
+ * It reaches the page and not the board, and the board is the honest exception: a game about snakes
+ * moving one square a turn is motion by construction, and what `Ticker` adds to it is a third of a
+ * second of a body settling after it dies.
+ */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
 * {
     box-sizing: border-box;
 }
@@ -54,6 +79,26 @@
  */
 [hidden] {
     display: none !important;
+}
+
+/*
+ * Text that is on the page for a screen reader and not for the eye: the heading's real words, under
+ * a drawing of them.
+ *
+ * Clipped rather than `display: none`, which takes an element out of the accessibility tree as well
+ * as off the page and would leave the heading empty. `hidden` is the same mistake spelled shorter,
+ * because the rule above is exactly that.
+ */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
 }
 
 body {
@@ -173,7 +218,7 @@ body.failed #loading {
  * mean the board had been sized against room the page does not have.
  */
 #screen-home,
-#screen-ladder {
+#screen-gauntlet {
     display: flex;
     flex-direction: column;
     gap: 0.9rem;
@@ -207,17 +252,81 @@ body.failed #loading {
 
 /* Home --------------------------------------------------------------------- */
 
-.home {
+/*
+ * The menu and the controls beside it, or under it where there is no room. No breakpoint, for the
+ * reason .levels has none: how many columns fit is the width's business, and a media query here
+ * would be a second opinion about it that has to be kept in step. #screen-home already scrolls, so
+ * the extra row is safe here where it would not be on the game screen.
+ *
+ * The centring lives here rather than on .home, because the row is the thing being centred now.
+ */
+.home-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 2rem;
     margin: auto;
+}
+
+.home {
     width: 100%;
     max-width: 22rem;
     text-align: center;
 }
 
-.home h1 {
+/*
+ * The logo. There is no web font on this page -- the stack above is the system's -- and adding one
+ * would be a network request on the critical path for two words, so the words are the system stack
+ * pushed hard: heavy, tightly tracked and two-tone. Paths could replace them later without anything
+ * around them moving, which is why this version is the one that shipped first.
+ *
+ * `clamp` rather than a breakpoint: the heading has to fit a 320px phone beside 1.5rem of screen
+ * padding and still read as a masthead on a monitor, and how much room there is is the width's
+ * business. `flex-wrap` is the floor under that -- the words drop below the mark rather than
+ * overflowing the column.
+ */
+.lockup {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1em 0.34em;
     margin: 0;
-    font-size: 2rem;
-    letter-spacing: -0.02em;
+    font-size: clamp(1.85rem, 8vw, 2.5rem);
+    font-weight: 800;
+    letter-spacing: -0.045em;
+    line-height: 1;
+}
+
+.lockup-mark {
+    flex: none;
+    width: 1.05em;
+    height: 1.05em;
+}
+
+/*
+ * The tile and the trail take the text colour, the head takes the accent -- so the mark is the same
+ * snake under all three themes and both schemes, and its head is the colour a route is drawn in.
+ * No theme's numbers here: two references, and Theme.kt still owns what they resolve to.
+ */
+.lockup-plate {
+    fill: currentColor;
+    opacity: 0.1;
+}
+
+.lockup-tail {
+    fill: currentColor;
+}
+
+.lockup-head {
+    fill: var(--accent);
+}
+
+/* The two words carry their own gap, so the split costs the accessible name nothing. */
+.lockup-warz {
+    margin-left: 0.16em;
+    color: var(--accent);
 }
 
 .tagline {
@@ -234,10 +343,44 @@ body.failed #loading {
     margin-top: 2rem;
 }
 
-/* Ladder ------------------------------------------------------------------- */
+/*
+ * Left aligned where the menu is centred: this is a list to read down rather than a set of things
+ * to press, and a centred definition list reads as neither.
+ */
+.controls {
+    flex: 0 1 18rem;
+    min-width: 15rem;
+    text-align: left;
+}
+
+.controls h2 {
+    margin: 0;
+    color: var(--ink-dim);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+}
+
+.controls dl {
+    margin: 0;
+}
+
+.controls dt {
+    margin-top: 0.85rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.controls dd {
+    margin: 0.1rem 0 0;
+    color: var(--ink-dim);
+    font-size: 0.85rem;
+}
+
+/* Gauntlet ----------------------------------------------------------------- */
 
 /*
- * Ten tiles that reflow from one column on a phone to three on a desktop. `auto-fill` rather than a
+ * Eleven tiles that reflow from one column on a phone to three on a desktop. `auto-fill` rather than a
  * fixed count, so the number of columns is the width's business and not a set of breakpoints to keep
  * in step with the rest of the page.
  */
@@ -248,6 +391,15 @@ body.failed #loading {
     margin: 0;
     padding: 0;
     list-style: none;
+}
+
+/*
+ * The positioning context the ▷ is placed against. On the <li> and not on the tile, because the tile
+ * is the thing being placed over: a <button> cannot contain another one, so the control is its
+ * sibling and the list item is what holds them both.
+ */
+.levels > li {
+    position: relative;
 }
 
 /*
@@ -265,12 +417,20 @@ body.failed #loading {
     text-align: left;
 }
 
-/* Four rows of text beside it: the number, the title, the blurb and the line naming the board. */
+/*
+ * Four rows of text beside it: the number, the title, the blurb and the line naming the board.
+ *
+ * The picture is the point of this screen -- it is where you choose who to face -- so it is drawn
+ * large enough to be a face rather than an emblem. The four text rows are still what decide the
+ * tile's height at every column count: the blurb is clamped to two lines for that reason, and even
+ * with it down to one the rows come to more than this. Move either number and check all three
+ * widths again, because an uneven column of tiles is what that clamp is there to prevent.
+ */
 .level .portrait {
     grid-row: 1 / span 4;
-    width: 3rem;
-    height: 3rem;
-    border-radius: 8px;
+    width: 4.5rem;
+    height: 4.5rem;
+    border-radius: 13px;
 }
 
 .level-no {
@@ -287,7 +447,7 @@ body.failed #loading {
     font-weight: 600;
 }
 
-/* Two lines at most: ten tiles of an even height read as a ladder, and a ragged column does not. */
+/* Two lines at most: tiles of an even height read as one run of rungs, a ragged column does not. */
 .level-blurb {
     grid-column: 2 / 4;
     color: var(--ink-dim);
@@ -333,6 +493,32 @@ body.failed #loading {
 /* A face you have already beaten steps back; a locked one is dimmed by `button:disabled` already. */
 .level.cleared .portrait {
     opacity: 0.55;
+}
+
+/*
+ * The run that cleared a rung, in the tile's top-right corner.
+ *
+ * Absolutely positioned over the tile rather than laid out inside it, because it is a sibling: the
+ * tile is a <button> and a nested one would never receive its click. The top-right is the one corner
+ * of the tile's grid with nothing in it -- the number is in column 2 and the badge is a row below --
+ * so the control needs no room made for it and every tile keeps the height it had.
+ *
+ * Slightly transparent until it is pointed at, so eleven cleared tiles read as a column of levels
+ * with a control on each rather than as a column of controls.
+ */
+.level-replay {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.5rem;
+    padding: 0 0.4rem;
+    line-height: 1.4;
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+.level-replay:hover,
+.level-replay:focus-visible {
+    opacity: 1;
 }
 
 /* Bars --------------------------------------------------------------------- */
@@ -460,7 +646,7 @@ body.failed #loading {
     overscroll-behavior: contain;
     user-select: none;
     /*
-     * The one case the two clamps in BoardRenderer.fit cannot both satisfy: a 40x40 in a landscape
+     * The one case the two clamps in BoardRenderer.fit cannot both satisfy: a 28x28 in a landscape
      * phone with a couple of hundred pixels of height, where the minimum cell size is larger than the
      * room. The board is centred and clipped rather than allowed out of its track -- this box is
      * `position: relative`, so an overflowing canvas would paint over both bars *and* swallow the
@@ -716,13 +902,16 @@ body.failed #loading {
  * The winner's face, above the verdict rather than beside it: the card is centred text, and a
  * draw has nobody to show -- so the portrait is a block that is simply absent when there is none,
  * and nothing has to hold a space open for it.
+ *
+ * The largest a portrait is drawn anywhere, because this is the moment somebody just beat them and
+ * there is nothing on the card competing for the room.
  */
 #result-portrait {
     display: block;
-    width: 4.5rem;
-    height: 4.5rem;
+    width: 7rem;
+    height: 7rem;
     margin: 0 auto 0.85rem;
-    border-radius: 14px;
+    border-radius: 21px;
 }
 
 .result-card h2 {
@@ -741,6 +930,22 @@ body.failed #loading {
     justify-content: center;
     gap: 0.5rem;
     margin-top: 1.25rem;
+}
+
+/*
+ * Its own bar under the row above, because that row does not wrap: a fourth button squeezed into it
+ * would take width off the three that decide what to play next. Ruled off rather than merely spaced,
+ * so the two groups read as "what now" and "what just happened".
+ */
+.result-replay {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--line);
+}
+
+/* The rule above is the gap, so .wide's own top margin would be a second one. */
+#result-replay {
+    margin-top: 0;
 }
 
 /* Controls ----------------------------------------------------------------- */
@@ -1009,4 +1214,121 @@ code {
     border: 1px solid var(--line);
     border-radius: 3px;
     font-size: 0.85em;
+}
+
+/* Motion ------------------------------------------------------------------- */
+
+/*
+ * Entrances, and nothing else. Every one of them is guarded by the prefers-reduced-motion block at
+ * the top of this file, which is where the reasoning lives.
+ *
+ * **There are no exits, and that is a limit rather than an omission.** The chrome hides a screen, a
+ * panel and the verdict by setting `hidden`, and `[hidden] { display: none !important }` is binary --
+ * there is no frame on which an outgoing element is still painted, so nothing can be animated out of
+ * the page. Beating that would mean a state machine in Kotlin holding elements alive for the length
+ * of a CSS animation, which is a second source of truth about what is on screen in exchange for a
+ * fade. The incoming thing moves and the outgoing one simply goes.
+ *
+ * The same fact is what makes these safe: an element that is `display: none` has no running
+ * animation, so revealing one starts its entrance from the beginning every time -- no class to add,
+ * nothing for Kotlin to remember, and no `animationend` to listen for.
+ *
+ * **Focus does not wait for any of this.** `Shell.focusInto` moves the focus on the same task that
+ * reveals the overlay, and a CSS animation does not block it. Do not add a `transitionend` handler
+ * that makes it wait: a keyboard player would then spend every navigation staring at a screen whose
+ * controls are not reachable yet.
+ */
+
+@keyframes rise {
+    from {
+        opacity: 0;
+        transform: translateY(0.5rem);
+    }
+}
+
+@keyframes slide-in {
+    from {
+        transform: translateX(100%);
+    }
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+}
+
+@keyframes card-in {
+    from {
+        opacity: 0;
+        transform: translateY(0.75rem) scale(0.96);
+    }
+}
+
+@keyframes badge-in {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+}
+
+/*
+ * The screen that just arrived. On the game screen it is the board coming up rather than the menu
+ * going away, which is the honest reading of a navigation with no exit to pair it with.
+ *
+ * A transform for the length of the entrance is safe here: `BoardRenderer.fit` measures
+ * `clientWidth`, which layout answers and a transform does not touch, and `cellAt` scales a client
+ * point through `getBoundingClientRect`, which reports the transformed box -- so a press landing
+ * mid-animation still lands on the square under it.
+ */
+.screen {
+    animation: rise 180ms ease-out;
+}
+
+/* A panel comes in from the edge it lives on, and the scrim under it simply arrives. */
+.panel {
+    animation: slide-in 200ms ease-out;
+}
+
+#panel-scrim,
+#dialog-result {
+    animation: fade-in 160ms ease-out;
+}
+
+/*
+ * The verdict, which is the one moment on this page worth a beat of its own: it interrupts, it takes
+ * the focus, and it is the answer to the thing somebody was just doing.
+ */
+.result-card {
+    animation: card-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+
+/* Every badge on the gauntlet screen pops as the screen arrives, which is a column of rungs read
+   from the top -- the one place a stagger would be worth having and the one place it is free. */
+.level.cleared .level-state {
+    animation: badge-in 260ms ease-out;
+}
+
+/*
+ * A press moves. Under a finger there is no hover to say a control was hit, so the press itself has
+ * to -- which is why this is a transform and not a colour: a tile on the gauntlet screen is mostly
+ * text, and text that changed colour under a thumb says less than a tile that gives.
+ *
+ * Two rules rather than one because the tiles are the larger surface and a shift would read as the
+ * whole grid jumping; they scale instead, and `.level:active` outranks `button:active` on its own.
+ */
+button {
+    transition: background-color 120ms ease, border-color 120ms ease, transform 90ms ease;
+}
+
+button:active {
+    transform: translateY(1px);
+}
+
+.level:active {
+    transform: scale(0.99);
+}
+
+.level-replay {
+    transition: opacity 120ms ease;
 }

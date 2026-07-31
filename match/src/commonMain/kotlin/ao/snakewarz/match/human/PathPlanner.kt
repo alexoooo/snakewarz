@@ -4,21 +4,47 @@ import ao.snakewarz.core.grid.Cell
 import ao.snakewarz.core.grid.Direction
 import ao.snakewarz.core.grid.Grid
 import ao.snakewarz.core.rules.BoardView
+import kotlin.math.abs
+import kotlin.math.sign
 
 /**
- * The route a player draws: breadth-first from where the path currently ends to the square they are
- * pointing at, over squares that are free *now* and are not already on the path.
+ * The route a player steers by. **A press [route]s, a drag [trace]s**, and the two draw differently
+ * on purpose: a press names a destination and gets the way there, a drag names the way and gets no
+ * more than it drew.
  *
- * **A plan, never a promise.** Tails retract and opponents move, so a route that was clear when it
- * was drawn can kill you by the time it is walked — which is the game, and is why this does not try
- * to predict the board it will actually meet. [InputBuffer.take] is the other half of that bargain:
- * a queued direction that has become illegal is discarded rather than played.
+ * **A plan, never a promise.** Opponents move, so a route that was clear when it was drawn can still
+ * kill you by the time it is walked — which is the game. [InputBuffer.take] is the other half of that
+ * bargain: a queued direction that has become illegal is discarded rather than played.
  *
- * **Breadth-first rather than "append the square if it is adjacent."** A finger jumps several squares
- * between pointer events and a mouse dragged quickly does the same, so requiring adjacency would make
- * the path stutter and would make touch nearly unusable. Routing means the player sketches and the
- * planner draws — around a body, and around a wall, which is a shape the straight line between two
- * squares cannot be assumed to have.
+ * ### What "blocked" means
+ *
+ * A square is passable at plan index `i` — the anchor under the head being `0` — if it is free now,
+ * **or** its owner is alive and will have retracted past it within `i - 1` of that snake's own moves.
+ * [Clearance] holds the arithmetic. Two unrelated reasons produce the same `i - 1`, and collapsing
+ * them into one loses whichever is fixed:
+ *
+ * - **Your own body — an ordering rule.** `Board.apply` reads `isFree(target)` *before* the tail
+ *   retracts, so a snake may not enter the square its own tail is about to leave. Your tail therefore
+ *   has clearance 1: the route may not enter it at step 1 and may at step 2, reproduced here rather
+ *   than special-cased.
+ * - **Everyone else — a move count.** An opponent's retraction happens inside its own move and is
+ *   already visible once that move is done. `Board.advanceToAct` cycles from the current position
+ *   skipping the dead, so between two of your moves every living snake moves exactly once; an
+ *   opponent has made `i - 1` or `i` moves depending where it sits in the cyclic to-act order **from
+ *   the current `board.toAct`** — which is *not* its slot index, because a route can be begun
+ *   mid-round. Assuming `i - 1` for everyone assumes fewer retractions, so it believes more squares
+ *   occupied. Conservative, always.
+ *
+ * Conservative is the only safe direction, and the reason is sharper than a lost move: when
+ * [InputBuffer.take] discards an illegal direction it returns *the next legal one from the same
+ * route*, so an over-optimistic plan makes the snake skip to a later leg rather than stop.
+ *
+ * ### Three optimisms it keeps
+ *
+ * 1. An opponent's future head is never predicted — a square free now is assumed free forever.
+ * 2. A snake that dies stops retracting, and its body freezes where it fell.
+ * 3. Under `growEveryNthMove == 1`, classic Tron, nothing ever clears and only free squares are
+ *    passable.
  *
  * The path is kept in both of the representations it is read in — padded [Cell] indices for painting
  * it, [Direction] ordinals for [InputBuffer.replace] — so no caller ever holds two arrays it has to
@@ -41,8 +67,9 @@ public class PathPlanner(private val grid: Grid) {
     private val path = IntArray(maxCells)
     private val moves = IntArray(maxCells - 1)
     private val stamp = IntArray(grid.cellCount)
-    private val cameFrom = IntArray(grid.cellCount)
+    private val depth = IntArray(grid.cellCount)
     private val frontier = IntArray(grid.cellCount)
+    private val clearance = Clearance(grid)
     private var generation = 0
 
     /** Squares on the path, the anchor included — so a path with nothing left to play still counts one. */
@@ -60,7 +87,7 @@ public class PathPlanner(private val grid: Grid) {
      * [InputBuffer.replace] takes.
      *
      * A live buffer rather than a copy, so feeding the queue and painting the route cost nothing. The
-     * next [extend] rewrites it, and nobody else may.
+     * next [route] or [trace] rewrites it, and nobody else may.
      */
     public val directions: IntArray get() = moves
 
@@ -78,33 +105,170 @@ public class PathPlanner(private val grid: Grid) {
     }
 
     /**
-     * Routes the path on to [target], reporting whether a route was found.
+     * Replaces everything after the anchor with the straightest shortest route to [target], reporting
+     * whether one exists.
      *
-     * `false` leaves the path exactly as it was, and is an ordinary answer rather than a fault. A
-     * pointer dragged past the edge of the board, on to a wall or a body, into a pocket the path has
-     * sealed off behind itself, or further than the queue can hold all read the same way: the player
-     * keeps dragging and the plan keeps the last route that worked.
+     * **Breadth-first rather than "append the square if it is adjacent."** A press names where to go
+     * rather than how, and the answer has to go *round* a body and round a wall — a shape the straight
+     * line between two squares cannot be assumed to have. Depth here is the arrival index, so the
+     * clearance test is exactly `enterableAt(cell, depth)`; occupancy only ever decreases for bodies
+     * already on the board, so that test is monotone in depth and plain breadth-first search stays
+     * optimal with each square dequeued once. A square refused at one depth is deliberately left
+     * unstamped, because a deeper frontier square may reach it after its owner has moved on.
+     *
+     * [target] being the anchor is a **zero-length route, and it exists.** That is what lets a press
+     * on your own head take hold and a freehand drawing start from nothing.
+     *
+     * `false` leaves the path exactly as it was and is an ordinary answer rather than a fault: off the
+     * board, on a wall, in a pocket, or further than the queue can hold all read the same way.
+     *
+     * Two honesty notes:
+     *
+     * - The route is reconstructed backwards from [target], preferring at each step the predecessor
+     *   that continues the direction just taken. That buys long straight runs — an L rather than a
+     *   staircase — with no second search, but among obstacles it is a **heuristic** and can cost one
+     *   extra turn. The exact answer is lexicographic `(length, turns)` over `(square, direction)`
+     *   states: four times the state and four times the memory, for a cosmetic property of a board
+     *   somebody is looking at. The trade was made deliberately.
+     * - Because a snake **cannot wait in place**, this cannot express "loop around and come back once
+     *   the tail clears" — a square whose neighbours are all dequeued before it opens is never
+     *   reached. Soundness is unaffected, since a route that *is* found is walkable, and the failure
+     *   mode is an ordinary "no route", which a press already treats as "do nothing".
      */
-    public fun extend(board: BoardView, target: Cell): Boolean {
-        check(cellCount > 0) { "a path is anchored by begin() before it is extended" }
+    public fun route(board: BoardView, target: Cell): Boolean {
+        check(cellCount > 0) { "a path is anchored by begin() before it is routed" }
+        if (!grid.isPlayable(target)) {
+            return false
+        }
 
-        val end = path[cellCount - 1]
-        if (target.index == end) {
-            // The pointer has not left the square the route already ends on, which is most of what a
-            // drag reports. Answering yes without searching keeps a held-still finger free.
+        val anchor = path[0]
+        if (target.index == anchor) {
+            cellCount = 1
             return true
         }
-        if (!grid.isPlayable(target) || !board.isFree(target)) {
-            return false
+
+        clearance.refresh(board)
+        nextGeneration()
+        stamp[anchor] = generation
+        depth[anchor] = 0
+
+        frontier[0] = anchor
+        var head = 0
+        var tail = 1
+
+        while (head < tail) {
+            val cell = frontier[head++]
+            val arrival = depth[cell] + 1
+            if (arrival > maxCells - 1) {
+                // Further than the queue can hold, and a breadth-first frontier only gets deeper.
+                break
+            }
+
+            for (i in DIRECTIONS.indices) {
+                val next = grid.step(Cell(cell), DIRECTIONS[i])
+                if (stamp[next.index] == generation || !clearance.enterableAt(board, next, arrival)) {
+                    // A refused square is left unstamped on purpose: a body still holding it at this
+                    // arrival may have retracted past it by the time a deeper square reaches it.
+                    continue
+                }
+
+                stamp[next.index] = generation
+                depth[next.index] = arrival
+                if (next.index == target.index) {
+                    reconstruct(next.index, arrival)
+                    return true
+                }
+                frontier[tail++] = next.index
+            }
         }
 
-        val steps = search(board, end, target.index)
-        if (steps == 0 || cellCount + steps > maxCells) {
-            return false
+        return false
+    }
+
+    /**
+     * Draws the line from the path's end towards [target], cut where it is blocked, and reports how
+     * many moves that appended.
+     *
+     * A 4-connected staircase: step whichever axis has further to go, integer-only, re-derived from
+     * the current square each step so it self-corrects and survives being cut. `(0,0)` to `(3,5)`
+     * gives `E E S E S E S E`. The asymmetry with [route] is the whole point — an L would turn a
+     * diagonal drag into a right angle, which is the opposite of following the pointer precisely.
+     * There is no search here, so a drag can neither detour nor jump; once cut it simply stops growing
+     * while the pointer stays past the obstruction, and resumes when the pointer comes back into line.
+     *
+     * `0` is an ordinary answer rather than a fault.
+     *
+     * **Dragging back along the route shortens it.** A [target] already on the path truncates to it,
+     * which is what a player expects and what an unconditional self-block would refuse.
+     *
+     * Past that one case the drawn path blocks itself unconditionally, and the omission is
+     * **deliberate**. The time-aware version is derivable — over `V = body ++ plan`, the squares this
+     * snake holds at time `t` are exactly `V[r(t) … L0 - 1 + t]`, with `r(t)` the retractions made by
+     * then — but it buys nothing a player can do today, so it is not paid for.
+     */
+    public fun trace(board: BoardView, target: Cell): Int {
+        check(cellCount > 0) { "a path is anchored by begin() before it is traced" }
+        if (!grid.isPlayable(target)) {
+            return 0
         }
 
-        append(end, target.index, steps)
-        return true
+        clearance.refresh(board)
+        markPath()
+        if (stamp[target.index] == generation) {
+            cellCount = depth[target.index] + 1
+            return 0
+        }
+
+        var row = grid.rowOf(Cell(path[cellCount - 1]))
+        var col = grid.colOf(Cell(path[cellCount - 1]))
+        val targetRow = grid.rowOf(target)
+        val targetCol = grid.colOf(target)
+        var appended = 0
+
+        while (row != targetRow || col != targetCol) {
+            // Step whichever axis has further to go: the staircase that hugs the segment.
+            if (abs(targetRow - row) >= abs(targetCol - col)) {
+                row += (targetRow - row).sign
+            } else {
+                col += (targetCol - col).sign
+            }
+
+            val next = grid.cellAt(row, col)
+            if (stamp[next.index] == generation || !clearance.enterableAt(board, next, cellCount)) {
+                break
+            }
+            if (cellCount == maxCells) {
+                break
+            }
+
+            moves[cellCount - 1] = directionOrdinal(path[cellCount - 1], next.index)
+            path[cellCount] = next.index
+            stamp[next.index] = generation
+            depth[next.index] = cellCount
+            cellCount++
+            appended++
+        }
+
+        return appended
+    }
+
+    /**
+     * Drops everything past the first square that will still be held when the snake could reach it,
+     * reporting whether anything was dropped.
+     *
+     * `O(cellCount)` and run once per step, which is what keeps a held route honest as opponents move
+     * across it. Truncating to a bare anchor is not a state of its own: [InteractiveBot] answers
+     * `Pending`, the clock above it waits, and dragging refills the route.
+     */
+    public fun revalidate(board: BoardView): Boolean {
+        clearance.refresh(board)
+        for (i in 1 until cellCount) {
+            if (!clearance.enterableAt(board, Cell(path[i]), i)) {
+                cellCount = i
+                return true
+            }
+        }
+        return false
     }
 
     /**
@@ -133,67 +297,54 @@ public class PathPlanner(private val grid: Grid) {
 
     override fun toString(): String = "PathPlanner($moveCount moves)"
 
-    /**
-     * The number of moves from [from] to [to] over free squares the path does not already hold, or
-     * `0` when there is no way through, leaving the route itself in [cameFrom].
-     */
-    private fun search(board: BoardView, from: Int, to: Int): Int {
+    // -- internals
+
+    /** Stamps the drawn path with its own indices, so a square on it knows where on it it sits. */
+    private fun markPath() {
         nextGeneration()
-        // The path blocks itself, so a route can neither cross what is already drawn nor turn back
-        // along it -- a snake walking its own route would be walking into its own body.
         for (i in 0 until cellCount) {
             stamp[path[i]] = generation
+            depth[path[i]] = i
         }
+    }
 
-        frontier[0] = from
-        var head = 0
-        var tail = 1
+    /**
+     * Writes the [steps] moves ending at [target] on to the path, cells and directions together,
+     * walking backwards over the depths the search left behind.
+     */
+    private fun reconstruct(target: Int, steps: Int) {
+        path[steps] = target
+        var walk = target
+        var taken = -1
 
-        while (head < tail) {
-            val cell = Cell(frontier[head++])
-
-            for (i in DIRECTIONS.indices) {
-                val next = grid.step(cell, DIRECTIONS[i])
-                if (stamp[next.index] == generation || !board.isFree(next)) {
-                    continue
+        for (index in steps downTo 1) {
+            var chosen = -1
+            if (taken >= 0 && precedes(walk - grid.offsetOf(DIRECTIONS[taken]), index - 1)) {
+                // Continuing the direction just taken is what turns a shortest route into an L.
+                chosen = taken
+            } else {
+                for (i in DIRECTIONS.indices) {
+                    if (precedes(walk - grid.offsetOf(DIRECTIONS[i]), index - 1)) {
+                        chosen = i
+                        break
+                    }
                 }
-
-                stamp[next.index] = generation
-                cameFrom[next.index] = cell.index
-                if (next.index == to) {
-                    return stepsBack(to, from)
-                }
-                frontier[tail++] = next.index
             }
+            if (chosen < 0) {
+                error("no square at depth ${index - 1} neighbours square $walk of $grid")
+            }
+
+            moves[index - 1] = DIRECTIONS[chosen].ordinal
+            walk -= grid.offsetOf(DIRECTIONS[chosen])
+            path[index - 1] = walk
+            taken = chosen
         }
 
-        return 0
+        cellCount = steps + 1
     }
 
-    private fun stepsBack(to: Int, from: Int): Int {
-        var steps = 0
-        var walk = to
-        while (walk != from) {
-            walk = cameFrom[walk]
-            steps++
-        }
-        return steps
-    }
-
-    /** Writes the [steps] squares between [from] and [to] on to the end of the path, cells and moves together. */
-    private fun append(from: Int, to: Int, steps: Int) {
-        var index = cellCount + steps - 1
-        var walk = to
-        while (walk != from) {
-            path[index--] = walk
-            walk = cameFrom[walk]
-        }
-
-        for (i in cellCount - 1 until cellCount + steps - 1) {
-            moves[i] = directionOrdinal(path[i], path[i + 1])
-        }
-        cellCount += steps
-    }
+    private fun precedes(cell: Int, atDepth: Int): Boolean =
+        stamp[cell] == generation && depth[cell] == atDepth
 
     private fun directionOrdinal(from: Int, to: Int): Int {
         val delta = to - from

@@ -10,15 +10,16 @@ import kotlin.io.encoding.Base64
  *
  * **The same bot must get the same mark in every match, on every machine, forever** — a mark that
  * moved would be worse than none, because a player identifies an opponent by it. So the hash is
- * written out below rather than taken from `String.hashCode()`, which Kotlin does not specify to be
- * identical across targets. `Int` arithmetic does wrap identically everywhere, which is the whole of
- * what [OFFSET] and [MIX] need.
+ * [fnv1a], written out in this package rather than taken from `String.hashCode()`, which Kotlin does
+ * not specify to be identical across targets.
  *
  * Mirroring left to right is what makes a random mask read as a *face* rather than as noise: three
  * generated columns, two reflected. It is also why the grid is odd-sided.
  */
 internal fun identicon(slug: String, colour: String): String {
-    val bits = hashOf(slug)
+    // The low GRID * COLUMNS bits are the mask, and taking the bottom fifteen is not the same as
+    // reading the tail of the slug: FNV mixes every unit into all thirty-two.
+    val bits = fnv1a(slug)
     val blocks = StringBuilder()
 
     for (row in 0 until GRID) {
@@ -55,24 +56,6 @@ private fun StringBuilder.block(col: Int, row: Int) {
         .append("' height='").append(CELL)
         .append("'/>")
 }
-
-/**
- * FNV-1a over the slug's UTF-16 units, written out so that it cannot move.
- *
- * The low `GRID * COLUMNS` bits are the mask, and taking the bottom fifteen is not the same as
- * reading the tail of the string: FNV mixes every unit into all thirty-two.
- */
-private fun hashOf(slug: String): Int {
-    var hash = OFFSET
-    for (ch in slug) {
-        hash = (hash xor ch.code) * MIX
-    }
-    return hash
-}
-
-/** FNV-1a's 32-bit offset basis and prime, as `Int`s, since that is the width the mixing needs. */
-private const val OFFSET = -2128831035
-private const val MIX = 16777619
 
 /** Five squares a side, of which three are generated and two reflected. */
 private const val GRID = 5

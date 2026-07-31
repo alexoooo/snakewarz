@@ -14,8 +14,8 @@ internal enum class Screen {
     /** The modes on offer, and the way back into a recording that is already loaded. */
     HOME,
 
-    /** The ladder's level select. */
-    LADDER,
+    /** The gauntlet's level select. */
+    GAUNTLET,
 
     /** The board, and the two bars around it. */
     GAME,

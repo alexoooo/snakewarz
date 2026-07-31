@@ -1,4 +1,4 @@
-package ao.snakewarz.match.ladder
+package ao.snakewarz.match.gauntlet
 
 import ao.snakewarz.botapi.knob.BotParams
 import ao.snakewarz.botapi.registry.BotId
@@ -8,7 +8,7 @@ import ao.snakewarz.match.map.MapShape
 import ao.snakewarz.match.map.generateMap
 
 /**
- * One rung of the single-player ladder: an opponent, what it may spend, and the board it defends.
+ * One rung of the single-player gauntlet: an opponent, what it may spend, and the board it defends.
  *
  * A level is **a whole match configuration and not a difficulty number**, because three things move
  * from rung to rung and only one of them is the bot. The geometry ramps, the map shape changes, and a
@@ -23,7 +23,7 @@ import ao.snakewarz.match.map.generateMap
  * player learns to beat, and a knob default moving under it would quietly hand somebody a different
  * opponent at the same level number.
  */
-public class LadderLevel(
+public class GauntletLevel(
     /** 1-based, and the identifier saved progress is keyed on. */
     public val index: Int,
     /** What the level is called on the level-select screen. */
@@ -78,5 +78,5 @@ public class LadderLevel(
     )
 
     override fun toString(): String =
-        "LadderLevel($index $title, ${opponent.slug}, ${rows}x$cols ${shape.slug}, $budgetPerTurn)"
+        "GauntletLevel($index $title, ${opponent.slug}, ${rows}x$cols ${shape.slug}, $budgetPerTurn)"
 }

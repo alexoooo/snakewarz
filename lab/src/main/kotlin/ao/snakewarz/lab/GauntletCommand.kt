@@ -6,41 +6,41 @@ import ao.snakewarz.lab.arena.Openings
 import ao.snakewarz.lab.log.MatchLog
 import ao.snakewarz.lab.log.Replays
 import ao.snakewarz.lab.log.recordBatch
-import ao.snakewarz.match.ladder.Ladder
-import ao.snakewarz.match.ladder.LadderLevel
+import ao.snakewarz.match.gauntlet.Gauntlet
+import ao.snakewarz.match.gauntlet.GauntletLevel
 import ao.snakewarz.match.tournament.Contestant
 import ao.snakewarz.match.tournament.TournamentConfig
 import java.nio.file.Path
 import kotlin.time.TimeSource
 
 /**
- * Whether the single-player ladder actually gets harder, measured one level at a time.
+ * Whether the single-player gauntlet actually gets harder, measured one level at a time.
  *
- * `Ladder`'s ten rungs move three things at once — the algorithm, the board and the allowance — so
- * nothing already in `:lab` can settle their order. `rate` cannot: ten geometries are ten
+ * `Gauntlet`'s eleven rungs move three things at once — the algorithm, the board and the allowance —
+ * so nothing already in `:lab` can settle their order. `rate` cannot: eleven geometries are eleven
  * `RunHeader.comparabilityKey`s and it refuses to pool them, correctly, because a rating is
  * conditioned on the board as much as on the field. `ab` cannot: it compares two entrants on **one**
  * board, and two adjacent levels never share one.
  *
  * So the instrument is a **common reference played against every level on that level's own ground**.
- * One entrant, one allowance, ten different matches; the reference's score is then a reading of each
- * level and the ten readings are comparable because the thing held still is the reference rather than
- * the board. What it cannot give is an Elo — a score against a fixed opponent is not a rating, and
- * two levels a point apart here are not separated by that.
+ * One entrant, one allowance, eleven different matches; the reference's score is then a reading of
+ * each level and the eleven readings are comparable because the thing held still is the reference
+ * rather than the board. What it cannot give is an Elo — a score against a fixed opponent is not a
+ * rating, and two levels a point apart here are not separated by that.
  *
  * ### Two ways to misread the output, both worth knowing before the numbers
  *
  * **The ends saturate, and that is the design rather than a defect.** A reference that beats level 1
- * nearly always and loses to level 10 nearly always is what [DEFAULT_REFERENCE] aims at, so the top
- * and the bottom of the column are pinned near 100% and 0% and the resolution is all in the middle.
- * A reference that separated all ten would have to be ten different strengths.
+ * nearly always and loses to the top of the table nearly always is what [DEFAULT_REFERENCE] aims at,
+ * so the top and the bottom of the column are pinned near 100% and 0% and the resolution is all in
+ * the middle. A reference that separated all eleven would have to be eleven different strengths.
  *
  * **Read the distinct line.** Levels 2 through 6 are entirely bots that draw no randomness, so a
  * fixed opening would give each of them the same four games however many rounds are asked for. That
  * is why [Openings.MIRRORED] is the default here as everywhere, and why every row carries how many of
  * its matches were different games.
  */
-internal class LadderCommand(
+internal class GauntletCommand(
     val reference: Contestant,
     val rounds: Int,
     val seed: Long,
@@ -49,28 +49,28 @@ internal class LadderCommand(
     val logDirectory: Path?,
 ) : LabCommand {
     override fun run(registry: BotRegistry, log: (String) -> Unit) {
-        log("[lab] ladder: $reference against ${Ladder.size} levels, $rounds rounds each, $openings openings")
+        log("[lab] gauntlet: $reference against ${Gauntlet.size} levels, $rounds rounds each, $openings openings")
 
         // Every level is checked against the reference before the first match rather than as it comes
         // up: a run that failed at level 6 would have spent the compute of five levels first, and
         // printed five rows nobody can act on.
-        val opponents = Ladder.levels.map { seatingFor(it, registry) }
+        val opponents = Gauntlet.levels.map { seatingFor(it, registry) }
 
         val started = TimeSource.Monotonic.markNow()
-        val scores = DoubleArray(Ladder.size)
+        val scores = DoubleArray(Gauntlet.size)
 
         log("")
         log(header())
-        for (level in Ladder.levels) {
+        for (level in Gauntlet.levels) {
             scores[level.index - 1] = play(level, opponents[level.index - 1], registry, log)
         }
 
         log("")
-        log("[lab] ${started.elapsedNow().inWholeSeconds}s over ${Ladder.size * rounds} matches")
+        log("[lab] ${started.elapsedNow().inWholeSeconds}s over ${Gauntlet.size * rounds} matches")
         verdict(scores, log)
     }
 
-    override fun toString(): String = "Ladder($reference, $rounds rounds, $openings, $threads threads)"
+    override fun toString(): String = "Gauntlet($reference, $rounds rounds, $openings, $threads threads)"
 
     /**
      * The level as an entrant, refused if the reference cannot be told from it.
@@ -80,10 +80,12 @@ internal class LadderCommand(
      * and the row would measure the seating rather than the level. Asked of the declaration rather
      * than of the slug, so a contributed bot is covered the day it is registered.
      *
-     * The ten shipped slugs are exactly the ten levels, so this is a live case rather than a defensive
-     * one: any reference is some level's bot, and only its allowance makes it a different entrant.
+     * The ten shipped slugs are exactly the ten opponents these eleven levels draw on, so this is a
+     * live case rather than a defensive one: any reference is some level's bot, and only its
+     * allowance — or its settings, which is what separates level 11 from level 10 — makes it a
+     * different entrant.
      */
-    private fun seatingFor(level: LadderLevel, registry: BotRegistry): Contestant {
+    private fun seatingFor(level: GauntletLevel, registry: BotRegistry): Contestant {
         val opponent = Contestant(level.opponent, level.budgetPerTurn, level.params)
         val sameBot = opponent.bot == reference.bot && opponent.params == reference.params
         val allowanceSeparates = registry.entryOf(reference.bot).search != null &&
@@ -99,7 +101,7 @@ internal class LadderCommand(
 
     /** One level: the reference against it, on its own board, map and allowance. Returns the score. */
     private fun play(
-        level: LadderLevel,
+        level: GauntletLevel,
         opponent: Contestant,
         registry: BotRegistry,
         log: (String) -> Unit,
@@ -135,12 +137,12 @@ internal class LadderCommand(
     }
 
     /**
-     * The deliverable: whether the reference does worse the further up the ladder it goes.
+     * The deliverable: whether the reference does worse the further up the gauntlet it goes.
      *
      * A rise is reported with the pair that produced it rather than as a pass or a fail, because the
      * answer to one is to reorder the table and the answer to the other is nothing at all. [NOISE] is
      * what a rise has to clear to be worth naming, and it is a property of [rounds] rather than of
-     * the ladder.
+     * the gauntlet.
      */
     private fun verdict(scores: DoubleArray, log: (String) -> Unit) {
         val rises = (1 until scores.size).filter { scores[it] > scores[it - 1] + NOISE }
@@ -156,7 +158,7 @@ internal class LadderCommand(
                     "level $rise (${percent(scores[rise - 1])}%)",
             )
         }
-        log("[lab] The number is the finding: reorder `Ladder.levels` to match it, then re-run this.")
+        log("[lab] The number is the finding: reorder `Gauntlet.levels` to match it, then re-run this.")
     }
 
     private fun header(): String =
@@ -175,14 +177,19 @@ internal class LadderCommand(
 
     companion object {
         /**
-         * The reference when nobody names one: a mid-ladder searcher on a small allowance.
+         * The reference when nobody names one: a mid-gauntlet searcher on a small allowance.
          *
-         * Chosen by running the ladder against candidates rather than argued. It has to beat level 1
-         * nearly always and lose to level 10 nearly always or the column says nothing, and the ten
-         * shipped slugs are exactly the ten levels — so the reference is necessarily one of them at a
-         * different allowance rather than an eleventh bot. At [REFERENCE_BUDGET] this one reads
-         * 100/95/100/92/75/60/60/20/7/3 across the ten, which resolves the whole ladder; the reactive
-         * bots saturate at the bottom and every searcher stronger than this saturates at the top.
+         * Chosen by running the gauntlet against candidates rather than argued. It has to beat level 1
+         * nearly always and lose to the top of the table nearly always or the column says nothing, and
+         * the ten shipped slugs are exactly the ten opponents the levels draw on — so the reference is
+         * necessarily one of them at a different allowance rather than an eleventh bot.
+         *
+         * At [REFERENCE_BUDGET] it read 100/95/100/92/75/60/60/20/7/3 across the ten-level table, which
+         * resolved the whole gauntlet: the reactive bots saturate at the bottom and every searcher
+         * stronger than this saturates at the top. **That reading is stale as of 2026-07-31** — eight
+         * of the eleven rows now name a board that did not exist when it was taken, three shapes having
+         * been redrawn and three added. The shape of the argument holds; the figures are what this
+         * command exists to take again.
          *
          * It also draws randomness, which the reactive levels do not: against a bot that plays the
          * same game every time, a reference that did the same would hand five of these rows the four
@@ -195,7 +202,7 @@ internal class LadderCommand(
          *
          * Pinned rather than left to each level's own figure, and that is the whole measurement: a
          * reference handed level 10's allowance and level 1's allowance is two different bots, and
-         * the column would then be reading itself as much as the ladder.
+         * the column would then be reading itself as much as the gauntlet.
          */
         const val REFERENCE_BUDGET: Int = 100
 
@@ -206,7 +213,7 @@ internal class LadderCommand(
          * How much a score may climb before the rise is worth naming.
          *
          * Five points of score, which is one match in twenty and about half a standard error at the
-         * default round count. Below it a rise is the sample rather than the ladder, and a check that
+         * default round count. Below it a rise is the sample rather than the gauntlet, and a check that
          * fired on those would cry wolf every run.
          */
         private const val NOISE = 0.05

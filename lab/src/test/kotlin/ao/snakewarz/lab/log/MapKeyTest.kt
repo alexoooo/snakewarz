@@ -77,7 +77,7 @@ class MapKeyTest {
     )
 
     private companion object {
-        /** Large enough for every shape in the catalogue to draw itself. */
-        const val SIDE = 13
+        /** Large enough for every shape in the catalogue to draw itself — `rooms` asks the most. */
+        const val SIDE = 14
     }
 }

@@ -145,8 +145,9 @@ class OpeningSetupTest {
     )
 
     private companion object {
-        const val ROWS = 12
-        const val COLS = 12
+        /** Every shape in the catalogue draws at this size, which is what the sweep below wants. */
+        const val ROWS = 14
+        const val COLS = 14
         val SLOTS = listOf("space", "wallhug")
 
         val CROSS: IntArray = generateMap(ROWS, COLS, MapShape.CROSS).walls()

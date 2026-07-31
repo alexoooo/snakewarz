@@ -76,6 +76,52 @@ internal class HalfBoard(val rows: Int, val cols: Int) {
         return true
     }
 
+    /**
+     * Marks the [height] x [width] block with its top-left corner at `(row, col)`, and the block's
+     * image, unless one of three conditions fails — and reports whether it did.
+     *
+     * The first two generalise [placeIsolated]: the block **and its eight-neighbourhood** are clear,
+     * and the block does not touch its own image, which only comes up within a square of the board's
+     * centre. A block that *is* its own image is exempt from the second, the way the exact centre
+     * square is there.
+     *
+     * **The third has no counterpart there, and it is what makes connectivity an argument rather
+     * than a hope: the block keeps a free square between itself and every edge of the board.** A
+     * rectangle cannot be disconnected by isolated *squares*, but it can by two blocks between them,
+     * so the argument has to be made differently here. A free border ring plus rectangles that never
+     * touch gives it: the ring of squares immediately around a block is entirely open — no other
+     * block reaches it — and is 4-connected, so a walk blocked going up follows that ring to the
+     * square diagonally off the block's top corner, which is a strictly lower row, and repeats until
+     * it reaches row 0. Row 0 is open the whole way across, so every open square reaches every other.
+     *
+     * Only the block's own neighbourhood is examined even though two blocks are placed, for the
+     * reason [placeIsolated] gives: the wall set is ρ-invariant at every moment and ρ is an isometry.
+     */
+    fun placeIsolatedBlock(row: Int, col: Int, height: Int, width: Int): Boolean {
+        if (row < 1 || col < 1 || row + height > rows - 1 || col + width > cols - 1) {
+            return false
+        }
+        for (r in row - 1..row + height) {
+            for (c in col - 1..col + width) {
+                if (wall[r * cols + c]) return false
+            }
+        }
+
+        val mirrorRow = rows - height - row
+        val mirrorCol = cols - width - col
+        val ownImage = mirrorRow == row && mirrorCol == col
+        if (!ownImage && touchingRuns(row, mirrorRow, height) && touchingRuns(col, mirrorCol, width)) {
+            return false
+        }
+
+        for (r in row until row + height) {
+            for (c in col until col + width) {
+                set(r, c)
+            }
+        }
+        return true
+    }
+
     /** The marked squares as ascending playable indices, which is the form `MatchSetup` takes. */
     fun walls(): IntArray {
         var count = 0
@@ -90,6 +136,10 @@ internal class HalfBoard(val rows: Int, val cols: Int) {
         }
         return cells
     }
+
+    /** Whether two runs of [extent] squares, one from [from] and one from [other], come within one. */
+    private fun touchingRuns(from: Int, other: Int, extent: Int): Boolean =
+        from <= other + extent && other <= from + extent
 
     /** Whether `(row, col)` or any of its eight neighbours is already a wall. */
     private fun touches(row: Int, col: Int): Boolean {

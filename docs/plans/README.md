@@ -1,57 +1,67 @@
 # Release 3 — the game gets its hands on
 
-> **This is an open plan.** Unlike the Release 2 record it replaces, it describes what is *left*, not
-> why something shipped. When a phase lands, fold its reasoning into the code and into `docs/`, and
-> strike the phase from the table below.
+> **Shipped. All six phases are done and this is now a record rather than a plan.** Read it to find
+> out *why* something is shaped the way it is — the decision table below is where the answers are —
+> and read the code, [`../../CLAUDE.md`](../../CLAUDE.md) and `docs/` for what the program does today.
+> Where a phase document and the tree disagree, **the tree is right**: a plan records what was
+> intended, and several details were settled differently once the code was in front of somebody.
+>
+> The record this replaced is Release 2's, and it was not deleted so much as superseded: it lives at
+> `git show 9112201:docs/plans/README.md`, with its eighteen `S*.md` sessions beside it in the same
+> tree.
 
-**For:** anyone picking up one of the phases. Read this file, then read only the phase you are doing
-and whatever it depends on.
+**For:** anyone asking why a shipped thing in the pointer, the gauntlet, the map catalogue or the
+paint is shaped the way it is.
 **Assumes:** [`../../CLAUDE.md`](../../CLAUDE.md) — the module graph, the forbidden dependency edges
-and the five non-obvious facts. They are **not** repeated here and they do not relax for this work.
+and the five non-obvious facts. They are **not** repeated here.
 
-Release 3 is gameplay feel and how the thing looks. Nothing in it changes the engine, the bot contract
-or the replay codec.
+Release 3 was gameplay feel and how the thing looks. **Nothing in it changed the engine, the bot
+contract or the replay codec**, and that held: `:core`, `:bot-api` and `:bots` came through untouched,
+and a `#r=` link written before it still decodes to the same bytes.
 
 ## Why
 
-Release 2 made a game out of a research console. Release 3 makes it a game you can play without being
-told how, and one that looks like a game rather than like a diagram of one.
+Release 2 made a game out of a research console. Release 3 made it a game you can play without being
+told how, and one that looks like a game rather than like a diagram of one. What it inherited:
 
-- **The pointer is a drawing tool and nothing else.** A press must land within one square of your head,
-  and dragging runs a breadth-first search that routes *around* obstacles — so the path bolts the long
-  way round instead of following the mouse. There is no way to say "go over there".
-- **A route is planned against the board as it is now**, so a tail square that will certainly have
-  cleared before you reach it is treated as a wall.
-- **Nothing on the home screen says how to play.**
-- **Backing out of a level drops you to the front page** rather than to the level select.
-- **`Custom` on top of a running game shows that game**, stale verdict card and all.
-- **The setup panel is a form you submit blind** — you cannot see the board you picked until you start it.
-- **Several level maps are too closed to be interesting**, and level 1 is a bare rectangle.
-- **A run you were pleased with is gone** the moment you start another.
-- **"Ladder" names three different things in this repo**, only one of which a player ever sees.
-- **A snake is a run of flat squares with a gridline through the middle of it**, a portrait is eight
-  rectangles you cannot read at 3rem, the logo is the system font, every map is painted identically,
-  and **nothing on the page moves** — `styles.css` has no `transition`, no `animation` and no
-  `@keyframes` in 1012 lines.
+- **The pointer was a drawing tool and nothing else.** A press had to land within one square of your
+  head, and dragging ran a breadth-first search that routed *around* obstacles — so the path bolted
+  the long way round instead of following the mouse. There was no way to say "go over there".
+- **A route was planned against the board as a snapshot**, so a tail square that would certainly have
+  cleared before you reached it was treated as a wall.
+- **Nothing on the home screen said how to play.**
+- **Backing out of a level dropped you to the front page** rather than to the level select.
+- **`Custom` on top of a running game showed that game**, stale verdict card and all.
+- **The setup panel was a form you submitted blind** — you could not see the board you had picked
+  until you started it.
+- **Several level maps were too closed to be interesting**, and level 1 was a bare rectangle.
+- **A run you were pleased with was gone** the moment you started another.
+- **"Ladder" named three different things in this repo**, only one of which a player ever sees.
+- **A snake was a run of flat squares with a gridline through the middle of it**, a portrait was eight
+  rectangles you could not read at 3rem, the logo was the system font, every map was painted
+  identically, and **nothing on the page moved** — `styles.css` had no `transition`, no `animation`
+  and no `@keyframes` in 1012 lines.
 
-## The phases
+## What shipped
 
-| # | Phase | What it delivers | Depends on |
-|---|---|---|---|
-| 1 | [Pointer controls](P1-pointer-controls.md) | Click to step, hold to keep going, hover to preview, drag traces the mouse exactly, and "blocked" becomes time-aware | — |
-| 2 | [Gauntlet rename](P2-gauntlet-rename.md) | The campaign stops being called the Ladder, everywhere but its storage key | — |
-| 3 | [Screens and setup](P3-screens-and-setup.md) | Controls on the home screen, Replay on the verdict card, `← Gauntlet`, Custom starts fresh, a live setup preview, map options that say what they need, 40×40 gone | 3.1 needs phase 1 |
-| 4 | [Maps and levels](P4-maps-and-levels.md) | Three shapes opened up, three new ones, eleven levels and a Final Boss | phase 2 |
-| 5 | [Level replays](P5-level-replays.md) | Every cleared level keeps the run that cleared it | phase 4 |
-| 6 | [Art and motion](P6-art-and-motion.md) | Snakes with heads and joints, texture packs per map, a real logo, portraits three times the size, and the page's first motion | 6.2 needs phase 4 |
+Each phase document is the record of what was decided before it ran, kept in full. Read one to find
+the argument behind a shape; read the tree to find out what the code does.
 
-**Ordering.** Phases 1 and 2 are independent of everything and of each other. Phase 2 lands before
-phase 4 so the level work is written once against `Gauntlet*` rather than twice. Phase 5 lands after
-phase 4 so no stored replay ever describes a level table that has since changed. Phase 3 is seven
-independent items; only 3.1 waits on phase 1, because it is the page that documents those controls.
-Phase 6 is last: §6.2 needs phase 4's catalogue, and §6.0 rewrites how `BoardRenderer` splits its two
-canvases — a rewrite that is cheaper once the pointer work in phase 1 has stopped moving the overlay
-around. Its §6.3 and §6.4 are markup and assets and can be picked up at any time.
+| # | Phase | What it delivered |
+|---|---|---|
+| 1 | [Pointer controls](P1-pointer-controls.md) | Click to step, hold to keep going, hover to preview, drag traces the pointer exactly, and "blocked" became time-aware. `PathPlanner` grew `route` / `trace` / `revalidate` and lost `extend`; `match/human/Clearance.kt` is the tail-retraction arithmetic under all three, and `ui/nearHead.kt` — the grace radius — is gone |
+| 2 | [Gauntlet rename](P2-gauntlet-rename.md) | The campaign stopped being called the Ladder everywhere a player can see. `match/ladder/` → `match/gauntlet/`, `ui/model/ladder/` → `ui/model/gauntlet/`, `:lab`'s `ladder` subcommand → `gauntlet`. `BotLadderTest` and `lab/strength/Ladder.kt` kept the word, and so did the storage key |
+| 3 | [Screens and setup](P3-screens-and-setup.md) | Controls on the home screen, Replay on the verdict card, `← Gauntlet`, Custom starts fresh, a live setup preview behind the panel, map options that say what size they need, 40 × 40 gone from the size list |
+| 4 | [Maps and levels](P4-maps-and-levels.md) | `rooms`, `diagonals` and `double-spiral` opened up; `arena`, `islands` and `pinwheel` added, for eleven shapes; eleven levels, ending in a Final Boss. The per-level ordering was invalidated by the redraw and **ships as a hypothesis that says so** |
+| 5 | [Level replays](P5-level-replays.md) | Every cleared level keeps the run that cleared it, one `localStorage` key per rung, carrying `ReplayCodec`'s own string rather than a new format |
+| 6 | [Art and motion](P6-art-and-motion.md) | Snake bodies moved to the overlay canvas and became connected animals with heads and joints; `render/TexturePack.kt` and `render/fnv1a.kt` give each map shape a treatment without touching a trail colour; a real logo; portraits redrawn at `viewBox` 96; and `schedule/Ticker.kt`, the page's first motion |
+
+**The order was forced in four places.** Phase 2 landed before phase 4 so the level work was written
+once against `Gauntlet*` rather than twice. Phase 5 landed after phase 4 so no stored replay ever
+described a level table that had since changed. Phase 3's §3.1 waited on phase 1, because it is the
+page that documents those controls. Phase 6 was last: §6.2 needed phase 4's catalogue to have stopped
+moving, and §6.0 rewrote how `BoardRenderer` splits its two canvases — cheaper once the pointer work
+had stopped moving the overlay around.
 
 ## Decisions already taken — do not relitigate
 
@@ -73,61 +83,56 @@ around. Its §6.3 and §6.4 are markup and assets and can be picked up at any ti
 | The portrait house style | **`viewBox` 32 → 96, flat-shaded characters** — still SVG, still no gradients, no text, no seat colour | The ask is "who am I facing". Flat cel shading is the look anyway, and gradients are where SVG size and rendering differences come from |
 | Where the logo goes | **The home screen `<h1>` only, as inline SVG** | `#wordmark` in the game bar has its `textContent` overwritten every render with the level title. An `<img>` cannot follow `--accent`, so a themed mark has to be inline |
 
-## The one thing this plan changed about the docs
+## Where the reasoning ended up
 
-`docs/plans/` used to hold the closed record of Release 2 — eighteen sessions, and the reasoning behind
-path release, the wall bitmap in the replay, and where maps and the ladder live. It has been replaced
-by this. Three links pointed into it and dangle until they are repointed:
+The rule while this was open was that a phase folds its reasoning into the code and into `docs/`
+rather than leaving it here, so a decision above is usually the *short* form of something written
+beside what it governs:
 
-- `CLAUDE.md:32` — the *"ask why a shipped thing is shaped the way it is"* row of the reading table.
-- `CLAUDE.md:61` — the sentence in *Current state* claiming this directory is a closed plan.
-- `docs/research/2026-07-30_Research-Agenda.md:20`.
+- The pointer's two verbs, the clearance off-by-one and the input queue's two capacities are in
+  [`../Match.md`](../Match.md); the clocks, the panels, the overlay's paint order and the texture
+  packs are in [`../UI.md`](../UI.md).
+- The catalogue, the half-turn symmetry argument and what a redraw costs a measurement are in
+  [`../Maps.md`](../Maps.md).
+- The level table's own KDoc — `Gauntlet` in `:match` — carries which of its placements are now
+  guesses and which three still stand on a number, and [`../Bots.md`](../Bots.md) carries the run that
+  the redraw invalidated, kept and labelled rather than deleted.
 
-## Standing rules for every phase
+Three links pointed into this directory while it described Release 2 and were repointed when it
+closed: the *"ask why a shipped thing is shaped the way it is"* row of `CLAUDE.md`'s reading table,
+the *Current state* sentence naming this directory a closed plan, and the delivery note near the top
+of [`../research/2026-07-30_Research-Agenda.md`](../research/2026-07-30_Research-Agenda.md).
 
-- **Read the row in [`../../CLAUDE.md`](../../CLAUDE.md) that matches what you are about to touch**, and
-  [`../Coding-Standards.md`](../Coding-Standards.md) before the first change, not after the first review.
-- **Stage a new source file the moment you create it** — `git add <path>`. Never commit, never push.
-- **`./gradlew build` is the gate**, and it runs `checkModulePurity` and `ktlintCheck`.
-- Five rules bite in this work specifically:
-  - **SW-03** — `PathPlanner` and `Clearance` are in a pure module: primitive arrays,
-    constructor-allocated buffers, nothing allocated per call.
-  - **SW-05** — a `MapShape.slug`, a `GauntletLevel.index` and a `localStorage` key are frozen once
-    released. A shape's *drawing* is not: a map travels as squares, never as a name.
-  - **CC-06 / CC-15** — `match/human/` stays flat at six files; one public declaration per file.
-  - **CC-12** — two near-identical helpers written in the same change are one helper.
-  - **CC-18** — every string a player reads is in the player's language, with no internal referents.
-  - **SW-08** — phase 6 is the only one that adds assets. SVG only, and check the CI budget arithmetic
-    locally with `./gradlew :app:wasmJsBrowserDistribution` before adding eleven of anything.
-- **Never background `wasmJsBrowserDevelopmentRun`.** To see the app, build a static bundle and serve it
-  yourself on the reserved port:
-  ```bash
-  ./gradlew :app:wasmJsBrowserDevelopmentExecutableDistribution
-  py -m http.server 8099 --bind 127.0.0.1 \
-     --directory app/build/dist/wasmJs/developmentExecutable
-  ```
-  Kill it when done —
-  `Get-NetTCPConnection -State Listen -LocalPort 8099 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }`.
+## Checking this area
 
-## Verification, for the whole release
+The commands that exercise what these phases touched. **`--tests` is scoped per module**, because a
+bare `./gradlew jvmTest --tests "*Foo*"` fails with `No tests found for given includes` on every
+module that has no matching test — which is most of them:
 
 ```bash
-./gradlew jvmTest --tests "*PathPlanner*" --tests "*Clearance*" --tests "*InputBuffer*"   # phase 1
-./gradlew jvmTest --tests "*Gauntlet*"                                                    # phases 2, 4
-./gradlew jvmTest --tests "*GenerateMap*" --tests "*BoardMap*" --tests "*OpeningSetup*"   # phase 4
-./gradlew jvmTest --tests "*TexturePack*" --tests "*Ticker*"                              # phase 6
+./gradlew :match:jvmTest --tests "*PathPlanner*" --tests "*Clearance*" --tests "*InputBuffer*"
+./gradlew :match:jvmTest --tests "*Gauntlet*" --tests "*GenerateMap*" --tests "*BoardMap*"
+./gradlew :lab:test      --tests "*Gauntlet*" --tests "*OpeningSetup*"    # :lab is JVM-only: `test`, not `jvmTest`
 ./gradlew build                                    # both targets, purity, ktlint
-./gradlew allTests -PbrowserTests=true             # SetupPanelTest / ShellTest / GauntletScreenTest
-./gradlew :lab:run --args="gauntlet --rounds 40"   # the renamed subcommand, and every new map drawn
-./gradlew :app:wasmJsBrowserDistribution           # phase 6 — then check the CI budget arithmetic
+./gradlew allTests -PbrowserTests=true             # SetupPanelTest / ShellTest / GauntletScreenTest / TexturePackTest / TickerTest
+./gradlew :lab:run --args="gauntlet --rounds 40"   # the renamed subcommand, on every new map drawn
+./gradlew :app:wasmJsBrowserDistribution           # then check the CI budget arithmetic — SW-08
 ```
 
-The browser suite is off by default and phases 3 and 5 genuinely need it: a new `<option>` missing from
-`SetupPanelTest.SKELETON` fails every case in that file at construction, and the result-card and tile
-changes are `ShellTest`'s and `GauntletScreenTest`'s. **Phase 6 is the one phase whose result no test
-can see** — canvas output is not unit-testable here, so its checks below are the gate.
+`TexturePack` and `Ticker` are `:ui`, which has no JVM target at all, so they run under
+`-PbrowserTests=true` or not at all. The browser suite is off by default and phases 3 and 5 genuinely
+needed it: a new `<option>` missing from `SetupPanelTest.SKELETON` fails every case in that file at
+construction.
 
-Then by hand, with **You** in a seat on a served bundle:
+**Phase 6 is the one phase whose result no test can see.** Canvas output is not unit-testable here, so
+it shipped behind the hand check below. Anything that changes `BoardRenderer`, `TexturePack` or
+`styles.css` is checked the same way, on the reserved port and never by backgrounding the dev server —
+[`../Workflow.md`](../Workflow.md) has why.
+
+### The hand check it shipped behind
+
+Kept with its numbering, because P3, P4 and P5 each cite the items that were theirs. Run with **You**
+in a seat on a served bundle; it is still the regression list for this area.
 
 1. Hover a distant empty square — a dim route appears, an L rather than a staircase.
 2. Click it — exactly **one** step along that route, then the snake stops.
@@ -146,7 +151,7 @@ Then by hand, with **You** in a seat on a served bundle:
 11. Play a match, go Home, press **Custom** — a fresh board on a fresh seed, and no stale verdict card.
 12. Open Setup, change size and map — the board behind the panel redraws as you pick, spawns and all.
     Close the panel without starting and the real match comes back.
-13. At 8×8 the map picker reads **"Rooms — needs 15 × 15"** rather than a silently greyed row, and
+13. At 8×8 the map picker reads **"Rooms — needs 14 × 14"** rather than a silently greyed row, and
     40 × 40 is gone from the size list.
 14. Inside a level the bar reads **← Gauntlet** and goes to the level select; Escape does the same; a
     custom match still reads ← Home.

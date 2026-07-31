@@ -52,24 +52,39 @@ second one only adds a picker row and a column to every matrix. That is what ret
 of anything. **Retiring is a real cost** — the slug is frozen, so it is never reused — and it is worth
 paying only when the bot answers no question that another bot here does not answer better.
 
-### The single-player ladder is a different ordering, and it is measured per level
+### The single-player gauntlet is a different ordering, and it is measured per level
 
-`Ladder` in `:match` seats each of the ten slugs once, on **its own board, map and allowance** — so it
-is not the registry order with numbers on it, and it could not be. `BotLadderTest` certifies its rungs
-on an empty 12x12, and neither half of that survives: `alphabeta:eval=territory` rates above bare
-`puct` at 8x8 while losing its head-to-head to it, and a six-entrant field on `cross` moved `wallhug`
-about 400 Elo up the table while compressing the whole field to half its empty-board width.
+`Gauntlet` in `:match` seats each of the ten slugs at least once, on **its own board, map and
+allowance** — so it is not the registry order with numbers on it, and it could not be. `BotLadderTest`
+certifies its rungs on an empty 12x12, and neither half of that survives:
+`alphabeta:eval=territory` rates above bare `puct` at 8x8 while losing its head-to-head to it, and a
+six-entrant field on `cross` moved `wallhug` about 400 Elo up the table while compressing the whole
+field to half its empty-board width.
 
-So the order is measured on the geometry each level plays, by `:lab`'s `ladder` subcommand: one fixed
+So the order is measured on the geometry each level plays, by `:lab`'s `gauntlet` subcommand: one fixed
 reference against every level in turn, and the ordering is right when the reference's score falls.
 
 ```bash
-./gradlew :lab:run --args="ladder --rounds 200"
+./gradlew :lab:run --args="gauntlet --rounds 200"
 ```
 
+> **Stale as of 2026-07-31, and shipped that way deliberately.** The table below was taken on the
+> ten-level gauntlet and on the *old* drawings of `rooms`, `diagonals` and `double-spiral`. Since then
+> those three shapes were redrawn, `arena`, `islands` and `pinwheel` were added, four levels changed
+> map and an eleventh level — `alphabeta:eval=chamber` on an empty 8x8 — was added on top. **Eight of
+> the eleven rows now name a board that did not exist when these figures were taken**; only `cross` at
+> level 2, `pillars` at level 3 and `ring` at level 5 are unchanged drawings under unchanged opponents.
+>
+> A shape travels as squares and never as a name, so no shared link broke — but a measurement is
+> exactly what a redraw invalidates. `Gauntlet`'s KDoc says which placements are now guesses, the
+> re-measurement is on the research agenda, and the command above is what settles it. Read the numbers
+> below as the last honest reading of a *different* gauntlet, kept because the three bullets under them
+> are still the reason placement is measured at all.
+
 Two references, 2,000 matches each, mirrored openings, seed 1. `uct@100` is the shipped default and
-is what resolves the whole ladder; `puct@250` is carried beside it because a single reference cannot
-be believed on an ordering it saturates at both ends.
+is what resolves the whole gauntlet; `puct@250` is carried beside it because a single reference cannot
+be believed on an ordering it saturates at both ends. **The board and map columns are the gauntlet as
+it stood on 2026-07-30**, which is not the one `Gauntlet.levels` ships today — see the note above.
 
 | # | opponent | board | map | allowance | `uct@100` | `puct@250` |
 |---|---|---|---|---|---|---|
@@ -109,7 +124,9 @@ distinct, which is why it is the second reading and not the first.
   `territory` leaf rather than `eval=chamber`, for two reasons that agree: `AlphaBetaBot.EVAL` records
   that leaf finishing *below* the cheap one in a common field, and `MatchSetup.DEFAULT_BUDGET_PER_TURN`
   puts it at about 4.6x `territory` per evaluation, which on a 20x20 overruns `:ui`'s 8 ms slice
-  several times over.
+  several times over. **Both reasons are about a 20x20**, which is what the eleventh level added on
+  2026-07-31 turns on: `eval=chamber` on an empty **8x8** is affordable, and a small bare board is a
+  tactical duel rather than a filling race. Whether it is in fact the hardest level is unmeasured.
 
 The allowances are the frame criterion rather than a ramp somebody liked the look of. `lab time` on
 each level's own board and map, best of five, with `uct` at 20x20 and the shipped allowance carried as
@@ -125,7 +142,10 @@ the control this table's figures are read against — that control reads 2.19 ms
 | *control:* `uct` @1,000, 20x20 | 2,189 |
 
 Every level is at or under the control, which is the configuration the 8 ms slice was chosen by — so
-no level costs a player more of a frame than an unconfigured match already does.
+no level costs a player more of a frame than an unconfigured match already does. **Levels 8 and 9 have
+since changed map and level 11 has no row here at all**, so this table is stale for the same reason the
+one above it is; the frame criterion it establishes is not, and re-running `lab time` per level is part
+of the re-measurement.
 
 ## A bot on a map: two readings, and the one denominator
 

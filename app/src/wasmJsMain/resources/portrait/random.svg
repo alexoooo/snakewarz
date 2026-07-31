@@ -1,10 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Random">
-    <!-- Scattered blocks that line up with nothing: it picks a legal move and no more. -->
-    <rect width="32" height="32" rx="6" fill="#16191d"/>
-    <rect x="5" y="4" width="6" height="6" fill="#4c9f74"/>
-    <rect x="19" y="6" width="6" height="6" fill="#7fe0a8"/>
-    <rect x="10" y="13" width="6" height="6" fill="#3a7f5c"/>
-    <rect x="22" y="17" width="5" height="5" fill="#5fbf8a"/>
-    <rect x="4" y="21" width="6" height="6" fill="#5fbf8a"/>
-    <rect x="15" y="23" width="5" height="5" fill="#3a7f5c"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Random">
+    <!--
+      Static. A head that will not hold still: the scattered blocks of the old mark survive as the
+      bands it is torn into and the flecks shaken loose, and its two eyes do not agree on a height.
+      It picks a legal move and no more.
+    -->
+    <defs>
+        <clipPath id="tile">
+            <rect width="96" height="96" rx="18"/>
+        </clipPath>
+    </defs>
+    <rect width="96" height="96" rx="18" fill="#16191d"/>
+    <g clip-path="url(#tile)">
+        <path d="M2 96V82l18-8h56l18 8v14z" fill="#2b6046"/>
+        <path d="M2 96V82l18-8h30v22z" fill="#3a7f5c"/>
+        <rect x="40" y="62" width="16" height="14" fill="#22503c"/>
+
+        <!-- Three bands of one head, none of them lined up with the next. -->
+        <rect x="24" y="20" width="50" height="16" fill="#4c9f74"/>
+        <rect x="18" y="36" width="50" height="16" fill="#5fbf8a"/>
+        <rect x="28" y="52" width="50" height="14" fill="#3a7f5c"/>
+
+        <rect x="26" y="40" width="13" height="9" fill="#e9f2ec"/>
+        <rect x="50" y="42" width="13" height="7" fill="#e9f2ec"/>
+        <rect x="30" y="42" width="5" height="6" fill="#0e1114"/>
+        <rect x="55" y="43" width="5" height="5" fill="#0e1114"/>
+        <rect x="36" y="58" width="24" height="4" fill="#0e1114"/>
+
+        <!-- Flecks shaken loose, lining up with nothing. -->
+        <rect x="6" y="16" width="9" height="9" fill="#3a7f5c"/>
+        <rect x="80" y="30" width="9" height="9" fill="#7fe0a8"/>
+        <rect x="6" y="54" width="7" height="7" fill="#5fbf8a"/>
+        <rect x="84" y="60" width="7" height="7" fill="#2b6046"/>
+    </g>
 </svg>

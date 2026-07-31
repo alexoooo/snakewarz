@@ -1,8 +1,8 @@
 package ao.snakewarz.ui.model
 
-import ao.snakewarz.match.ladder.Ladder
+import ao.snakewarz.match.gauntlet.Gauntlet
 import ao.snakewarz.match.stats.MatchStats
-import ao.snakewarz.ui.model.ladder.LadderProgress
+import ao.snakewarz.ui.model.gauntlet.GauntletProgress
 import ao.snakewarz.ui.render.Theme
 
 /**
@@ -21,7 +21,7 @@ internal class UiModel(
     /** Which of the three sections is showing. Exactly one is, and the other two are `hidden`. */
     val screen: Screen,
     /**
-     * The rung of the ladder on the board, or `null` for a match somebody configured.
+     * The rung of the gauntlet on the board, or `null` for a match somebody configured.
      *
      * Deliberately not derivable from [screen]: a level and a custom match are both played on
      * [Screen.GAME], so what makes one a level is the way in and is kept while the board is up. It is
@@ -30,12 +30,12 @@ internal class UiModel(
      */
     val level: Int?,
     /**
-     * How far up the ladder this browser has got, which the level select and the menu both read.
+     * How far up the gauntlet this browser has got, which the level select and the menu both read.
      *
      * Carried on the model rather than looked up where it is wanted, so that the tiles, the Continue
      * button and the verdict cannot disagree about what has been beaten within one frame.
      */
-    val ladder: LadderProgress,
+    val gauntlet: GauntletProgress,
     /**
      * The player has just beaten [level].
      *
@@ -116,13 +116,13 @@ internal class UiModel(
      * Derived from [level] rather than stored beside it, because "this is a level" and "this is level
      * seven" would otherwise be two answers to one question — and the pair could disagree.
      */
-    val mode: Mode get() = if (level == null) Mode.CUSTOM else Mode.LADDER
+    val mode: Mode get() = if (level == null) Mode.CUSTOM else Mode.GAUNTLET
 
     /**
      * The rung the verdict offers to move on to, or `null` where there is none.
      *
      * `null` on a loss, on a draw, in a custom match, and on the last rung — which is where the card
-     * offers Home and the verdict says the ladder is finished.
+     * offers Home and the verdict says the gauntlet is finished.
      */
-    val nextLevel: Int? get() = level?.takeIf { levelCleared && it < Ladder.size }?.plus(1)
+    val nextLevel: Int? get() = level?.takeIf { levelCleared && it < Gauntlet.size }?.plus(1)
 }

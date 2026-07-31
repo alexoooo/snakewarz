@@ -17,8 +17,10 @@ How a phase is run, what an agent is told, and the order the instruments go in a
 >
 > **This agenda is not edited and is not the current state of the tree.** It records what was believed
 > on 2026-07-30. Some of it has since been *delivered as engineering* by
-> [`../plans/README.md`](../plans/README.md) — Release 2, eighteen sessions — which is a different
-> route to the same ground and leaves parts of the text below describing work that is done.
+> **Release 2, eighteen sessions** — which is a different route to the same ground and leaves parts
+> of the text below describing work that is done. That record has since been superseded in place:
+> [`../plans/README.md`](../plans/README.md) is now Release 3's, and Release 2's own is at
+> `git show 9112201:docs/plans/README.md`.
 >
 > | here | delivered by |
 > |---|---|
@@ -28,6 +30,11 @@ How a phase is run, what an agent is told, and the order the instruments go in a
 > | **P7** — `learned` needs a refit | diagnosed, not done. The features were moved onto `BoardView.openCount` so a map leaves every reading in range; the refit and its instrument are still open, and `LearnedEval`'s KDoc states the three clauses precisely |
 > | **P7** — separation, parity | untouched |
 > | P1, P2, P5, P6, P8 | untouched |
+>
+> **And one measurement was *un*-done by engineering**, which is the direction nobody expects: Release
+> 3 redrew three map shapes, added three, and grew the single-player gauntlet to eleven levels, which
+> invalidates the per-level ordering [`../Bots.md`](../Bots.md) carries. The re-measurement is the
+> first item under [Open at the close](#open-at-the-close).
 >
 > **Three of the ground truths below were corrected in the doing.** Each is a case of a written
 > description being read instead of the code:
@@ -608,3 +615,38 @@ plus five lines this agenda earns:
 
 *Written when the last phase lands. Appended to as phases produce decisions that belong to a person
 rather than to a phase.*
+
+### Re-measure the single-player gauntlet's ordering — added 2026-07-31, unblocked, cheap
+
+**The eleven-level table shipped unmeasured, deliberately, and this is the run that settles it.**
+Release 3's map phase redrew `rooms`, `diagonals` and `double-spiral`, added `arena`, `islands` and
+`pinwheel`, moved four levels onto different maps and added an eleventh level —
+`alphabeta:eval=chamber` on an empty 8×8. Eight of the eleven rows now name a board that did not exist
+when [`../Bots.md`](../Bots.md)'s per-level figures were taken; only `cross` at level 2, `pillars` at
+level 3 and `ring` at level 5 are unchanged drawings under unchanged opponents.
+
+```bash
+./gradlew :lab:run --args="gauntlet --rounds 200"
+```
+
+**The ordering is right when the reference's score falls level by level.** One fixed reference plays
+every level on that level's own board, map and allowance; a rise of more than five points is a table
+to reorder rather than a run to repeat, and the command names the pair that produced it. Carry a
+second reference for the reason the first run did — `uct@100` and `puct@250` — because a single one
+saturates at both ends and cannot be believed about an ordering it pins near 100% and 0%.
+
+Three things to state in the brief:
+
+- **Read the distinct-games line first.** Levels 2 through 6 are entirely bots that draw no
+  randomness, so a reference that also drew none would play each of those rows the same four games
+  however many rounds were asked for. `mirrored` is the default and is what earns the sample.
+- **A rise is a finding, not a defect.** The prior worth holding is that `double-spiral` at level 6
+  moved: its 77–23 inversion of the value of search was measured on corridors that alternated one and
+  two squares, and they are now a uniform two.
+- **Level 11 is the row with no prior at all.** `AlphaBetaBot.EVAL` records `eval=chamber` finishing
+  *below* the cheap leaf in a common field on a bare 12×12, and the level's whole premise is that an
+  8×8 is a different question. It may come out easier than level 10; that is a real possible answer
+  and the table would then be wrong rather than the run.
+
+A `lab time` pass per level belongs with it: two levels changed map and the eleventh has no timing
+row, so the frame criterion that chose the allowances is currently asserted rather than checked.

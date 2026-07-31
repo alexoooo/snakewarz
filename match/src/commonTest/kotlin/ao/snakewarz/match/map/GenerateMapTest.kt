@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
  * Every shipped map, at every size the game offers, is symmetric, connected and worth playing on.
  *
  * The sweep is the point: a map is not reviewed by looking at it, because a sealed pocket or an
- * asymmetry that only appears at 40x40 is exactly what an eye misses. The half turn is the fairness
+ * asymmetry that only appears at 28x28 is exactly what an eye misses. The half turn is the fairness
  * claim — [ao.snakewarz.match.mostDistantSpawns] seats slot 0 at the lowest open square and slot 1 at
  * the highest, and on a ρ-invariant map those two are exact images — so it is asserted here as well
  * as inside [generateMap], where a shape that broke it could not reach a match at all.
@@ -97,11 +97,11 @@ class GenerateMapTest {
     }
 
     @Test
-    fun `only the scattered shape reads the seed, and it reads it`() {
+    fun `only a scattered shape reads the seed, and both of them read it`() {
         for (shape in MapShape.entries) {
             val one = generateMap(20, 20, shape, seed = 1).walls()
             val other = generateMap(20, 20, shape, seed = 2).walls()
-            if (shape == MapShape.SCATTER) {
+            if (shape in SCATTERED) {
                 assertTrue(!one.contentEquals(other), "${shape.slug} ignores its seed")
             } else {
                 assertContentEquals(one, other, "${shape.slug} is not a function of its geometry alone")
@@ -174,17 +174,26 @@ class GenerateMapTest {
         /**
          * Every square board the picker offers, plus two non-square ones of each parity.
          *
-         * All seven, because the picker gates a shape on [MapShape.minimumSide] alone — so any size
-         * it offers and this list misses is a Start match that could throw at a player.
+         * All six, because the picker gates a shape on [MapShape.minimumSide] alone — so any size it
+         * offers and this list misses is a Start match that could throw at a player.
          */
-        val SIZES = listOf(8 to 8, 10 to 10, 12 to 12, 16 to 16, 20 to 20, 28 to 28, 40 to 40, 14 to 22, 9 to 15)
+        val SIZES = listOf(8 to 8, 10 to 10, 12 to 12, 16 to 16, 20 to 20, 28 to 28, 14 to 22, 9 to 15)
 
         const val SEED: Long = 20260730
 
         /**
+         * The shapes that draw at random, and so are the ones a seed may move.
+         *
+         * Named rather than derived, because "is a function of the geometry alone" is the claim being
+         * tested: a shape that started reading the seed and was added here in the same change would
+         * have tested nothing.
+         */
+        val SCATTERED = setOf(MapShape.SCATTER, MapShape.ISLANDS)
+
+        /**
          * Under 40% wall on every shipped map.
          *
-         * The densest is the double spiral, which is one square of wall per two of corridor by
+         * The densest is the double spiral, which is one square of wall per three of corridor by
          * construction. A shape past this is a shape that has stopped being a map and started being a
          * maze, and this is where that gets noticed.
          */

@@ -9,13 +9,14 @@ import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.botapi.registry.BotRegistry
 import ao.snakewarz.match.Match
 import ao.snakewarz.match.MatchSetup
+import ao.snakewarz.match.gauntlet.Gauntlet
 import ao.snakewarz.ui.model.Panel
 import ao.snakewarz.ui.model.Screen
 import ao.snakewarz.ui.model.SlotLabels
 import ao.snakewarz.ui.model.SlotPortraits
 import ao.snakewarz.ui.model.UiIntent
 import ao.snakewarz.ui.model.UiModel
-import ao.snakewarz.ui.model.ladder.LadderProgress
+import ao.snakewarz.ui.model.gauntlet.GauntletProgress
 import ao.snakewarz.ui.render.Theme
 import kotlinx.browser.document
 import org.w3c.dom.HTMLButtonElement
@@ -93,7 +94,7 @@ class ShellTest {
     }
 
     @Test
-    fun `a ladder level offers neither Setup nor Tournament`() {
+    fun `a gauntlet level offers neither Setup nor Tournament`() {
         // A level *is* its configuration, so re-seating it would be playing something else under
         // its name. Gone from the bar rather than greyed on it: a control that can never apply here
         // should not be present, and hiding it is also what takes it out of the tab order.
@@ -128,9 +129,12 @@ class ShellTest {
 
     @Test
     fun `beating the last rung offers nothing above it`() {
-        // There is no level eleven, so the card is the verdict and the way out — and the focus falls
-        // through to Home rather than staying on a button nobody can press.
-        shell.render(model(screen = Screen.GAME, level = 10, levelCleared = true, result = "Ladder complete"))
+        // There is no rung above the last one, so the card is the verdict and the way out — and the
+        // focus falls through to Home rather than staying on a button nobody can press. Taken off
+        // `Gauntlet.size` rather than written out, so the case follows the table when it grows.
+        shell.render(
+            model(screen = Screen.GAME, level = Gauntlet.size, levelCleared = true, result = "Gauntlet cleared"),
+        )
 
         assertEquals("result-home", focused())
         assertEquals(listOf("result-home"), reachable())
@@ -184,6 +188,49 @@ class ShellTest {
         shell.render(model(screen = Screen.GAME, openPanel = Panel.SETUP, result = "You win"))
 
         assertEquals(listOf("result-again", "result-home"), reachable())
+    }
+
+    @Test
+    fun `the verdict offers the run back, under its actions rather than among them`() {
+        shell.render(model(screen = Screen.GAME))
+        shell.render(model(screen = Screen.GAME, level = 3, result = "You lose", canWatchReplay = true))
+
+        // Last in document order, so the focus still lands on what to do next rather than on what
+        // just happened.
+        assertEquals("result-again", focused())
+        assertEquals(listOf("result-again", "result-home", "result-replay"), reachable())
+
+        (element("result-replay") as HTMLButtonElement).click()
+        assertEquals(UiIntent.WatchReplay, intents.single())
+    }
+
+    @Test
+    fun `on a level the way out is the level select, and off one it is the menu`() {
+        shell.render(model(screen = Screen.GAME, level = 7))
+        assertEquals("← Gauntlet", element("game-back").textContent)
+        (element("game-back") as HTMLButtonElement).click()
+        assertEquals(Screen.GAUNTLET, (intents.single() as UiIntent.Navigate).screen)
+
+        // Escape is the same call, so it cannot offer a different way out from the button.
+        intents.clear()
+        escape()
+        assertEquals(Screen.GAUNTLET, (intents.single() as UiIntent.Navigate).screen)
+
+        intents.clear()
+        shell.render(model(screen = Screen.GAME))
+        assertEquals("← Home", element("game-back").textContent)
+        (element("game-back") as HTMLButtonElement).click()
+        assertEquals(Screen.HOME, (intents.single() as UiIntent.Navigate).screen)
+    }
+
+    @Test
+    fun `the level select goes to the menu even with a rung still on the board`() {
+        // The rung outlives the screen it was chosen on, so a back that read only the level would
+        // send the level select to itself and strand somebody there.
+        shell.render(model(screen = Screen.GAUNTLET, level = 7))
+        (element("gauntlet-back") as HTMLButtonElement).click()
+
+        assertEquals(Screen.HOME, (intents.single() as UiIntent.Navigate).screen)
     }
 
     @Test
@@ -247,7 +294,7 @@ class ShellTest {
     private fun section(screen: Screen): HTMLElement = element(
         when (screen) {
             Screen.HOME -> "screen-home"
-            Screen.LADDER -> "screen-ladder"
+            Screen.GAUNTLET -> "screen-gauntlet"
             Screen.GAME -> "screen-game"
         },
     )
@@ -272,10 +319,11 @@ class ShellTest {
         levelCleared: Boolean = false,
         openPanel: Panel? = null,
         result: String? = null,
+        canWatchReplay: Boolean = false,
     ): UiModel = UiModel(
         screen = screen,
         level = level,
-        ladder = LadderProgress.NONE,
+        gauntlet = GauntletProgress.NONE,
         levelCleared = levelCleared,
         openPanel = openPanel,
         theme = Theme.of(Theme.DEFAULT_ID, dark = false),
@@ -290,7 +338,7 @@ class ShellTest {
         labels = SlotLabels(SETUP, ONE_SEAT),
         portraits = SlotPortraits(SETUP, { null }, Theme.of(Theme.DEFAULT_ID, dark = false)),
         hover = null,
-        canWatchReplay = false,
+        canWatchReplay = canWatchReplay,
         shareUrl = null,
         tournament = null,
     )
@@ -324,7 +372,7 @@ class ShellTest {
         val SKELETON = """
             <main id="app">
               <section id="screen-home" tabindex="-1"></section>
-              <section id="screen-ladder" tabindex="-1"><button id="ladder-back"></button></section>
+              <section id="screen-gauntlet" tabindex="-1"><button id="gauntlet-back"></button></section>
               <section id="screen-game" tabindex="-1">
                 <button id="game-back"></button>
                 <button id="open-setup"></button>
@@ -345,6 +393,7 @@ class ShellTest {
               <button id="result-again" data-focus></button>
               <button id="result-next" data-focus hidden></button>
               <button id="result-home" data-focus></button>
+              <button id="result-replay" data-focus hidden></button>
             </div>
         """.trimIndent()
     }

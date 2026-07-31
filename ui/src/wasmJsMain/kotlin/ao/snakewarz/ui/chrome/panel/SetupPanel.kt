@@ -22,9 +22,14 @@ import org.w3c.dom.HTMLSelectElement
 /**
  * `#panel-setup`: the board, the map, four seats with their settings, the seed, and Start match.
  *
- * A form and nothing more. Nothing here dispatches until Start match is pressed, so which bot is
- * seated and what its knobs say is form state right up to that click — the same kind of thing the
- * reseed button writes straight into `#seed`, and no part of the running match can see any of it.
+ * **Almost all of it is form state, and the one exception is a picture.** Which bot is seated and
+ * what its knobs say belongs to this panel right up to Start match — the same kind of thing the
+ * reseed button writes straight into `#seed` — and no part of the running match can see any of it.
+ * What the three boxes that describe the *board* do dispatch is [UiIntent.PreviewSetup], because a
+ * form you submit blind is what this panel used to be: a panel is an overlay over a translucent
+ * scrim, so the board it covers is the natural place to answer *what does this size, this map and
+ * this seed look like*. That intent changes nothing about the match, which is why it is a `Shell`
+ * one and why a preview cannot end somebody's tournament.
  *
  * The two registry-driven exceptions to *"Kotlin never constructs structure"* both live behind this
  * panel: the `<option>` list of each picker, built here, and the knob rows inside each seat, built by
@@ -34,23 +39,27 @@ import org.w3c.dom.HTMLSelectElement
  */
 internal class SetupPanel(
     private val registry: BotRegistry,
-    dispatch: (UiIntent) -> Unit,
+    private val dispatch: (UiIntent) -> Unit,
 ) {
     private val sizeSelect: HTMLSelectElement = elementById("size")
     private val mapSelect: HTMLSelectElement = elementById("map")
     private val fromReplayOption: HTMLOptionElement = elementById("map-from-replay")
 
     /**
-     * Each shape's option, paired with the shape it draws.
+     * Each shape's option, the shape it draws, and the label the markup gave it.
      *
      * Looked up by slug so that a shape the markup forgot fails at boot with its own name, rather
-     * than becoming a picker that quietly offers seven of eight maps.
+     * than becoming a picker that quietly offers ten of eleven maps.
+     *
+     * The label is captured here, once, because [refreshMapOptions] appends a requirement to it and
+     * has to be able to take that back: reading the text at the moment of the write would append to
+     * whatever the last write left, and a picker resized twice would say *needs 14 × 14* twice. The
+     * base wording stays the markup's, and Kotlin only ever adds a suffix to it.
      */
-    private val mapOptions: List<Pair<MapShape, HTMLOptionElement>> = MapShape.entries.map { shape ->
-        shape to (
-            mapSelect.querySelector("option[value='${shape.slug}']") as? HTMLOptionElement
-                ?: error("the page skeleton is missing a map option for ${shape.slug}")
-            )
+    private val mapOptions: List<Triple<MapShape, HTMLOptionElement, String>> = MapShape.entries.map { shape ->
+        val option = mapSelect.querySelector("option[value='${shape.slug}']") as? HTMLOptionElement
+            ?: error("the page skeleton is missing a map option for ${shape.slug}")
+        Triple(shape, option, option.textContent.orEmpty())
     }
 
     /**
@@ -75,14 +84,37 @@ internal class SetupPanel(
         refreshMapOptions()
 
         startButton.addEventListener("click") { dispatch(UiIntent.StartMatch(readOptions())) }
-        reseedButton.addEventListener("click") { seedInput.value = freshSeed().toString() }
+        reseedButton.addEventListener("click") {
+            reseed()
+            preview()
+        }
 
         // A smaller board offers fewer shapes, so the gate moves with the size rather than being
         // discovered at Start match by a `generateMap` that refuses the shape still selected.
+        //
+        // The preview goes last, and that ordering is load-bearing: it draws the map the picker is
+        // showing, `generateMap` throws on a shape the board is too small for, and the line above is
+        // the only thing standing between those two facts.
         sizeSelect.addEventListener("change") {
             discardReplayMap()
             refreshMapOptions()
+            preview()
         }
+        mapSelect.addEventListener("change") { preview() }
+        // `change` and not `input`, so a seed is previewed once it has been typed rather than once
+        // per keystroke — every one of which would otherwise build a board and lay out a match.
+        seedInput.addEventListener("change") { preview() }
+    }
+
+    /**
+     * Draws a seed nobody has played into `#seed`.
+     *
+     * The reseed button's own work, exposed because the menu's Custom button asks for the same
+     * thing: pressing it means a new game rather than the last one again. Start match deliberately
+     * does *not* go through here — a seed somebody typed is a board they meant to play.
+     */
+    fun reseed() {
+        seedInput.value = freshSeed().toString()
     }
 
     fun readOptions(): MatchOptions {
@@ -95,6 +127,9 @@ internal class SetupPanel(
             cols = size,
             seed = seed,
             walls = mapWalls(size, seed),
+            // What the board is *painted* like, and nothing the match will ever see — the picker's
+            // own answer, so a map that came in with a replay carries no shape and no texture.
+            shape = MapShape.ofSlug(mapSelect.value),
             // Each seat answers with its bot *and* its settings or with nothing at all, so an empty
             // picker drops the whole seat and there is no index left to keep aligned downstream.
             slots = seats.mapNotNull(SlotForm::read),
@@ -117,6 +152,7 @@ internal class SetupPanel(
             cols = match.cols,
             seed = match.seed,
             walls = match.walls,
+            shape = match.shape,
             // An allowance left at the default is left unsaid, so a stock seat enters as plain
             // `uct` rather than as `uct@40k` and the matrix reads the way it always has.
             contestants = match.slots
@@ -167,6 +203,11 @@ internal class SetupPanel(
 
     // -- internals
 
+    /** Asks for the board this form now describes to be drawn on the arena behind it. */
+    private fun preview() {
+        dispatch(UiIntent.PreviewSetup(readOptions()))
+    }
+
     private fun boardSize(): Int = sizeSelect.value.toIntOrNull() ?: DEFAULT_SIZE
 
     /**
@@ -183,19 +224,23 @@ internal class SetupPanel(
     }
 
     /**
-     * Greys out every shape the chosen board is too small to draw, and falls back off one that was
-     * already picked.
+     * Greys out every shape the chosen board is too small to draw, says what each of them wants, and
+     * falls back off one that was already picked.
      *
      * `MapShape.minimumSide` is the single source of that number: a copy in the markup would sit a
      * file away from the shape it belongs to, and `generateMap` refuses a smaller board outright — so
-     * an option left pickable is a Start match that throws.
+     * an option left pickable is a Start match that throws. Writing the number into the label is the
+     * same fact answered for the player: half the list greyed with no explanation reads as a broken
+     * picker, where *Rooms — needs 14 × 14* reads as a bigger board.
      */
     private fun refreshMapOptions() {
         val size = boardSize()
         var lost = false
-        for ((shape, option) in mapOptions) {
-            option.disabled = size < shape.minimumSide
-            lost = lost || (option.disabled && option.selected)
+        for ((shape, option, label) in mapOptions) {
+            val small = size < shape.minimumSide
+            option.disabled = small
+            option.textContent = if (small) "$label — needs ${shape.minimumSide} × ${shape.minimumSide}" else label
+            lost = lost || (small && option.selected)
         }
         if (lost) {
             mapSelect.value = MapShape.EMPTY.slug
@@ -255,7 +300,7 @@ internal class SetupPanel(
     private fun shapeDrawing(setup: MatchSetup): MapShape? {
         val walls = setup.walls()
         val side = minOf(setup.rows, setup.cols)
-        return mapOptions.firstOrNull { (shape, _) ->
+        return mapOptions.firstOrNull { (shape, _, _) ->
             shape.minimumSide <= side &&
                 generateMap(setup.rows, setup.cols, shape, seed = setup.seed).walls().contentEquals(walls)
         }?.first

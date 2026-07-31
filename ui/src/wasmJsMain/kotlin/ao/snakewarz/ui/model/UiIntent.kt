@@ -55,6 +55,16 @@ internal sealed interface UiIntent {
     class OpenPanel(val panel: Panel) : Shell
 
     /**
+     * Draw the board [options] describe, so the form is not something you submit blind.
+     *
+     * A [Shell] intent for [Hover]'s reason: it puts a picture on the arena and changes nothing
+     * about the match, so it must neither be dropped while a batch owns the board nor be grounds for
+     * taking the board off one. Closing the panel and starting a match both put the player's own
+     * board back, so nothing here outlives the form it came from.
+     */
+    class PreviewSetup(val options: MatchOptions) : Shell
+
+    /**
      * Colour the board and the page some other way.
      *
      * A [Shell] intent for [Hover]'s reason: recolouring changes nothing about the position, so it
@@ -93,16 +103,37 @@ internal sealed interface UiIntent {
     class StartMatch(val options: MatchOptions) : Match
 
     /**
-     * Play a rung of the ladder, from a fresh seed.
+     * Start a match somebody configured, on the game screen, from a seed nobody has played before.
+     *
+     * A [Match] intent and not a [Navigate], for [StartLevel]'s reason: it replaces the match on the
+     * board, so it has to pass the guard that says whose board that is. Navigating alone would show
+     * whatever was already there — a finished game, verdict card and all — because a board exists
+     * from construction and nothing about arriving on the screen replaces it.
+     */
+    data object StartCustom : Match
+
+    /**
+     * Play a rung of the gauntlet, from a fresh seed.
      *
      * A [Match] intent and not a [Navigate], even though it ends on the game screen: what it does is
      * replace the match on the board, so it has to pass the guard that says whose board that is. The
      * screen and the mode follow from the match, rather than the other way round.
      *
      * The **level number**, because that is the frozen identifier — saved progress is keyed on it, and
-     * `Ladder.levelAt` is what turns it back into a board.
+     * `Gauntlet.levelAt` is what turns it back into a board.
      */
     class StartLevel(val index: Int) : Match
+
+    /**
+     * Watch the run that cleared a rung, kept from the day it was played.
+     *
+     * A [Match] intent for [StartLevel]'s reason and not for [WatchReplay]'s: what it does is put
+     * another match on the board, so it passes the guard that says whose board that is. The
+     * difference from [WatchReplay] is where the recording comes from — that one is the match still
+     * on the board, this one is a payload out of storage, and a payload that will not decode is
+     * treated as though there were none.
+     */
+    class WatchLevelReplay(val index: Int) : Match
 
     class SetSpeed(val turnsPerSecond: Double) : Match
 

@@ -3,9 +3,10 @@ package ao.snakewarz.ui.chrome
 import kotlinx.browser.localStorage
 
 /**
- * What this browser remembers between visits: the player's taste, and how far up the ladder they got.
+ * What this browser remembers between visits: the player's taste, how far up the gauntlet they got,
+ * and the run that cleared each rung.
  *
- * Neither is anything a match depends on. A theme is not part of a replay and never travels in a
+ * None of it is anything a match depends on. A theme is not part of a replay and never travels in a
  * link, and progress is one browser's memory of one person's evenings — which is exactly why every
  * route through here has an answer for "there is nothing stored" and none of them can fail.
  *
@@ -28,19 +29,33 @@ internal object Preferences {
     }
 
     /**
-     * Ladder progress as it was last written, or `null` for a browser that has cleared nothing.
+     * Gauntlet progress as it was last written, or `null` for a browser that has cleared nothing.
      *
      * A string rather than a parsed value, because what the text means is
-     * [ao.snakewarz.ui.model.ladder.LadderProgress]'s to say and *whether it can be read at all* is
-     * this object's — the two failures are unrelated and answering both here would fuse them.
+     * [ao.snakewarz.ui.model.gauntlet.GauntletProgress]'s to say and *whether it can be read at all*
+     * is this object's — the two failures are unrelated and answering both here would fuse them.
      */
-    fun ladder(): String? = read(LADDER_KEY)
+    fun gauntlet(): String? = read(GAUNTLET_KEY)
 
-    fun setLadder(progress: String) {
-        write(LADDER_KEY, progress)
+    fun setGauntlet(progress: String) {
+        write(GAUNTLET_KEY, progress)
     }
 
-    override fun toString(): String = "Preferences(${theme() ?: "unset"}, ${ladder() ?: "unset"})"
+    /**
+     * The run that cleared level [level] on this browser, or `null` where nothing is kept for it.
+     *
+     * The text is a `ReplayCodec` payload — the very string a shared link carries — and this knows
+     * nothing about it beyond that, for the reason [gauntlet] hands its text on unparsed: whether the
+     * store can be read at all and whether what came back is a match are unrelated failures, and
+     * answering both here would fuse them.
+     */
+    fun levelReplay(level: Int): String? = read(levelReplayKey(level))
+
+    fun setLevelReplay(level: Int, payload: String) {
+        write(levelReplayKey(level), payload)
+    }
+
+    override fun toString(): String = "Preferences(${theme() ?: "unset"}, ${gauntlet() ?: "unset"})"
 
     // -- internals
 
@@ -62,5 +77,27 @@ internal object Preferences {
     }
 
     private const val THEME_KEY = "snakewarz.theme.v1"
-    private const val LADDER_KEY = "snakewarz.ladder.v1"
+
+    /**
+     * The constant and the string it holds deliberately disagree.
+     *
+     * The campaign was called the Ladder when this key shipped, and the key is somebody's saved
+     * place: renaming the *string* would hand every existing player a browser that has never heard
+     * of them and open them back at level 1. SW-05 freezes what was released, so the word survives
+     * where only the storage can see it and nowhere a player can.
+     */
+    private const val GAUNTLET_KEY = "snakewarz.ladder.v1"
+
+    /**
+     * One key per rung — `snakewarz.gauntlet.replay.<n>.v1` — rather than one key holding them all.
+     *
+     * Writing one level then rewrites nothing else, a value that arrives corrupt costs that one rung
+     * rather than the lot, and there is no concatenation format for anybody to parse. A record is on
+     * the order of a kilobyte at the turn limit, so eleven of them sit far inside any quota.
+     *
+     * The version belongs to the *board* as much as to the layout: a rung whose map or opponent
+     * changed would otherwise hand somebody a game on a board that no longer exists, and bumping to
+     * `.v2` leaves the old value unread rather than played.
+     */
+    private fun levelReplayKey(level: Int): String = "snakewarz.gauntlet.replay.$level.v1"
 }

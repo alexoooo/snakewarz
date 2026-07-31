@@ -208,7 +208,7 @@ public class MatchSetup(
          * turn a bad link into a fresh match — so the reader is told their browser cannot run the
          * game, which is a confident and wrong diagnosis.
          *
-         * 256 is far above anything the game offers: `:ui` stops at 40x40 and `:lab` defaults to
+         * 256 is far above anything the game offers: `:ui` stops at 28x28 and `:lab` defaults to
          * 12x12. It holds the worst case — eight slots on 256x256 — to a few megabytes, and it is
          * small enough that `rows * cols` cannot overflow anywhere downstream.
          */

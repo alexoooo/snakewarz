@@ -1,9 +1,9 @@
-package ao.snakewarz.ui.model.ladder
+package ao.snakewarz.ui.model.gauntlet
 
-import ao.snakewarz.match.ladder.Ladder
+import ao.snakewarz.match.gauntlet.Gauntlet
 
 /**
- * How far up the ladder this browser has got: the highest level it may open, and which it has beaten.
+ * How far up the gauntlet this browser has got: the highest level it may open, and which it has beaten.
  *
  * A value rather than a store. Reading and writing `localStorage` is `Preferences`' job and the
  * session's — this only knows how to turn two numbers into a string and a string back into two
@@ -24,13 +24,13 @@ import ao.snakewarz.match.ladder.Ladder
  *
  * ### Clamped on the way in
  *
- * A stored `highest` above the table is a ladder that lost a level between deploys, and it must clamp
+ * A stored `highest` above the table is a gauntlet that lost a level between deploys, and it must clamp
  * rather than index past the end. The cleared set is masked to what is unlocked for the same reason.
  *
  * A level index is **frozen** once released, exactly like the `BotId` a level names: it is the key
  * this is stored under, and renumbering the table would hand everybody somebody else's progress.
  */
-internal class LadderProgress private constructor(
+internal class GauntletProgress private constructor(
     /** The highest level that may be opened, counting from 1. Always within the table. */
     val highest: Int,
     /** One bit per level, level `n` at bit `n - 1`. Never carries a bit above [highest]. */
@@ -50,17 +50,17 @@ internal class LadderProgress private constructor(
     /**
      * This progress with [level] beaten, which unlocks the one above it and nothing further.
      *
-     * Beating the last level unlocks nothing and is still recorded, so a finished ladder reads as ten
-     * cleared tiles rather than nine and an open one.
+     * Beating the last level unlocks nothing and is still recorded, so a finished gauntlet reads as a
+     * full column of cleared tiles rather than one short of it and an open one.
      */
-    fun withCleared(level: Int): LadderProgress {
+    fun withCleared(level: Int): GauntletProgress {
         require(level in FIRST_LEVEL..LEVELS) { "there are $LEVELS levels, so there is no level $level" }
         return of(maxOf(highest, level + 1), clearedBits or bitOf(level))
     }
 
     fun format(): String = "$VERSION$SEPARATOR$highest$SEPARATOR$clearedBits"
 
-    override fun toString(): String = "LadderProgress(${format()})"
+    override fun toString(): String = "GauntletProgress(${format()})"
 
     /** What a tile says about itself: beaten, playable, or not yet reachable. */
     enum class State {
@@ -71,10 +71,10 @@ internal class LadderProgress private constructor(
 
     companion object {
         /** A browser that has never played a level, and the answer to every unreadable value. */
-        val NONE: LadderProgress = LadderProgress(FIRST_LEVEL, 0)
+        val NONE: GauntletProgress = GauntletProgress(FIRST_LEVEL, 0)
 
         /** What [stored] says, or [NONE] where it says nothing this version understands. */
-        fun parse(stored: String?): LadderProgress {
+        fun parse(stored: String?): GauntletProgress {
             val fields = stored?.split(SEPARATOR) ?: return NONE
             if (fields.size != FIELDS || fields[0] != VERSION) {
                 return NONE
@@ -84,9 +84,9 @@ internal class LadderProgress private constructor(
             return of(highest, cleared)
         }
 
-        private fun of(highest: Int, cleared: Int): LadderProgress {
+        private fun of(highest: Int, cleared: Int): GauntletProgress {
             val reachable = highest.coerceIn(FIRST_LEVEL, LEVELS)
-            return LadderProgress(reachable, cleared and maskUpTo(reachable))
+            return GauntletProgress(reachable, cleared and maskUpTo(reachable))
         }
 
         private fun bitOf(level: Int): Int = 1 shl (level - 1)
@@ -102,10 +102,10 @@ internal class LadderProgress private constructor(
         /**
          * The table this is progress through.
          *
-         * Checked rather than assumed, because the cleared set is a bitmask over one `Int`: a ladder
+         * Checked rather than assumed, because the cleared set is a bitmask over one `Int`: a gauntlet
          * grown past that many rungs would silently drop the top of itself out of saved progress.
          */
-        private val LEVELS: Int = Ladder.size.also {
+        private val LEVELS: Int = Gauntlet.size.also {
             check(it < Int.SIZE_BITS) { "progress is a bitmask of one Int, so $it levels will not fit" }
         }
     }

@@ -392,26 +392,26 @@ class LabCommandTest {
     }
 
     @Test
-    fun `ladder takes a reference and a round count, and no board of its own`() {
-        val command = LabCommand.of("ladder --against uct:budget=100 --rounds 4".split(' '), ShippedBots)
-            as LadderCommand
+    fun `gauntlet takes a reference and a round count, and no board of its own`() {
+        val command = LabCommand.of("gauntlet --against uct:budget=100 --rounds 4".split(' '), ShippedBots)
+            as GauntletCommand
 
         assertEquals(BotId("uct"), command.reference.bot)
         assertEquals(100, command.reference.budgetPerTurn)
         assertEquals(4, command.rounds)
 
-        // Every board a ladder run plays comes off the level, so a `--rows` here would measure ten
-        // levels on a board none of them is played on.
+        // Every board a gauntlet run plays comes off the level, so a `--rows` here would measure
+        // eleven levels on a board none of them is played on.
         val board = assertFailsWith<IllegalArgumentException> {
-            LabCommand.of("ladder --rows 12".split(' '), ShippedBots)
+            LabCommand.of("gauntlet --rows 12".split(' '), ShippedBots)
         }
         assertContains(board.message.orEmpty(), "--rows")
     }
 
     @Test
-    fun `a ladder reference nobody has heard of names the ones there are`() {
+    fun `a gauntlet reference nobody has heard of names the ones there are`() {
         val failure = assertFailsWith<IllegalStateException> {
-            LabCommand.of("ladder --against nosuchbot".split(' '), ShippedBots)
+            LabCommand.of("gauntlet --against nosuchbot".split(' '), ShippedBots)
         }
 
         assertContains(failure.message.orEmpty(), "nosuchbot")
@@ -419,19 +419,19 @@ class LabCommandTest {
     }
 
     @Test
-    fun `a ladder reference left unset is pinned rather than taking each level's own allowance`() {
-        val command = LabCommand.of(listOf("ladder"), ShippedBots) as LadderCommand
+    fun `a gauntlet reference left unset is pinned rather than taking each level's own allowance`() {
+        val command = LabCommand.of(listOf("gauntlet"), ShippedBots) as GauntletCommand
 
-        assertEquals(LadderCommand.DEFAULT_REFERENCE, command.reference.bot.slug)
-        assertEquals(LadderCommand.REFERENCE_BUDGET, command.reference.budgetPerTurn)
+        assertEquals(GauntletCommand.DEFAULT_REFERENCE, command.reference.bot.slug)
+        assertEquals(GauntletCommand.REFERENCE_BUDGET, command.reference.budgetPerTurn)
         assertEquals(TournamentConfig.DEFAULT_ROUNDS, command.rounds)
         assertEquals(Openings.MIRRORED, command.openings)
     }
 
     @Test
-    fun `ladder plays the levels rather than a field, so it takes no entrants`() {
+    fun `gauntlet plays the levels rather than a field, so it takes no entrants`() {
         val failure = assertFailsWith<IllegalArgumentException> {
-            LabCommand.of(listOf("ladder", "uct"), ShippedBots)
+            LabCommand.of(listOf("gauntlet", "uct"), ShippedBots)
         }
 
         assertContains(failure.message.orEmpty(), "--against")

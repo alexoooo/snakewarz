@@ -1,7 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="You">
-    <!-- The one seat that is not a bot, so the one portrait that is a figure rather than a method. -->
-    <rect width="32" height="32" rx="6" fill="#16191d"/>
-    <rect x="12" y="5" width="8" height="8" fill="#7fe0a8"/>
-    <rect x="9" y="17" width="14" height="4" fill="#5fbf8a"/>
-    <rect x="6" y="21" width="20" height="7" fill="#4c9f74"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="You">
+    <!--
+      You. The one seat that is not a bot, so the one portrait with nothing to say about a method:
+      a person, drawn at the bright end of the ramp and the only face here that is smiling.
+    -->
+    <defs>
+        <clipPath id="tile">
+            <rect width="96" height="96" rx="18"/>
+        </clipPath>
+    </defs>
+    <rect width="96" height="96" rx="18" fill="#16191d"/>
+    <g clip-path="url(#tile)">
+        <path d="M0 96V80l22-10h52l22 10v16z" fill="#4c9f74"/>
+        <path d="M0 96V80l22-10h26v26z" fill="#5fbf8a"/>
+        <rect x="40" y="58" width="16" height="16" fill="#3a7f5c"/>
+
+        <rect x="26" y="16" width="44" height="46" fill="#7fe0a8"/>
+        <rect x="60" y="22" width="10" height="40" fill="#5fbf8a"/>
+        <rect x="24" y="10" width="48" height="12" fill="#2b6046"/>
+        <rect x="24" y="10" width="10" height="28" fill="#2b6046"/>
+
+        <rect x="36" y="32" width="8" height="9" fill="#0e1114"/>
+        <rect x="54" y="32" width="8" height="9" fill="#0e1114"/>
+        <rect x="38" y="50" width="20" height="4" fill="#0e1114"/>
+        <rect x="34" y="46" width="4" height="4" fill="#0e1114"/>
+        <rect x="58" y="46" width="4" height="4" fill="#0e1114"/>
+    </g>
 </svg>

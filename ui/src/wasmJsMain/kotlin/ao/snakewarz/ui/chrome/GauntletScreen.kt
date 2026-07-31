@@ -1,13 +1,13 @@
 package ao.snakewarz.ui.chrome
 
 import ao.snakewarz.botapi.registry.BotRegistry
-import ao.snakewarz.match.ladder.Ladder
-import ao.snakewarz.match.ladder.LadderLevel
+import ao.snakewarz.match.gauntlet.Gauntlet
+import ao.snakewarz.match.gauntlet.GauntletLevel
 import ao.snakewarz.match.map.MapShape
 import ao.snakewarz.ui.model.Portraits
 import ao.snakewarz.ui.model.UiIntent
 import ao.snakewarz.ui.model.UiModel
-import ao.snakewarz.ui.model.ladder.LadderProgress
+import ao.snakewarz.ui.model.gauntlet.GauntletProgress
 import ao.snakewarz.ui.render.Theme
 import ao.snakewarz.ui.render.identicon
 import org.w3c.dom.HTMLButtonElement
@@ -15,14 +15,14 @@ import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLImageElement
 
 /**
- * `#screen-ladder`: ten tiles, one per rung, and which of them may be played.
+ * `#screen-gauntlet`: eleven tiles, one per rung, and which of them may be played.
  *
- * [Ladder] is `:match`, which this module already sees, so a tile needs no seam and no injected
+ * [Gauntlet] is `:match`, which this module already sees, so a tile needs no seam and no injected
  * table — unlike the opponent's *name* and *face*, which are facts about a bot and therefore arrive
  * through the `BotRegistry` interface and [Portraits] by slug. Nothing here can tell a wall hugger
- * from a human, which is the whole of why the ladder table lives a module down.
+ * from a human, which is the whole of why the gauntlet table lives a module down.
  *
- * Ten is a fixed number, so the tiles are **static markup** and this only ever writes their text,
+ * Eleven is a fixed number, so the tiles are **static markup** and this only ever writes their text,
  * their state and their picture — the same arrangement as the four scoreboard cards, and not a third
  * exception to *"Kotlin never constructs structure"*. Title, blurb and the line naming the board are
  * written once at construction, because a level's identity does not change while the page is open.
@@ -31,18 +31,25 @@ import org.w3c.dom.HTMLImageElement
  * it cannot be clicked, and it leaves the tab order — which together are what "locked" has to mean to
  * somebody who is not looking at the screen.
  *
+ * **The ▷ that plays a cleared rung back is a sibling of the tile, not a child of it.** A tile is a
+ * `<button>`, so a button inside it would be invalid markup and would never receive the click; the
+ * control sits beside it in the `<li>` and is put over the corner in `styles.css`. It is `hidden`
+ * where there is nothing to play rather than disabled, which is the argument `Mode.offers` already
+ * makes for the panel openers: a control that can never apply should not be present at all.
+ *
  * **The open tile carries `[data-focus]`, so arriving here lands on the level you would play.** That
  * attribute is read by [Shell] on the frame the screen appears, which is why `Chrome.render` runs
  * this before the shell rather than after it.
  */
-internal class LadderScreen(
+internal class GauntletScreen(
     registry: BotRegistry,
     private val portraits: Portraits,
     dispatch: (UiIntent) -> Unit,
 ) {
-    private val tiles: List<Tile> = Ladder.levels.map { level ->
+    private val tiles: List<Tile> = Gauntlet.levels.map { level ->
         Tile(
             root = elementById("level-${level.index}"),
+            replay = elementById("level-replay-${level.index}"),
             level = level,
             opponent = registry[level.opponent]?.displayName ?: level.opponent.slug,
         )
@@ -62,56 +69,74 @@ internal class LadderScreen(
      * The progress the tiles were last written for, compared by identity.
      *
      * Every screen is rendered once a *frame*, and while a match runs that is sixty times a second —
-     * so ten tiles of unchanged text would be the one genuinely wasteful thing on that path. Progress
+     * so eleven tiles of unchanged text would be the one genuinely wasteful thing on that path. Progress
      * is an immutable value replaced only when a level is beaten, which makes identity the exact
      * question, and it is the same cache the session keeps over its labels and faces.
      */
-    private var renderedProgress: LadderProgress? = null
+    private var renderedProgress: GauntletProgress? = null
 
     init {
         for (tile in tiles) {
             val index = tile.level.index
             tile.root.addEventListener("click") { dispatch(UiIntent.StartLevel(index)) }
+            tile.replay.addEventListener("click") { dispatch(UiIntent.WatchLevelReplay(index)) }
         }
     }
 
     fun render(model: UiModel) {
-        if (model.ladder === renderedProgress && model.theme.id == renderedTheme) {
+        if (model.gauntlet === renderedProgress && model.theme.id == renderedTheme) {
             return
         }
-        renderedProgress = model.ladder
+        renderedProgress = model.gauntlet
         resolveFaces(model.theme)
 
-        // The one tile worth landing on: the level about to be played, or the last of a ladder that
+        // The one tile worth landing on: the level about to be played, or the last of a gauntlet that
         // has none left to unlock. Never a locked one, which could not take the focus anyway.
-        val landing = tiles.firstOrNull { model.ladder.stateOf(it.level.index) == LadderProgress.State.OPEN }
+        val landing = tiles.firstOrNull { model.gauntlet.stateOf(it.level.index) == GauntletProgress.State.OPEN }
             ?: tiles.last()
 
         for ((position, tile) in tiles.withIndex()) {
+            val state = model.gauntlet.stateOf(tile.level.index)
             tile.render(
-                state = model.ladder.stateOf(tile.level.index),
+                state = state,
                 face = faces[position],
                 landing = tile === landing,
+                stored = state == GauntletProgress.State.CLEARED && hasRun(tile.level.index),
             )
         }
     }
 
-    override fun toString(): String = "LadderScreen(${tiles.size})"
+    override fun toString(): String = "GauntletScreen(${tiles.size})"
 
     // -- internals
+
+    /**
+     * Whether there is a run stored for [level], asked of the store rather than of the model.
+     *
+     * Safe under the cache above, and only because of when the two move together: a run is written on
+     * the turn a level is won, which is the same turn progress is replaced — so a read guarded by that
+     * instance can never be a frame behind the write. Progress in the model rather than a payload
+     * because a kilobyte per rung has no business being carried through a once-a-frame snapshot.
+     */
+    private fun hasRun(level: Int): Boolean = Preferences.levelReplay(level) != null
 
     private fun resolveFaces(theme: Theme) {
         if (theme.id == renderedTheme) {
             return
         }
         renderedTheme = theme.id
-        faces = Ladder.levels.map { level ->
+        faces = Gauntlet.levels.map { level ->
             val slug = level.opponent.slug
             portraits.urlFor(slug) ?: identicon(slug, theme.body(OPPONENT_SLOT))
         }
     }
 
-    private class Tile(val root: HTMLButtonElement, val level: LadderLevel, opponent: String) {
+    private class Tile(
+        val root: HTMLButtonElement,
+        val replay: HTMLButtonElement,
+        val level: GauntletLevel,
+        opponent: String,
+    ) {
         private val portrait: HTMLImageElement = root.child(".portrait")
         private val number: HTMLElement = root.child(".level-no")
         private val title: HTMLElement = root.child(".level-title")
@@ -131,14 +156,17 @@ internal class LadderScreen(
          * name: one is the hook `styles.css` reads and the other is copy a player reads, and neither
          * should change because a constant was renamed.
          */
-        fun render(state: LadderProgress.State, face: String?, landing: Boolean) {
-            root.disabled = state == LadderProgress.State.LOCKED
+        fun render(state: GauntletProgress.State, face: String?, landing: Boolean, stored: Boolean) {
+            root.disabled = state == GauntletProgress.State.LOCKED
             when (state) {
-                LadderProgress.State.CLEARED -> style("level cleared", "Cleared")
-                LadderProgress.State.OPEN -> style("level open", "Play")
-                LadderProgress.State.LOCKED -> style("level locked", "Locked")
+                GauntletProgress.State.CLEARED -> style("level cleared", "Cleared")
+                GauntletProgress.State.OPEN -> style("level open", "Play")
+                GauntletProgress.State.LOCKED -> style("level locked", "Locked")
             }
             portrait.showPortrait(face)
+            // Gone rather than greyed, so it is out of the tab order too: on a browser that has
+            // cleared nothing there are eleven of these and none of them could ever do anything.
+            replay.hidden = !stored
 
             if (landing) {
                 root.setAttribute(FOCUS, "")
@@ -157,7 +185,7 @@ internal class LadderScreen(
         /**
          * Which seat the opponent takes, and therefore which trail colour a drawn mark is tinted in.
          *
-         * `LadderLevel.setup` seats the player first and the opponent second, so a tile's face is
+         * `GauntletLevel.setup` seats the player first and the opponent second, so a tile's face is
          * already the colour that snake will be on the board.
          */
         const val OPPONENT_SLOT = 1

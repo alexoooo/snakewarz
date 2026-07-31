@@ -30,7 +30,7 @@ you have to know before you type a command you already think you know: never bac
 ./gradlew :lab:run --args="tune puct --knobs cpuct,territoryWeight"
 ./gradlew :lab:run --args="spsa puct:eval=chamber --knobs parityWeight,sealPenalty --budget 1000"
 ./gradlew :lab:run --args="train --rows 12 --cols 12 --hidden 16 --epochs 60"
-./gradlew :lab:run --args="ladder --rounds 200"
+./gradlew :lab:run --args="gauntlet --rounds 200"
 
 # And the same questions asked on a board with walls in it.
 ./gradlew :lab:run --args="play uct puct --map cross --rows 12 --cols 12 --rounds 100"
@@ -53,12 +53,13 @@ mean another would have produced the same one.
 | `tune` | what should this knob be, up to about three of them | — | a journal |
 | `spsa` | what should these ten knobs be | — | a journal |
 | `train` | **what should this value function's weights be** | the log's replays | a literal, on stdout |
-| `ladder` | **do the single-player levels actually get harder** | — | the match log |
+| `gauntlet` | **do the single-player levels actually get harder** | — | the match log |
 
-`ladder` is the only one that takes no board: every match it plays comes off a `Ladder` level, so the
-ten rows are ten different geometries and one fixed reference. Nothing else in the list can answer it
-— `rate` refuses to pool ten geometries, correctly, and `ab` compares two entrants on one board where
-two adjacent levels never share one. [`Bots.md`](Bots.md) carries the shipped run.
+`gauntlet` is the only one that takes no board: every match it plays comes off a `Gauntlet` level, so
+the eleven rows are eleven different boards and one fixed reference. Nothing else in the list can answer
+it — `rate` refuses to pool eleven geometries, correctly, and `ab` compares two entrants on one board
+where two adjacent levels never share one. [`Bots.md`](Bots.md) carries the last run, which Release 3's
+redraw invalidated and which is labelled there rather than deleted.
 
 `ab` is the first one to reach for when deciding whether to keep a change. `play` gives a matrix, and
 a matrix has to be read against a threshold somebody invented; `ab` plays until the evidence settles
@@ -81,7 +82,7 @@ output.
 | `play`, `time`, `ab`, `tune`, `spsa` | yes | yes |
 | `rate` | **as a filter** | — |
 | `report`, `phases`, `train` | no — they read the log | — |
-| `ladder` | no — every board comes off the level | — |
+| `gauntlet` | no — every board comes off the level | — |
 
 Four things about the flag are decisions rather than plumbing:
 
@@ -172,11 +173,11 @@ measured under it.
 **A map does not add a distinct game, and it is easy to assume it does.** `--map` is a function of the
 geometry and the run's own seed, so every match of a batch is played behind *the same* walls; the
 spawns are still the two ends of the board, and the turn order still has two values. Four games on
-`empty` is four games on `double-spiral`. Where this bites hardest is the ladder's lower rungs, which
-are **entirely** bots that draw no randomness — `random` excepted, five of the ten — so a `ladder` run
-whose reference is also deterministic measures four games per level however many rounds it is given.
-The shipped run in [`Bots.md`](Bots.md) uses `uct@100` for exactly that reason, and reports 200 of 200
-distinct games on nine of its ten rows.
+`empty` is four games on `double-spiral`. Where this bites hardest is the gauntlet's lower rungs, which
+are **entirely** bots that draw no randomness — `random` excepted, five of the eleven — so a `gauntlet`
+run whose reference is also deterministic measures four games per level however many rounds it is
+given. The run recorded in [`Bots.md`](Bots.md) uses `uct@100` for exactly that reason, and reported
+200 of 200 distinct games on nine of the ten rows it was taken on.
 
 **Every batch prints how many of its matches were distinct games.** Read that number before any
 other. The two openings modes gave opposite answers to
@@ -662,6 +663,14 @@ Prefer `jvmTest` while developing; most modules answer in seconds. **`:bots` doe
 couple of minutes, because `BotLadderTest` and `RolloutTruncationTest` play several hundred complete
 matches with a search bot in them, which is the point of both. Narrow with `--tests` while working on
 something else. A full cold `build` takes several minutes; the wasm toolchain is slow to warm up.
+
+**`--tests` has to be scoped to a module.** A bare `./gradlew jvmTest --tests "*Gauntlet*"` fails
+outright — `No tests found for given includes` — because the filter is applied to every module's
+`jvmTest` and most of them have no matching test. Name the one that does:
+`./gradlew :match:jvmTest --tests "*Gauntlet*"`. `:lab` is JVM-only, so its task is `test` rather than
+`jvmTest`, and `:ui` and `:app` have no JVM target at all — their suites run under
+`-PbrowserTests=true` or not at all, and never with `--tests`, which on `wasmJsBrowserTest` silently
+runs one method of the named class and reports success.
 
 **One test in the suite reads a wall clock, and it flakes.** `:bots`'
 `RolloutPolicyTest."a prior at its swept weights is priced before anything is built on it"` is a

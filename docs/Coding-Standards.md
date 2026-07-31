@@ -175,12 +175,23 @@ name that changed meaning. This is also why a `Choice` holds **names, never ordi
 `eval=territory` survives somebody reordering the list the sidebar offers, and `eval=2` does not.
 
 **Two more identifiers are frozen without being in the payload, and their reasons are different.**
-A `MapShape.slug` reaches a `:lab` flag, a `:ui` picker and a ladder level, so it takes `BotId`'s
+A `MapShape.slug` reaches a `:lab` flag, a `:ui` picker and a gauntlet level, so it takes `BotId`'s
 charset discipline — but a *shape* is not in a replay at all, because the codec carries the wall
 bitmap itself. That is what buys the one freedom here: **a map shape can be redesigned or deleted
-without breaking a single shared link.** A `LadderLevel.index` is not in a replay either and is frozen
-harder than either: it is the key somebody's saved progress is stored under, in
-`localStorage["snakewarz.ladder.v1"]`, and renumbering the table moves every player's place in it.
+without breaking a single shared link.** A `GauntletLevel.index` is not in a replay either and is
+frozen harder than either: it is the key somebody's saved progress is stored under, in
+`localStorage["snakewarz.ladder.v1"]`, and renumbering the table moves every player's place in it. It
+is also *in* a key of its own — the run that cleared a rung is kept at
+`snakewarz.gauntlet.replay.<n>.v1` — where the trailing version is the lever a level table that
+changes again would pull, so that an old value is left unread rather than played on a board that no
+longer exists.
+
+**That storage key is the sharpest example this rule has.** The campaign was called the Ladder when
+it shipped, and Release 3 renamed it to the Gauntlet everywhere a player can see — the screen, the
+button, the verdict, the types, the `:lab` subcommand. The key did not move: `Preferences`'
+`GAUNTLET_KEY` holds `snakewarz.ladder.v1`, the constant and its value deliberately disagree, and a
+comment beside it says why. A rename there compiles, passes every test that does not assert the
+literal, and silently opens every existing player back at level 1.
 
 Display names are not identifiers and may be changed freely. Renaming is a *new* id plus whatever
 migration you are willing to write — usually not worth it.

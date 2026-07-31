@@ -50,9 +50,12 @@ import org.w3c.dom.events.KeyboardEvent
  *
  * ### Escape, and what "back" means
  *
- * Escape closes the overlay on top; with nothing open it goes back a screen, which is home from
- * either of the other two. `ClosePanel` is one intent rather than two because *which* overlay is on
- * top is the session's to know — the same reason [UiIntent.TogglePlay] is one intent.
+ * Escape closes the overlay on top; with nothing open it goes back a screen. **Back is one screen
+ * out and not one screen home:** a rung of the gauntlet is left to the level select, so that walking
+ * out of level 7 does not cost the ten tiles as well. The bar's button, the verdict card's way out
+ * and Escape are the same call, which is what stops the three offering different destinations from
+ * one board. `ClosePanel` is one intent rather than two for the parallel reason [UiIntent.TogglePlay]
+ * is: *which* overlay is on top is the session's to know.
  */
 internal class Shell(private val dispatch: (UiIntent) -> Unit) {
     private val app: HTMLElement = elementById("app")
@@ -64,9 +67,21 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
     private val dialogDetail: HTMLElement = elementById("result-detail")
     private val dialogAgain: HTMLButtonElement = elementById("result-again")
     private val dialogNext: HTMLButtonElement = elementById("result-next")
+    private val dialogReplay: HTMLButtonElement = elementById("result-replay")
+
+    /** The way off the board, which is the level select while a rung of the gauntlet is on it. */
+    private val backButton: HTMLButtonElement = elementById("game-back")
 
     /** The rung Next level starts, read at the press for the reason `HomeScreen.resume` is. */
     private var nextLevel: Int? = null
+
+    /**
+     * The rung on the board, or `null` for a match somebody configured.
+     *
+     * Kept for [nextLevel]'s reason — read at the press rather than captured at render — and it is
+     * what [back] is: walking out of level 7 goes to the level select, not to the front page.
+     */
+    private var level: Int? = null
 
     private val screens: List<Pair<Screen, HTMLElement>> =
         Screen.entries.map { it to elementById<HTMLElement>(sectionIdOf(it)) }
@@ -77,7 +92,7 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
     /**
      * The button on the top bar that opens each panel, kept rather than merely listened to.
      *
-     * Which panels a mode offers is answered by hiding these — a ladder level *is* its
+     * Which panels a mode offers is answered by hiding these — a gauntlet level *is* its
      * configuration, so Setup and Tournament are not controls that happen to do nothing there, they
      * are controls that should not be on the bar at all.
      */
@@ -114,11 +129,14 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
         // backdrop is there to invite.
         scrim.addEventListener("click") { dispatch(UiIntent.ClosePanel) }
 
-        elementById<HTMLButtonElement>("game-back").addEventListener("click") { back() }
-        elementById<HTMLButtonElement>("ladder-back").addEventListener("click") { back() }
+        backButton.addEventListener("click") { back() }
+        elementById<HTMLButtonElement>("gauntlet-back").addEventListener("click") { back() }
 
         dialogAgain.addEventListener("click") { dispatch(UiIntent.Restart) }
         dialogNext.addEventListener("click") { nextLevel?.let { dispatch(UiIntent.StartLevel(it)) } }
+        dialogReplay.addEventListener("click") { dispatch(UiIntent.WatchReplay) }
+        // The same call as the bar's own way out, so the card cannot offer a different destination
+        // from the button behind it.
         elementById<HTMLButtonElement>("result-home").addEventListener("click") { back() }
 
         window.addEventListener("keydown") { event -> onKeyDown(event as KeyboardEvent) }
@@ -137,6 +155,10 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
     fun render(model: UiModel) {
         val navigated = model.screen != screen
         screen = model.screen
+        level = model.level
+        // The label follows the destination rather than being written once, because they are one
+        // decision: a rung is backed out of to the level select and a custom match to the menu.
+        backButton.textContent = if (model.level == null) "$BACK_ARROW Home" else "$BACK_ARROW Gauntlet"
         for ((which, section) in screens) {
             section.hidden = which != model.screen
         }
@@ -181,18 +203,21 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
     // -- internals
 
     /**
-     * What the verdict offers, which is one of three things and never two of them.
+     * What the verdict offers: one of three ways on, and the way back over what just happened.
      *
      * A **lost** level is retried — one key, unlimited lives, and `Restart` on a level draws a fresh
      * seed rather than the same board. A **beaten** one is moved on from, because replaying a level
      * you have just cleared is not what anybody wants next. The **last** rung has neither: there is
-     * nothing above it, and the verdict itself says the ladder is finished.
+     * nothing above it, and the verdict itself says the gauntlet is finished. A custom match is the
+     * first of those and always has been: Play again, and Home.
      *
-     * A custom match is the first of those and always has been: Play again, and Home.
+     * Watch replay sits under all of them rather than among them, and it is offered on every verdict
+     * this card is ever up for: the card is only shown on a finished match of the player's own, which
+     * is exactly the match a recording can be taken of.
      *
      * Run *before* [settle] takes the focus, because which button is showing is what decides where
-     * the focus lands — all three carry `[data-focus]` and [focusInto] takes the first one a person
-     * could actually press.
+     * the focus lands — every action carries `[data-focus]` and [focusInto] takes the first one a
+     * person could actually press.
      */
     private fun renderResultActions(model: UiModel) {
         nextLevel = model.nextLevel
@@ -200,6 +225,9 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
         dialogNext.hidden = model.nextLevel == null
         dialogAgain.hidden = model.levelCleared
         dialogAgain.textContent = if (model.level == null) "Play again" else "Retry"
+        // A second way to the recording of the match just finished, off the same flag `#panel-share`
+        // reads: winning a level and then hunting through a panel for the run is what this is for.
+        dialogReplay.hidden = !model.canWatchReplay
     }
 
     /**
@@ -261,10 +289,20 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
         container.focus()
     }
 
+    /**
+     * One screen out: the level select from a rung of the gauntlet, and the menu from anything else.
+     *
+     * The bar's button, the verdict card's Home button and Escape are all this one call, which is
+     * what stops the three offering different ways out of the same board. The level select itself
+     * goes to the menu whatever is remembered about the board behind it — [level] outlives the
+     * screen it was chosen on, so the screen has to be part of the question.
+     */
     private fun back() {
-        if (screen != Screen.HOME) {
-            dispatch(UiIntent.Navigate(Screen.HOME))
+        if (screen == Screen.HOME) {
+            return
         }
+        val target = if (screen == Screen.GAME && level != null) Screen.GAUNTLET else Screen.HOME
+        dispatch(UiIntent.Navigate(target))
     }
 
     private fun onKeyDown(event: KeyboardEvent) {
@@ -294,6 +332,9 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
         /** What a screen or an overlay marks the control it would rather the focus landed on. */
         const val FOCUS = "data-focus"
 
+        /** The way-out button's arrow, which the destination beside it is written against. */
+        const val BACK_ARROW = "←"
+
         /**
          * The `when`s below are exhaustive over their enums with no `else`, so a screen or a panel
          * added to the model without an id here is a compile error rather than an `elementById` that
@@ -301,7 +342,7 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
          */
         fun sectionIdOf(screen: Screen): String = when (screen) {
             Screen.HOME -> "screen-home"
-            Screen.LADDER -> "screen-ladder"
+            Screen.GAUNTLET -> "screen-gauntlet"
             Screen.GAME -> "screen-game"
         }
 

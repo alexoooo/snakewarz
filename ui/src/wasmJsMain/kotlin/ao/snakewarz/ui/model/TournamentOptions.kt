@@ -1,5 +1,6 @@
 package ao.snakewarz.ui.model
 
+import ao.snakewarz.match.map.MapShape
 import ao.snakewarz.match.tournament.Contestant
 import ao.snakewarz.match.tournament.TournamentFormat
 
@@ -20,6 +21,15 @@ internal class TournamentOptions(
     val seed: Long,
     /** The one map every match of the batch is played on — see `TournamentConfig.walls`. */
     val walls: IntArray,
+    /**
+     * The shape [walls] was drawn from: `MatchOptions.shape`'s twin, and a decoration hint on the
+     * same terms.
+     *
+     * `TournamentConfig` takes [walls] and never this. A batch owns the arena while it runs, so the
+     * board on screen is the tournament's — and it is drawn with the pack of the map the form said,
+     * rather than with whatever the match it replaced happened to be wearing.
+     */
+    val shape: MapShape?,
     val contestants: List<Contestant>,
     val rounds: Int,
     val format: TournamentFormat,

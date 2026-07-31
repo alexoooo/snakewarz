@@ -53,46 +53,106 @@
 -->
 <main id="app">
     <section id="screen-home" class="screen" tabindex="-1">
-        <div class="home">
-            <h1>Snake Warz</h1>
-            <p class="tagline">Tron-style snakes as an AI testbed</p>
+        <div class="home-row">
+            <div class="home">
+                <!--
+                  The one place the game's name is a brand. The .wordmark in the game bar is not:
+                  Kotlin overwrites its text with the level title on every render, so a mark put
+                  there would not survive a frame.
 
-            <!--
-              Continue is the button somebody came back for, so it is first and takes the primary
-              fill off Ladder while it is showing. Kotlin writes its text, both `hidden` flags and
-              that one class, and nothing else here.
-            -->
-            <div class="home-actions">
-                <button id="home-continue" type="button" class="primary wide" hidden>Continue</button>
-                <button id="home-ladder" type="button" class="wide primary">Ladder</button>
-                <button id="home-custom" type="button" class="wide">Custom</button>
-                <button id="home-replay" type="button" class="wide" hidden>Watch replay</button>
+                  Inline rather than <img src="logo.svg">, because an <img> cannot read --accent or
+                  --ink: it would be one fixed picture under three themes and two schemes, where
+                  this follows all six for nothing. The mark is favicon.svg's snake turning a
+                  corner, in the page's own colours rather than the favicon's fixed ramp -- the tail
+                  in the text colour and the head in the accent, which is the colour a route is
+                  already drawn in.
+
+                  The heading's real text is the clipped span, and the drawing is aria-hidden. That
+                  is what lets the words be split into two tinted halves with no space of their own
+                  to mispronounce, and it is what a path-drawn version later would slot into
+                  unchanged.
+                -->
+                <h1 class="lockup">
+                    <svg class="lockup-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                        <rect class="lockup-plate" width="32" height="32" rx="6"/>
+                        <rect class="lockup-tail" x="5" y="19" width="6" height="6" opacity="0.35"/>
+                        <rect class="lockup-tail" x="11" y="19" width="6" height="6" opacity="0.52"/>
+                        <rect class="lockup-tail" x="17" y="19" width="6" height="6" opacity="0.7"/>
+                        <rect class="lockup-head" x="17" y="13" width="6" height="6" opacity="0.62"/>
+                        <rect class="lockup-head" x="17" y="7" width="6" height="6"/>
+                    </svg>
+                    <span class="lockup-words" aria-hidden="true">Snake<span class="lockup-warz">Warz</span></span>
+                    <span class="visually-hidden">Snake Warz</span>
+                </h1>
+                <p class="tagline">Tron-style snakes as an AI testbed</p>
+
+                <!--
+                  Continue is the button somebody came back for, so it is first and takes the primary
+                  fill off Gauntlet while it is showing. Kotlin writes its text, both `hidden` flags
+                  and that one class, and nothing else here.
+                -->
+                <div class="home-actions">
+                    <button id="home-continue" type="button" class="primary wide" hidden>Continue</button>
+                    <button id="home-gauntlet" type="button" class="wide primary">Gauntlet</button>
+                    <button id="home-custom" type="button" class="wide">Custom</button>
+                    <button id="home-replay" type="button" class="wide" hidden>Watch replay</button>
+                </div>
+
+                <p class="note">
+                    Last snake moving wins. Walls and every trail &mdash; including your own &mdash; are
+                    lethal, and there is nothing to eat.
+                </p>
             </div>
 
-            <p class="note">
-                Last snake moving wins. Walls and every trail &mdash; including your own &mdash; are
-                lethal, and there is nothing to eat.
-            </p>
+            <!--
+              The pointer has three separate verbs and nothing else on the page says so. Beside the
+              menu where there is room for it and under the menu where there is not -- .home-row
+              wraps, which is the whole of the arrangement.
+            -->
+            <aside class="controls">
+                <h2>Controls</h2>
+                <dl>
+                    <dt>Click a square</dt>
+                    <dd>One step towards it, around anything in the way.</dd>
+
+                    <dt>Hold</dt>
+                    <dd>Keeps going along that route until you let go.</dd>
+
+                    <dt>Drag</dt>
+                    <dd>
+                        Draws the exact route: it follows the pointer square by square, and stops
+                        where something is in the way.
+                    </dd>
+
+                    <dt>Arrow keys or WASD</dt>
+                    <dd>Steer one square at a time. Hold a key to keep going that way.</dd>
+                </dl>
+            </aside>
         </div>
     </section>
 
     <!--
-      Ten tiles, one per rung, and static like the four scoreboard cards: the ladder is a fixed
+      Eleven tiles, one per rung, and static like the four scoreboard cards: the gauntlet is a fixed
       table, so Kotlin only ever writes each tile's text, its state and its picture. Not a third
       exception to "Kotlin never constructs structure".
 
       A locked tile is a `disabled` <button> rather than a <div>: it announces itself as
       unavailable, it cannot be clicked, and it leaves the tab order. They start locked because
       that is what a browser with nothing stored is looking at, and the first frame corrects it.
+
+      The play control beside each one is what watches the run that cleared that rung back. It is a
+      *sibling* of the tile because the tile is a <button> and a nested one would be invalid markup
+      that never receives its click; styles.css puts it over the corner. Icon-only, so it carries
+      its own name, and it starts hidden because a browser with nothing stored has nothing to play.
     -->
-    <section id="screen-ladder" class="screen" tabindex="-1" hidden>
+    <section id="screen-gauntlet" class="screen" tabindex="-1" hidden>
         <div class="bar">
-            <button id="ladder-back" type="button">&larr; Home</button>
-            <h1>Ladder</h1>
+            <button id="gauntlet-back" type="button">&larr; Home</button>
+            <h1>Gauntlet</h1>
         </div>
         <p class="note">
-            Ten levels, ten different opponents, and as many attempts as you like. Beat one and the
-            next unlocks.
+            Ten opponents and a Final Boss, and as many attempts as you like. Beat one and the next
+            unlocks.
         </p>
 
         <ol class="levels">
@@ -105,6 +165,8 @@
                     <span class="level-meta"></span>
                     <span class="level-state"></span>
                 </button>
+                <button id="level-replay-1" type="button" class="level-replay"
+                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
             </li>
             <li>
                 <button id="level-2" type="button" class="level locked" disabled>
@@ -115,6 +177,8 @@
                     <span class="level-meta"></span>
                     <span class="level-state"></span>
                 </button>
+                <button id="level-replay-2" type="button" class="level-replay"
+                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
             </li>
             <li>
                 <button id="level-3" type="button" class="level locked" disabled>
@@ -125,6 +189,8 @@
                     <span class="level-meta"></span>
                     <span class="level-state"></span>
                 </button>
+                <button id="level-replay-3" type="button" class="level-replay"
+                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
             </li>
             <li>
                 <button id="level-4" type="button" class="level locked" disabled>
@@ -135,6 +201,8 @@
                     <span class="level-meta"></span>
                     <span class="level-state"></span>
                 </button>
+                <button id="level-replay-4" type="button" class="level-replay"
+                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
             </li>
             <li>
                 <button id="level-5" type="button" class="level locked" disabled>
@@ -145,6 +213,8 @@
                     <span class="level-meta"></span>
                     <span class="level-state"></span>
                 </button>
+                <button id="level-replay-5" type="button" class="level-replay"
+                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
             </li>
             <li>
                 <button id="level-6" type="button" class="level locked" disabled>
@@ -155,6 +225,8 @@
                     <span class="level-meta"></span>
                     <span class="level-state"></span>
                 </button>
+                <button id="level-replay-6" type="button" class="level-replay"
+                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
             </li>
             <li>
                 <button id="level-7" type="button" class="level locked" disabled>
@@ -165,6 +237,8 @@
                     <span class="level-meta"></span>
                     <span class="level-state"></span>
                 </button>
+                <button id="level-replay-7" type="button" class="level-replay"
+                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
             </li>
             <li>
                 <button id="level-8" type="button" class="level locked" disabled>
@@ -175,6 +249,8 @@
                     <span class="level-meta"></span>
                     <span class="level-state"></span>
                 </button>
+                <button id="level-replay-8" type="button" class="level-replay"
+                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
             </li>
             <li>
                 <button id="level-9" type="button" class="level locked" disabled>
@@ -185,6 +261,8 @@
                     <span class="level-meta"></span>
                     <span class="level-state"></span>
                 </button>
+                <button id="level-replay-9" type="button" class="level-replay"
+                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
             </li>
             <li>
                 <button id="level-10" type="button" class="level locked" disabled>
@@ -195,6 +273,20 @@
                     <span class="level-meta"></span>
                     <span class="level-state"></span>
                 </button>
+                <button id="level-replay-10" type="button" class="level-replay"
+                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
+            </li>
+            <li>
+                <button id="level-11" type="button" class="level locked" disabled>
+                    <img class="portrait" alt="" aria-hidden="true">
+                    <span class="level-no">&mdash;</span>
+                    <span class="level-title">&mdash;</span>
+                    <span class="level-blurb"></span>
+                    <span class="level-meta"></span>
+                    <span class="level-state"></span>
+                </button>
+                <button id="level-replay-11" type="button" class="level-replay"
+                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
             </li>
         </ol>
     </section>
@@ -208,7 +300,7 @@
     <section id="screen-game" class="screen" tabindex="-1" hidden>
         <div class="bar top">
             <button id="game-back" type="button">&larr; Home</button>
-            <!-- The game's name, or the level's when the board is a rung of the ladder. -->
+            <!-- The game's name, or the level's when the board is a rung of the gauntlet. -->
             <span class="wordmark" id="wordmark">Snake Warz</span>
             <span class="bar-gap"></span>
             <button id="open-setup" type="button">Setup</button>
@@ -305,7 +397,6 @@
                 <option value="16">16 &times; 16</option>
                 <option value="20">20 &times; 20</option>
                 <option value="28">28 &times; 28</option>
-                <option value="40">40 &times; 40</option>
             </select>
 
             <!--
@@ -313,20 +404,25 @@
               entry -- there is no "fork, add a file, register it" workflow behind these, and
               the value is the shape's frozen slug, the same one :lab's --map flag takes.
 
-              Kotlin only ever writes `disabled` here, from MapShape.minimumSide, so a shape
-              the chosen board is too small to draw cannot be picked. The last option is the
-              map a replay arrived with when no shape draws it: hidden until one does.
+              Kotlin writes `disabled` here, from MapShape.minimumSide, so a shape the chosen
+              board is too small to draw cannot be picked -- and appends the board it wants to
+              the label below, so a greyed row says why. The base label is this file's, and the
+              suffix is the only thing Kotlin adds to it. The last option is the map a replay
+              arrived with when no shape draws it: hidden until one does.
             -->
             <label for="map">Map</label>
             <select id="map">
                 <option value="empty" selected>Empty</option>
+                <option value="arena">Arena</option>
                 <option value="pillars">Pillars</option>
+                <option value="pinwheel">Pinwheel</option>
                 <option value="ring">Ring</option>
                 <option value="cross">Cross</option>
                 <option value="diagonals">Diagonals</option>
                 <option value="rooms">Rooms</option>
                 <option value="double-spiral">Double spiral</option>
                 <option value="scatter">Scatter</option>
+                <option value="islands">Islands</option>
                 <option id="map-from-replay" value="from-replay" hidden>&mdash; from replay &mdash;</option>
             </select>
 
@@ -509,14 +605,23 @@
         <p id="result-detail"></p>
         <!--
           Three actions, of which one or two are ever showing: another attempt at what was just
-          played, the rung above it, and the way out. All three are marked `data-focus` and Shell
-          takes the focus to the first one a person could actually press, so a lost level costs one
-          Enter and a beaten one costs the same key to move on.
+          played, the rung above it, and the way out. Every action on this card is marked
+          `data-focus` and Shell takes the focus to the first one a person could actually press, so
+          a lost level costs one Enter and a beaten one costs the same key to move on.
         -->
         <div class="result-actions">
             <button id="result-again" type="button" class="primary" data-focus>Play again</button>
             <button id="result-next" type="button" class="primary" data-focus hidden>Next level</button>
             <button id="result-home" type="button" data-focus>Home</button>
+        </div>
+        <!--
+          A fourth button in the row above would shrink the other three: that row does not wrap.
+          It is also the lesser action -- seeing the match again rather than deciding what to play
+          next -- so it is ruled off below them, and it is marked after #result-home so the focus
+          still lands on the way on rather than on the way back.
+        -->
+        <div class="result-replay">
+            <button id="result-replay" type="button" class="wide" data-focus hidden>Watch replay</button>
         </div>
     </div>
 </div>

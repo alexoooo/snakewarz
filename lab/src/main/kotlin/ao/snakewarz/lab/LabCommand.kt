@@ -64,11 +64,11 @@ internal interface LabCommand {
         private val TIME_FLAGS = setOf("rows", "cols", "seed", "budget", "passes", "map", "density")
 
         /**
-         * No geometry here, and that is the point: every board a `ladder` run plays comes off the
-         * level rather than off the command line. A `--rows` accepted here would measure ten levels
+         * No geometry here, and that is the point: every board a `gauntlet` run plays comes off the
+         * level rather than off the command line. A `--rows` accepted here would measure eleven levels
          * on a board none of them is played on.
          */
-        private val LADDER_FLAGS = setOf("against", "rounds", "seed", "openings", "threads", "log")
+        private val GAUNTLET_FLAGS = setOf("against", "rounds", "seed", "openings", "threads", "log")
 
         private val RATE_FLAGS = setOf(
             "log", "board", "budget", "format", "build", "openings", "since", "pool", "map",
@@ -205,8 +205,8 @@ internal interface LabCommand {
               train [--log DIR] [--rows N] [--cols N] [--stride N] [--positions N] [--hidden N]
                     [--epochs N] [--rate N] [--decay N] [--batch N] [--seed N] [--out FILE]
                     [--model FILE]
-              ladder [--against <entrant>] [--rounds N] [--seed N] [--openings ...] [--threads N]
-                     [--log DIR|none]
+              gauntlet [--against <entrant>] [--rounds N] [--seed N] [--openings ...] [--threads N]
+                       [--log DIR|none]
 
             An entrant is <slug>[:name=value,...], where `budget` is that entrant's own allowance
             and every other name is one of that bot's declared knobs. For example:
@@ -223,8 +223,8 @@ internal interface LabCommand {
               spsa puct:eval=chamber --knobs parityWeight,sealPenalty --budget 1000
               train --rows 12 --cols 12 --hidden 8 --epochs 40
               train --log .lab/p2b-field-20 --rows 20 --cols 20 --model .lab/shipped-model.txt
-              ladder --rounds 40
-              ladder --rounds 40 --against uct:budget=100
+              gauntlet --rounds 40
+              gauntlet --rounds 40 --against uct:budget=100
 
             `tune` and `spsa` both search a bot's declared knobs and recommend; neither ever edits a
             default. Adopting one moves every golden move-stream hash, and that is a question for a
@@ -283,12 +283,12 @@ internal interface LabCommand {
             `--model FILE` it fits nothing and scores that literal over the whole corpus instead,
             which is how a fit taken on one board is read on another.
 
-            `ladder` takes no board at all: it plays each of the ten single-player levels on that
+            `gauntlet` takes no board at all: it plays each of the eleven single-player levels on that
             level's own geometry, map and allowance, against one fixed reference, and prints the
             reference's score per level. The order is right when that score falls -- and a level that
             comes out easier than the one below it is a table to reorder, not a run to repeat. The
             reference is `--against`, and its allowance is held still across every level, which is
-            what makes the ten readings comparable.
+            what makes the eleven readings comparable.
 
             Every batch is appended to the match log under .lab/, which is what `rate` and `report`
             read. `--log none` runs without recording anything.
@@ -310,7 +310,7 @@ internal interface LabCommand {
                 "tune" -> tuneOf(entrants, Flags(options, TUNE_FLAGS), registry)
                 "spsa" -> spsaOf(entrants, Flags(options, SPSA_FLAGS), registry)
                 "train" -> trainOf(entrants, Flags(options, TRAIN_FLAGS))
-                "ladder" -> ladderOf(entrants, Flags(options, LADDER_FLAGS), registry)
+                "gauntlet" -> gauntletOf(entrants, Flags(options, GAUNTLET_FLAGS), registry)
                 else -> error("no such subcommand: '$subcommand'.\n\n$USAGE")
             }
         }
@@ -687,13 +687,13 @@ internal interface LabCommand {
          * The one subcommand whose boards are not the caller's to choose.
          *
          * `--against` takes a full entrant spec so the reference can be retuned without a code
-         * change, and its allowance is filled in from [LadderCommand.REFERENCE_BUDGET] when the spec
-         * leaves it out — because a reference that took each level's own figure would grow with the
-         * ladder and the column would stop being about the ladder.
+         * change, and its allowance is filled in from [GauntletCommand.REFERENCE_BUDGET] when the
+         * spec leaves it out — because a reference that took each level's own figure would grow with
+         * the gauntlet and the column would stop being about the gauntlet.
          */
-        private fun ladderOf(entrants: List<String>, flags: Flags, registry: BotRegistry): LadderCommand {
+        private fun gauntletOf(entrants: List<String>, flags: Flags, registry: BotRegistry): GauntletCommand {
             require(entrants.isEmpty()) {
-                "ladder plays the levels rather than a field, so it takes no entrants: " +
+                "gauntlet plays the levels rather than a field, so it takes no entrants: " +
                     "'${entrants.first()}'. The reference is `--against`.\n\n$USAGE"
             }
 
@@ -706,12 +706,12 @@ internal interface LabCommand {
             val threads = flags.int("threads", Arena.defaultThreads())
             require(threads > 0) { "--threads must be positive, was $threads" }
 
-            val named = contestantOf(flags.text("against") ?: LadderCommand.DEFAULT_REFERENCE, registry)
+            val named = contestantOf(flags.text("against") ?: GauntletCommand.DEFAULT_REFERENCE, registry)
 
-            return LadderCommand(
+            return GauntletCommand(
                 reference = Contestant(
                     bot = named.bot,
-                    budgetPerTurn = named.budgetPerTurn ?: LadderCommand.REFERENCE_BUDGET,
+                    budgetPerTurn = named.budgetPerTurn ?: GauntletCommand.REFERENCE_BUDGET,
                     params = named.params,
                 ),
                 rounds = rounds,
