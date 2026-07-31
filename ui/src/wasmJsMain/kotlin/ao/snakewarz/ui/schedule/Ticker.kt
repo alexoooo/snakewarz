@@ -1,12 +1,12 @@
 package ao.snakewarz.ui.schedule
 
-import ao.snakewarz.ui.chrome.KeyRepeat
+import ao.snakewarz.ui.chrome.SteerRepeat
 import kotlinx.browser.window
 
 /**
  * Turns wall-clock time into **paints**, and never into turns.
  *
- * It is not a second [TurnScheduler], and the framing is [KeyRepeat]'s: that one produces keypresses
+ * It is not a second [TurnScheduler], and the framing is [SteerRepeat]'s: that one produces moves
  * and this one produces repaints, and what either turns into is somebody else's decision. **Nothing
  * this computes may reach `Match.step`.** A frame here changes how a position *looks* — a body
  * settling after a death, dashes marching along a held route, a head breathing — and a match played

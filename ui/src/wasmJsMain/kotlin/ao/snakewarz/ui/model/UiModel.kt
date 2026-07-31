@@ -78,6 +78,16 @@ internal class UiModel(
      * Disables the transport: there is no clock to start, stop or step.
      */
     val interactive: Boolean,
+    /**
+     * The player has a snake on the board and a move to make with it, so steering it is a thing that
+     * can happen right now.
+     *
+     * Stronger than [interactive], which only asks whether a person is still alive in the match on
+     * screen: this is the very predicate a press on the board is answered by, so the on-screen pad
+     * offers exactly what the board would accept. Off while a tournament or a setup preview owns the
+     * arena, and off the instant the match has an outcome.
+     */
+    val steering: Boolean,
     val running: Boolean,
     /** The length of the recording, or the current turn when there is no recording to be ahead of. */
     val turnCount: Int,

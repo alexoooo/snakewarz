@@ -46,7 +46,7 @@ catch the throw.
 
 **A held key repeats on our clock, not the operating system's.** `Chrome` drops
 `KeyboardEvent.repeat` — a text-editing rate, half a second of nothing then thirty a second, and
-different on every machine — and `KeyRepeat` (in `:ui`, on `requestAnimationFrame`) turns a held key
+different on every machine — and `SteerRepeat` (in `:ui`, on `requestAnimationFrame`) turns a held key
 into one move every 250ms. A tap is exactly one move. A second key pressed while the first is down
 takes the repeat over, and `blur` cancels it, because a key released while the page is not looking
 never sends `keyup`.

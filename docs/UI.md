@@ -133,6 +133,42 @@ intent has to declare its tier where it is declared, and a rewrite of the dispat
 decision. Opening a panel is a `Shell` intent for exactly Hover's reason: it changes nothing about
 the match, so folding one away must not end somebody's tournament.
 
+### Steering with a thumb
+
+**A drawn route cannot be the only way to steer, because on a phone the finger drawing it is over the
+squares it is aiming at.** `SteerPad` is the answer: four arrows in `#steer-pad`, feeding
+`UiIntent.Steer` through the same `SteerRepeat` a held arrow key drives. There is no second control
+path — a tap is one move and a hold is a move every 250ms, on a keyboard and under a thumb alike.
+
+- **The board never gives up a pixel for it.** The canvas is square and its track rarely is, so a
+  fitted board leaves a strip of `.board-wrap` above and below it, or to either side. `SteerPad.place`
+  measures both and puts the pad in the deeper one, positioned **out of flow** — because
+  `BoardRenderer.fit` measures that same container, and a pad in the flow would be room the board is
+  then short of. This is the one thing to keep true when touching either file.
+- **Which strip it may claim differs by side, and the phone is why.** Under the board it takes the
+  strip *whole*, and the `pad-below` class on the container is what moves the board to the top of its
+  track to give it one: height is what a portrait phone has least of. Beside the board it takes half
+  and the board stays centred, because a wide track always leaves more room to one side than a pad
+  wants. Where neither strip can hold `MIN_SIZE` the pad **overlaps** the outermost squares, which is
+  what its translucency is for — a control that disappears at some board sizes is worse than one
+  briefly in the way.
+- **`place` follows every fit**, exactly as `refreshOverlay` does and for the same kind of reason: the
+  pad hangs off the drawn board's own edges. `GameSession.fitBoard` is the single door both go
+  through, so a new match, a level, a resize, a theme and a batch's opening cannot each forget.
+- **It is shown exactly while `UiModel.steering`** — which is `GameSession.canSteer()`, the very
+  predicate a press on the board is answered by, so the pad offers what the board would accept.
+  Absent rather than greyed, for the reason `Mode.offers` hides a panel opener.
+- **`@media (pointer: coarse)`, and the *primary* pointer is the whole of that rule.**
+  `any-pointer: coarse` is true of every touchscreen laptop — a machine with arrow keys and no need
+  of a pad. The same query hides the menu's *Arrow keys or WASD* entry and reveals the one naming the
+  pad, so the controls list describes the machine it is being read on.
+- **No `setPointerCapture`, and the release listens on `window`.** Capture throws outright on a
+  pointer the browser has stopped tracking, which would take the press down with it; what it exists
+  to prevent — a thumb that leaves the pad before it lifts, leaving a snake walking with nobody
+  holding it — is answered by listening for the release globally instead. `PathInput` keeps its
+  capture because a *route* genuinely needs the moves in between, and this does not: sliding off the
+  pad keeps the direction it left with.
+
 ### Screens, panels and focus
 
 The page is **three static sections** — `#screen-home`, `#screen-gauntlet`, `#screen-game` — of which
@@ -323,13 +359,17 @@ stopped matching what the keys do is worse than no list at all.
   which is what pressing the space bar in a form full of buttons means.
 - **`preventDefault` first, the repeat guard second.** Dropping auto-repeat is a statement about how
   fast the *snake* moves and says nothing about what the browser may do with the event. The other
-  way round, a held arrow steered at `KeyRepeat`'s rate and scrolled the page at the keyboard's.
+  way round, a held arrow steered at `SteerRepeat`'s rate and scrolled the page at the keyboard's.
 - **`onKeyUp` has no focus guard on purpose**, and the `blur` listener cancels the repeat: a key let
   go of while the page is not looking never reports it, and a release that stops nothing costs
   nothing.
 - **There is no keyboard way to *draw* a route, and there does not need to be.** The arrow keys are
   the keyboard's steering, and a key mid-drag takes the route over outright — `GameSession.steer`
   opens with `endPath()`, so the two ways of saying where to go can never interleave.
+- **A phone has none of these keys, and `SteerPad` is the row of the table it gets instead.** Four
+  arrows that raise the same `UiIntent.Steer` through the same `SteerRepeat`, so a thumb and a
+  keyboard are one control path and cannot disagree about what a hold does. See *Steering with a
+  thumb*, below.
 - **No element carries a positive `tabindex`.** The order is DOM order; `tabindex="-1"` appears only
   on the screens and panels, which are focused programmatically and are not tab stops. One positive
   value anywhere would make the whole page's order a puzzle.
@@ -628,7 +668,7 @@ board already follows.
 ### The overlay moves, and none of it can change a result
 
 `Ticker` is the fourth thing on this page that reads a clock and the only one that cannot affect a
-match: it produces **paints**, never turns, which is the framing `KeyRepeat` already has. Two things
+match: it produces **paints**, never turns, which is the framing `SteerRepeat` already has. Two things
 on the overlay need frames the turn clock does not provide — a body settling to `CORPSE_ALPHA` over
 about a third of a second, and the dashes marching along a held route, with the pulse on the head
 that route is anchored on. `TurnScheduler` parks at `Progress.FINISHED`, which is the exact instant
@@ -701,8 +741,8 @@ list" — it is **does it come off a registry**:
 - **The eleven gauntlet tiles** are static markup like the four scoreboard cards. `Gauntlet.levels` is a
   fixed table in `:match`, not something a contributor extends, and `GauntletScreen` writes only each
   tile's text, state and picture.
-- **The overlay canvas, the hover label and the seat portraits** are static markup too; Kotlin only
-  ever writes their size, text, position and `src`.
+- **The overlay canvas, the hover label, the steering pad and the seat portraits** are static markup
+  too; Kotlin only ever writes their size, text, position, class and `src`.
 
 `SlotForm` owns all of that, one per seat under `SetupPanel`, and nothing in it dispatches a
 `UiIntent`. Which bot is picked and what its knobs are set to is **form state**, like the reseed

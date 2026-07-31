@@ -36,9 +36,10 @@ import org.w3c.dom.events.MouseEvent
  * `#panel-setup`; see [SetupPanel].
  *
  * What is *here* is the game screen: the board, the transport, the scrub row, the status line, the
- * seat cards and the keyboard. Which screen is showing and what is layered over it belongs to
- * [Shell], the modes on offer to [HomeScreen], the level select to [GauntletScreen], and everything
- * dense to the four panels — all of them rendered from the same model on the way through [render].
+ * seat cards, the keyboard and the [SteerPad] that stands in for one. Which screen is showing and
+ * what is layered over it belongs to [Shell], the modes on offer to [HomeScreen], the level select
+ * to [GauntletScreen], and everything dense to the four panels — all of them rendered from the same
+ * model on the way through [render].
  */
 internal class Chrome(
     registry: BotRegistry,
@@ -76,7 +77,10 @@ internal class Chrome(
     private val status: HTMLElement = elementById("status")
     private val rows: List<SlotRow> = List(SetupPanel.SEATS) { SlotRow(elementById("slot-$it")) }
 
-    private val repeat = KeyRepeat { direction -> dispatch(UiIntent.Steer(direction)) }
+    private val repeat = SteerRepeat { direction -> dispatch(UiIntent.Steer(direction)) }
+
+    /** The keyboard's four keys, for a device that has none. Shares [repeat], so both hold alike. */
+    private val steerPad = SteerPad(boardWrap, canvas, repeat)
 
     /** Where the pointer last was, so [placeTip] can run again once the label has a width. */
     private var tipX: Double = 0.0
@@ -118,6 +122,14 @@ internal class Chrome(
     /** Where the speed slider is now, so the scheduler and the label agree from the first frame. */
     fun turnsPerSecond(): Double = settingsPanel.turnsPerSecond()
 
+    /**
+     * Puts the steering pad back in the room the board leaves.
+     *
+     * Follows every fit, exactly as the overlay does: the pad hangs off the board's own edges, so a
+     * board that has changed size or shape leaves it over the squares or nowhere near them.
+     */
+    fun placeSteerPad(): Unit = steerPad.place()
+
     fun readOptions(): MatchOptions = setupPanel.readOptions()
 
     /** Draws a fresh seed into the form, so that the next [readOptions] is a game nobody has played. */
@@ -143,6 +155,7 @@ internal class Chrome(
 
         shell.render(model)
         home.render(model)
+        steerPad.render(model)
         setupPanel.render(model)
         tournamentPanel.render(model)
         sharePanel.render(model)
@@ -240,7 +253,7 @@ internal class Chrome(
      * Escape belongs to [Shell], which is the only thing that knows what is in front of the board.
      *
      * Auto-repeat is the keyboard talking, not the player: its rate is a text-editing rate, and a
-     * different one on every machine, so a held key is repeated by [KeyRepeat] instead. But dropping
+     * different one on every machine, so a held key is repeated by [SteerRepeat] instead. But dropping
      * those events is a statement about how fast the *snake* moves and says nothing about what the
      * browser may do with them — so `preventDefault` comes first and the repeat guard second. The
      * other way round, holding an arrow key steered at our rate and scrolled the page at the

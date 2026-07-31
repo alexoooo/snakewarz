@@ -1,6 +1,6 @@
 package ao.snakewarz.ui.schedule
 
-import ao.snakewarz.ui.chrome.KeyRepeat
+import ao.snakewarz.ui.chrome.SteerRepeat
 import kotlinx.browser.window
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -9,8 +9,8 @@ import kotlin.time.TimeSource
 /**
  * Turns wall-clock time into turns, and is the only thing in the project that paces a *match*.
  *
- * The one other clock is [KeyRepeat], which paces a held key. It is not a second scheduler: it
- * produces keypresses, exactly as a person leaning on an arrow key would, and what those turn into
+ * The one other clock is [SteerRepeat], which paces a held direction. It is not a second scheduler:
+ * it produces moves, exactly as a person leaning on an arrow key would, and what those turn into
  * is still `GameSession`'s decision.
  *
  * **`requestAnimationFrame`, not a coroutine `delay`.** rAF is vsync-aligned, so stepping never

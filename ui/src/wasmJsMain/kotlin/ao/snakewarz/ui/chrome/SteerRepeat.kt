@@ -5,31 +5,35 @@ import ao.snakewarz.ui.schedule.TurnScheduler
 import kotlinx.browser.window
 
 /**
- * A held key, turned into moves at a rate a person can watch.
+ * A direction held down, turned into moves at a rate a person can watch.
+ *
+ * Two things hold one — an arrow key and a button on [SteerPad] — and they share one instance rather
+ * than pacing themselves separately, because a thumb and a keyboard both holding would otherwise be
+ * two clocks driving one snake.
  *
  * The operating system repeats a held key already, and its rate is exactly wrong here: half a second
  * of nothing and then thirty a second, tuned for cursors in text and different on every machine.
  * A snake crossing the board at that rate is a snake nobody can stop where they meant to. So
- * `Chrome` drops `KeyboardEvent.repeat` and this times the repeat instead — a tap is one move, and
- * holding is a move every [PERIOD_MILLIS], the same on every keyboard.
+ * [Chrome] drops `KeyboardEvent.repeat` and this times the repeat instead — a tap is one move, and
+ * holding is a move every [PERIOD_MILLIS], the same on every keyboard and under every thumb.
  *
  * On `requestAnimationFrame` for the same reasons [TurnScheduler] is: it is vsync-aligned, it stops
  * dead in a hidden tab rather than banking up moves to fire on return, and a timestamp handed in
  * from outside is a clock a test can drive.
  */
-internal class KeyRepeat(private val onMove: (Direction) -> Unit) {
+internal class SteerRepeat(private val onMove: (Direction) -> Unit) {
     private var held: Direction? = null
     private var handle: Int = 0
 
     /** When the next repeat is owed, or `NaN` while nothing has been scheduled yet. */
     private var dueAt: Double = Double.NaN
 
-    /** Plays [direction] now, and again every [PERIOD_MILLIS] until the key comes back up. */
+    /** Plays [direction] now, and again every [PERIOD_MILLIS] until it is let go of. */
     fun press(direction: Direction) {
         onMove(direction)
 
-        // A second key pressed while the first is down takes the repeat over, which is how anybody
-        // actually turns a corner: the new direction is the one they are asking for.
+        // A second direction taken while the first is still down takes the repeat over, which is how
+        // anybody actually turns a corner: the new direction is the one being asked for.
         held = direction
         dueAt = Double.NaN
         if (handle == 0) {
@@ -37,7 +41,7 @@ internal class KeyRepeat(private val onMove: (Direction) -> Unit) {
         }
     }
 
-    /** Stops the repeat, if [direction] is the one running. A key that was not held is not news. */
+    /** Stops the repeat, if [direction] is the one running. One that was not held is not news. */
     fun release(direction: Direction) {
         if (held == direction) {
             cancel()
@@ -45,7 +49,7 @@ internal class KeyRepeat(private val onMove: (Direction) -> Unit) {
     }
 
     /**
-     * Forgets the held key.
+     * Forgets the held direction.
      *
      * Needed because a key released while the page is not looking sends no `keyup` at all: alt-tab
      * mid-move and the snake would keep going, with nothing on screen to explain why.
@@ -58,9 +62,9 @@ internal class KeyRepeat(private val onMove: (Direction) -> Unit) {
         }
     }
 
-    override fun toString(): String = "KeyRepeat(${held ?: "up"})"
+    override fun toString(): String = "SteerRepeat(${held ?: "up"})"
 
-    /** `internal` rather than `private` so `KeyRepeatTest` can be the clock this KDoc promises. */
+    /** `internal` rather than `private` so `SteerRepeatTest` can be the clock this KDoc promises. */
     internal fun frame(timestamp: Double) {
         val direction = held
         if (direction == null) {

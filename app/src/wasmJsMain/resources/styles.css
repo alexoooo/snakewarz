@@ -708,6 +708,127 @@ body.failed #loading {
     display: none;
 }
 
+/* Steering pad ------------------------------------------------------------- */
+
+/*
+ * Four arrows for a device with no arrow keys.
+ *
+ * `display: none` until the thing being pointed with is a finger: on a machine with a keyboard the
+ * arrow keys already are this control, and a second copy of it beside the board would be a
+ * decoration that steers.
+ *
+ * `pointer: coarse` names the **primary** pointer, and the distinction is the whole rule.
+ * `any-pointer: coarse` is true of every touchscreen laptop -- a machine with arrow keys, a mouse and
+ * no need of a pad -- while a phone and a tablet are coarse-first. A width would answer a different
+ * question again: how wide the window is, which on a desktop is a thing somebody drags.
+ *
+ * Kotlin writes the size and one of the two classes below; the anchoring is here. Out of flow either
+ * way, so the board is never sized against the room this takes -- BoardRenderer.fit measures
+ * .board-wrap, and a pad in the flow would be room the board would then be short of.
+ */
+#steer-pad {
+    display: none;
+    position: absolute;
+    z-index: 2;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 0.35rem;
+    touch-action: none;
+}
+
+@media (pointer: coarse) {
+    #steer-pad {
+        display: grid;
+    }
+
+    /* The menu's controls list names whichever of the two is actually there. */
+    #screen-home .keys-only {
+        display: none;
+    }
+
+    #screen-home .pad-only {
+        display: block;
+    }
+
+    /*
+     * A pad *under* the board takes the whole strip rather than the lower half of it, and this is
+     * what gives it one: height is what a portrait phone has least of, so the board goes to the top
+     * of its track. There is no rule beside it for the other side -- a wide track always leaves more
+     * room than the pad wants, so the board stays centred there and the pad takes the edge under the
+     * thumb. Inside the query so a page not showing a pad never moves its board for one.
+     */
+    .board-wrap.pad-below {
+        align-content: start;
+    }
+}
+
+/* The other half of that pair, and the default: no pad, so the keys are what the menu describes. */
+#screen-home .pad-only {
+    display: none;
+}
+
+#steer-pad.below {
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+#steer-pad.beside {
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+#steer-north {
+    grid-area: 1 / 2;
+}
+
+#steer-west {
+    grid-area: 2 / 1;
+}
+
+#steer-east {
+    grid-area: 2 / 3;
+}
+
+#steer-south {
+    grid-area: 3 / 2;
+}
+
+/*
+ * Translucent because the strip it sits in is not always deep enough for it: where the board is
+ * nearly as large as its track the pad overlaps the outermost squares, and a control in the way is a
+ * better answer than one that disappears at some board sizes.
+ *
+ * The arrow's own size is the pad's, which Kotlin writes as a font size on #steer-pad -- so `em`
+ * here, and the corner it rounds follows it too.
+ */
+.steer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 0.4em;
+    background: color-mix(in srgb, var(--panel) 82%, transparent);
+    color: var(--ink);
+    font-size: inherit;
+    line-height: 1;
+}
+
+/*
+ * `.held` is written by Kotlin and `:active` is the browser's own. Both, because the press handler
+ * cancels the pointer's default action -- which is what stops a tap focusing the arrow and coming
+ * back a moment later as a second move -- and a browser is then within its rights to skip the state
+ * it would have applied. A pad that does not light up under a thumb reads as one that missed.
+ */
+.steer:active,
+.steer.held {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+}
+
 /* Transport ---------------------------------------------------------------- */
 
 .transport {

@@ -179,6 +179,7 @@ class GauntletScreenTest {
         resultPortrait = null,
         replay = false,
         interactive = false,
+        steering = false,
         running = false,
         turnCount = 0,
         status = "paused",

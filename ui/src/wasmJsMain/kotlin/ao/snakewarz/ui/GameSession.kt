@@ -385,7 +385,7 @@ public class GameSession(
         if (batchBoard != null && intent != UiIntent.ToggleTournament) {
             batchBoard = null
             renderer.applyPack(pack)
-            renderer.fit(match.view)
+            fitBoard(match)
             refreshOverlay()
             // Here rather than left to whatever the intent does next: a turn-based match answers
             // Play by doing nothing at all, and the scoreboard would then still be describing the
@@ -515,7 +515,8 @@ public class GameSession(
     /**
      * Whether a press on the board is this player steering, rather than a look at somebody else's.
      *
-     * Shared by [pathBegan] and the preview, so what is painted and what a press does are one
+     * Shared by [pathBegan], the preview and the on-screen pad — reported to the chrome as
+     * `UiModel.steering` — so what is painted, what a press does and what the pad offers are one
      * decision. Each clause is load-bearing:
      *
      * - **A batch owns the arena** while it runs and leaves its last position up afterwards, and the
@@ -725,8 +726,22 @@ public class GameSession(
      */
     private fun refit() {
         val shown = previewBoard ?: batchBoard ?: match
-        renderer.fit(shown.view)
+        fitBoard(shown)
         refreshOverlay()
+    }
+
+    /**
+     * Lays [shown]'s board out at the size its track allows, and puts the steering pad in what is
+     * left over.
+     *
+     * Every route onto a different board — a resize, a theme, a new match, a level, a batch's
+     * opening — goes through here rather than calling the renderer, for the reason `refreshOverlay`
+     * exists beside it: the pad is placed against the edges of the *drawn* board, so a fit nothing
+     * follows leaves it over the squares or stranded in the middle of the page.
+     */
+    private fun fitBoard(shown: Match) {
+        renderer.fit(shown.view)
+        chrome.placeSteerPad()
     }
 
     // -- colour
@@ -832,7 +847,7 @@ public class GameSession(
         previewBoard = board
         // The picture is of the match this form would start, which includes what it would look like.
         renderer.applyPack(TexturePack.of(options.shape))
-        renderer.fit(board.view)
+        fitBoard(board)
         refreshOverlay()
     }
 
@@ -975,7 +990,7 @@ public class GameSession(
         // The arena is the player's own again, so the ground goes back to their match's — a preview
         // or a batch may have left the renderer set to somebody else's board.
         renderer.applyPack(pack)
-        renderer.fit(match.view)
+        fitBoard(match)
         refreshOverlay()
 
         if (match.interactive) {
@@ -1252,7 +1267,7 @@ public class GameSession(
     private fun fitToBatch(tournament: Tournament) {
         val opening = Match(tournament.setupFor(0), registry)
         batchBoard = opening
-        renderer.fit(opening.view)
+        fitBoard(opening)
         refreshOverlay()
     }
 
@@ -1469,6 +1484,7 @@ public class GameSession(
                 resultPortrait = if (verdict == null) null else winnerFace(faces),
                 replay = replay != null,
                 interactive = match.interactive,
+                steering = canSteer(),
                 running = scheduler.running,
                 turnCount = replay?.turnCount ?: shown.turnIndex,
                 status = statusText(shown),

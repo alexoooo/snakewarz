@@ -5,18 +5,18 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * The held-key clock, driven from outside — which its own KDoc says is the point of taking a
+ * The held-direction clock, driven from outside — which its own KDoc says is the point of taking a
  * timestamp rather than reading one.
  *
  * Both behaviours checked here are stated in that KDoc and neither was checked anywhere: taking over
  * on a second key is how a person turns a corner, and owing the next repeat from *now* is what stops
  * a slow frame paying itself back as two moves at once.
  */
-class KeyRepeatTest {
+class SteerRepeatTest {
     @Test
     fun `a tap is one move`() {
         val moves = mutableListOf<Direction>()
-        val repeat = KeyRepeat { moves += it }
+        val repeat = SteerRepeat { moves += it }
 
         repeat.press(Direction.NORTH)
         repeat.release(Direction.NORTH)
@@ -28,7 +28,7 @@ class KeyRepeatTest {
     @Test
     fun `holding repeats once a period, and not a millisecond sooner`() {
         val moves = mutableListOf<Direction>()
-        val repeat = KeyRepeat { moves += it }
+        val repeat = SteerRepeat { moves += it }
 
         repeat.press(Direction.EAST)
         assertEquals(1, moves.size, "the press itself plays immediately")
@@ -51,7 +51,7 @@ class KeyRepeatTest {
         // A frame that arrives late must not leave a debt that spends itself as two moves in a row
         // the moment the page catches up. Measured from the late frame, the next one is not yet due.
         val moves = mutableListOf<Direction>()
-        val repeat = KeyRepeat { moves += it }
+        val repeat = SteerRepeat { moves += it }
 
         repeat.press(Direction.SOUTH)
         repeat.frame(0.0)
@@ -71,7 +71,7 @@ class KeyRepeatTest {
     @Test
     fun `a second key takes the repeat over`() {
         val moves = mutableListOf<Direction>()
-        val repeat = KeyRepeat { moves += it }
+        val repeat = SteerRepeat { moves += it }
 
         repeat.press(Direction.NORTH)
         repeat.frame(0.0)
@@ -91,7 +91,7 @@ class KeyRepeatTest {
     @Test
     fun `releasing a key that is not held is not news`() {
         val moves = mutableListOf<Direction>()
-        val repeat = KeyRepeat { moves += it }
+        val repeat = SteerRepeat { moves += it }
 
         repeat.press(Direction.WEST)
         repeat.release(Direction.NORTH)
@@ -108,7 +108,7 @@ class KeyRepeatTest {
         // Alt-tab mid-move sends no keyup at all, so the snake would otherwise keep going with
         // nothing on screen to explain why.
         val moves = mutableListOf<Direction>()
-        val repeat = KeyRepeat { moves += it }
+        val repeat = SteerRepeat { moves += it }
 
         repeat.press(Direction.NORTH)
         repeat.cancel()

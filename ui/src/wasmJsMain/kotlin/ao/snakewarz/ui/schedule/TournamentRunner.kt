@@ -52,7 +52,7 @@ internal class TournamentRunner(private val onFrame: () -> Unit) {
     override fun toString(): String = "TournamentRunner(${tournament ?: "idle"})"
 
     /**
-     * The timestamp is ignored, unlike in [TurnScheduler.frame] and `KeyRepeat.frame`.
+     * The timestamp is ignored, unlike in [TurnScheduler.frame] and `SteerRepeat.frame`.
      *
      * Deliberate rather than missed: those two pace something against wall time and need to know how
      * much of it went by, and this one has nothing to pace. A batch runs as fast as the machine

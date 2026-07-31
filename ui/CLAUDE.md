@@ -15,6 +15,11 @@ you commit. Nothing in Kotlin stops a stray click — the pointer has no equival
 `#dialog-result` are full-viewport and above `#board`, so no press reaches the canvas while either is
 up. Change their stacking or their box and you have changed the game.
 
+`SteerPad` is the arrow keys for a device that has none, and it is positioned **out of flow inside
+`.board-wrap`** — the container `BoardRenderer.fit` measures. Put it in the flow and the board is
+sized against room the pad has taken. It is placed from `GameSession.fitBoard`, which is the one door
+every fit goes through, because the pad hangs off the drawn board's own edges.
+
 The keyboard map is written down in exactly two places — `docs/UI.md`'s table and the Keys note in
 `#panel-settings` — so `Chrome.onKeyDown`, that note and that table change together. A shortcut list
 that has stopped matching what the keys do is worse than no list.
