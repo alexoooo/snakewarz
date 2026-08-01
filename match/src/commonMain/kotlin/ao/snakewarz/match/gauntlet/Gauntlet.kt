@@ -8,9 +8,10 @@ import ao.snakewarz.match.map.MapShape
  * The seven-level single-player campaign, weakest first.
  *
  * Five trivial reactive opponents were removed. The curve now begins with the strongest useful
- * reactive opponent, introduces a wall-aware non-search bot, and then teaches progressively broader
- * search before the empty-board championship winner. The six wall layouts use each surviving
- * non-empty map shape once; the boss returns to an empty 8x8 for a pure tactical duel.
+ * reactive opponent, introduces a wall-aware non-search bot, and then climbs through fixed-depth,
+ * guided-tree and alpha-beta search before the empty-board championship winner. The six wall layouts
+ * use each surviving non-empty map shape once; the boss returns to an empty 8x8 for a pure tactical
+ * duel.
  *
  * Every opponent configuration and [GauntletLevel.mapSeed] is pinned. Retries vary the match seed —
  * and therefore turn order and bot randomness — without redrawing the level or changing its effort.
@@ -50,10 +51,10 @@ public object Gauntlet {
         GauntletLevel(
             index = 3,
             title = "The Lookout",
-            blurb = "Looks one reply ahead, enough to spot traps that a purely reactive opponent cannot see.",
+            blurb = "Reads five turns into every branch and fights for the arena instead of waiting for a trap.",
             opponent = BotId("lookahead"),
-            params = BotParams(mapOf("depth" to "1")),
-            budgetPerTurn = 4,
+            params = BotParams(mapOf("depth" to "5")),
+            budgetPerTurn = 1_024,
             rows = 12,
             cols = 12,
             shape = MapShape.ARENA,
@@ -62,10 +63,10 @@ public object Gauntlet {
         GauntletLevel(
             index = 4,
             title = "The Gambler",
-            blurb = "Plays hundreds of complete games in its head and takes whichever move won most.",
-            opponent = BotId("flat-monte-carlo"),
-            params = BotParams.EMPTY,
-            budgetPerTurn = 400,
+            blurb = "Builds a guided search tree, valuing territory while testing hundreds of futures.",
+            opponent = BotId("puct"),
+            params = BotParams(mapOf("eval" to "territory")),
+            budgetPerTurn = 600,
             rows = 12,
             cols = 12,
             shape = MapShape.SCATTER,
@@ -74,9 +75,9 @@ public object Gauntlet {
         GauntletLevel(
             index = 5,
             title = "The Student",
-            blurb = "Remembers which imagined games paid off and spends its next search where they did.",
-            opponent = BotId("uct"),
-            params = BotParams.EMPTY,
+            blurb = "Uses the island walls as part of its territorial search instead of treating them as scenery.",
+            opponent = BotId("puct"),
+            params = BotParams(mapOf("eval" to "territory")),
             budgetPerTurn = 600,
             rows = 12,
             cols = 12,
@@ -86,8 +87,8 @@ public object Gauntlet {
         GauntletLevel(
             index = 6,
             title = "The Planner",
-            blurb = "Starts each search with a territorial hunch, then tests it against complete games.",
-            opponent = BotId("puct"),
+            blurb = "Reads replies with alpha-beta and turns the pinwheel's narrow exits into commitments.",
+            opponent = BotId("alphabeta"),
             params = BotParams(mapOf("eval" to "territory")),
             budgetPerTurn = 600,
             rows = 12,

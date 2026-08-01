@@ -70,13 +70,13 @@ empty-board claim. It is registered because it supplies the measured free wall s
 Gauntlet research needed, not because the sidebar can express one total ordering.
 
 `lookahead` is the result of the 2026-08-01 fixed mini-search phase. It is one permanent algorithm,
-not three frozen ids: the declared `depth` parameter selects one, two or three individual turns and
-defaults to three. The worst-case complete caps are 4, 16 and 64 evaluations respectively. A forced
+not five frozen ids: the declared `depth` parameter selects one through five individual turns and
+defaults to three. The worst-case complete caps are 4, 16, 64, 256 and 1,024 evaluations respectively. A forced
 move or terminal line may finish for less, but if one required static leaf cannot be paid the entire
 tree is discarded and the already-computed Cartographer move is returned. It never adopts a partial
 root, silently downgrades its depth or carries unused savings into another turn.
 
-All three depths completed every searchable root on the six fixed research tapes with zero fallback
+The original three depths completed every searchable root on the six fixed research tapes with zero fallback
 at those caps and fit the 3.5 ms tiny Chrome lane; the largest accepted raw turn was 1.4 ms, depth
 three on `rooms`. In separate seven-entrant fields, depth three beat Cartographer directly 80-0,
 71-7, 49-31, 78-2, 69-11 and 78-2 on empty 8x8, `arena`, `cross`, `rooms`, `double-spiral` and
@@ -84,6 +84,12 @@ three on `rooms`. In separate seven-entrant fields, depth three beat Cartographe
 24%, 33%, 16%, 38%, 90% and 48%. That is a measured map-general middle with a corridor specialism,
 not a claim that it belongs somewhere in the empty-12 ladder. Only depth three advances to the
 empty-8 championship.
+
+Depths four and five were completed for the later exact-arena Gauntlet study. Depth five beat the
+shipped depth-one Level 3 in 87% [83,91] of shared-opening games, scored 62% [55,68] against UCT@100,
+and cost 2.0 ms at its worst accepted Chrome turn. A release-owner clear of the old Level 3 on the
+first try described it as trivial, so the playable candidate now uses depth five rather than the
+cheapest machine qualifier.
 
 A bot that is merely *weak* is not an instrument: `random` is already the floor, more cleanly, and a
 second one only adds a picker row and a column to every matrix. That is what retired `tomsnake`, an
@@ -112,10 +118,10 @@ reference against every level in turn, and the ordering is right when the refere
 |---|---|---|---|---:|---:|---:|---:|
 | 1 | `chase` | 12x12 | `pillars@0` | — | 69% | 98% | 0.1 ms |
 | 2 | `cartographer` | 16x16 | `rooms@0` | — | 66% | 99% | 0.2 ms |
-| 3 | `lookahead:depth=1` | 12x12 | `arena@0` | 4 | 61% | 95% | 0.2 ms |
-| 4 | `flat-monte-carlo` | 12x12 | `scatter@0` | 400 | 63% | 82% | 2.8 ms |
-| 5 | `uct` | 12x12 | `islands@0` | 600 | 25% | 55% | 4.9 ms |
-| 6 | `puct:eval=territory` | 12x12 | `pinwheel@0` | 600 | 25% | 45% | 3.3 ms |
+| 3 | `lookahead:depth=5` | 12x12 | `arena@0` | 1,024 | 38% | 57% | 2.0 ms |
+| 4 | `puct:eval=territory` | 12x12 | `scatter@0` | 600 | 19% | 43% | 2.7 ms |
+| 5 | `puct:eval=territory` | 12x12 | `islands@0` | 600 | 15% | 34% | 3.4 ms |
+| 6 | `alphabeta:eval=territory` | 12x12 | `pinwheel@0` | 600 | 19% | 41% | 4.7 ms |
 | 7 | `alphabeta:eval=territory` | 8x8 | `empty@0` | 1,700 | 11% | 17% | 7.2 ms |
 
 The map seed is part of the level rather than the retry seed. A retry may change turn order and bot
@@ -123,9 +129,10 @@ randomness, but it cannot redraw the walls that were measured. The curve is acce
 reference profiles stay non-increasing within the declared five-point tolerance; a forfeit voids the
 run rather than becoming evidence about difficulty.
 
-The accepted runs used seed 81001, 200 mirrored matches per level and no forfeits. UCT produced
-200/200 distinct games on every row; PUCT produced 107/161/121/200/200/100/74. Chrome rows used five
-UCT@600-bracketed passes; every row had at least four stable control pairs and fit its frozen lane.
+The candidate runs used seed 81001, 200 mirrored matches per level and no forfeits. Levels 3 through
+6 are the 2026-08-01b playable research profiles; their Chrome rows used five UCT@600-bracketed
+passes and fit their frozen lanes. Level 6 is not yet qualified: PUCT@250 rises seven points from
+Level 5, so the agenda has dispatched that exact pinwheel profile to its next algorithm phase.
 
 #### Historical measurement of the retired development campaign
 

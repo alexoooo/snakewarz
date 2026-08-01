@@ -5,10 +5,9 @@ import ao.snakewarz.botapi.registry.BotFactory
 /**
  * Temporary cross-target access to completed fixed-depth search shapes.
  *
- * These factories are research plumbing rather than released bot identities. Depths one through
- * three reproduce the shipped implementation; depths four and five exist only for the 2026-08-01b
- * exact-level experiment. Lab ids may label local aggregate rows, but they must never be retained in
- * a replay or enter `ShippedBots`.
+ * These factories are research plumbing rather than bot identities. All five depths now reproduce
+ * shapes accepted by shipped `lookahead`; the temporary lab ids may label local aggregate rows, but
+ * they must never be retained in a replay or enter `ShippedBots`.
  */
 public object FixedDepthResearch {
     /** Completed paranoid searches at depths one through five, in depth order. */
@@ -30,7 +29,7 @@ public object FixedDepthResearch {
         return null
     }
 
-    /** One unreleased fixed shape and its seat-local factory. */
+    /** One fixed shape exposed under a temporary lab label and its seat-local factory. */
     public class FixedDepthCase internal constructor(
         public val key: String,
         public val depth: Int,

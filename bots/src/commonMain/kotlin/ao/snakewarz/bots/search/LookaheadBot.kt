@@ -11,14 +11,14 @@ import ao.snakewarz.botapi.knob.BotKnob
  * searchers.
  *
  * This is deliberately not iterative deepening. [DEPTH] chooses one shape: every own move at depth
- * one, every actual next actor's reply at depth two, or three individual turns of paranoid
- * alpha-beta at depth three. Cartographer orders every node and supplies the fallback.
+ * one, every actual next actor's reply at depth two, or up to five individual turns of paranoid
+ * alpha-beta. Cartographer orders every node and supplies the fallback.
  *
- * The worst-case complete caps are **4, 16 and 64 evaluations** at depths one, two and three. Forced
- * moves and terminal leaves can make a position complete for less, but unused savings never carry
- * into another turn. If the allowance refuses even one required appraisal, the whole search is
- * discarded and Cartographer's live-board move is returned; this bot never adopts a partial root or
- * silently searches at a shallower depth.
+ * The worst-case complete caps are **4, 16, 64, 256 and 1,024 evaluations** at depths one through
+ * five. Forced moves and terminal leaves can make a position complete for less, but unused savings
+ * never carry into another turn. If the allowance refuses even one required appraisal, the whole
+ * search is discarded and Cartographer's live-board move is returned; this bot never adopts a
+ * partial root or silently searches at a shallower depth.
  *
  * P4 measured all three configurations on six separate boards. Depth three beat Cartographer
  * directly by 80-0, 71-7, 49-31, 78-2, 69-11 and 78-2 on empty 8x8, arena, cross, rooms,
@@ -41,10 +41,10 @@ public class LookaheadBot(setup: BotSetup) : Bot {
          * Intermediate values are valid but may fall back when they cannot pay for the configured
          * depth's whole tree.
          */
-        val SEARCH = BotKnob.Search(min = 4, max = 64, step = 4)
+        val SEARCH = BotKnob.Search(min = 4, max = 1_024, step = 4)
 
         /**
-         * Individual turns searched, with fixed complete caps of 4, 16 and 64 evaluations.
+         * Individual turns searched, with fixed complete caps from 4 at depth one to 1,024 at depth five.
          *
          * A measured hyperparameter rather than a sidebar choice: higher is the stronger default,
          * and the allowance remains the player-facing speed/strength tradeoff.
@@ -52,10 +52,10 @@ public class LookaheadBot(setup: BotSetup) : Bot {
         val DEPTH = BotKnob.Integer(
             name = "depth",
             label = "Depth",
-            help = "Individual turns searched; depths 1, 2 and 3 require up to 4, 16 and 64 evaluations.",
+            help = "Turns searched; depths 1 through 5 require up to 4, 16, 64, 256 or 1,024 evaluations.",
             default = 3,
             min = 1,
-            max = 3,
+            max = 5,
         )
 
         val KNOBS: List<BotKnob> = listOf(SEARCH, DEPTH)

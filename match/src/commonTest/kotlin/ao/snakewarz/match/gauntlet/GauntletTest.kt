@@ -31,14 +31,16 @@ class GauntletTest {
     }
 
     @Test
-    fun `seven different opponent configurations`() {
-        // Seven play styles, and no level is another one merely thinking for longer. The claim is on
-        // configuration rather than slug so pinned settings remain part of an opponent's identity.
-        val configurations = Gauntlet.levels.map { it.opponent.slug to it.params }
+    fun `seven different exact level configurations`() {
+        // A profile may deliberately recur on another wall layout: that exact map is part of the
+        // opponent measured for a level, so uniqueness belongs to the complete level configuration.
+        val configurations = Gauntlet.levels.map {
+            listOf(it.opponent.slug, it.params.toString(), it.rows, it.cols, it.shape.slug, it.mapSeed)
+        }
         assertEquals(
             configurations.size,
             configurations.toSet().size,
-            "an opponent appears twice at the same settings: $configurations",
+            "an exact level configuration appears twice: $configurations",
         )
 
         val titles = Gauntlet.levels.map { it.title }
@@ -134,9 +136,9 @@ class GauntletTest {
 
     @Test
     fun `the levels asking for a search allowance are exactly the ones at the top`() {
-        // Not a claim about which bots search -- this module cannot see a bot -- but about the shape
-        // of the curve: an allowance that appeared mid-table and vanished again would mean the table
-        // ramps something other than difficulty.
+        // Allowances are evaluator-specific work units, not difficulty. The fixed-depth Level 3 can
+        // therefore carry a larger cap than a later Monte Carlo level; only the zero/non-zero split
+        // has a cross-algorithm meaning in this module.
         val allowances = Gauntlet.levels.map { it.budgetPerTurn }
         val firstSearching = allowances.indexOfFirst { it > 0 }
 
@@ -144,11 +146,6 @@ class GauntletTest {
         assertTrue(
             allowances.drop(firstSearching).all { it > 0 },
             "a level with no allowance sits above one with an allowance: $allowances",
-        )
-        assertEquals(
-            allowances.drop(firstSearching).sorted(),
-            allowances.drop(firstSearching),
-            "the allowance falls somewhere up the gauntlet: $allowances",
         )
     }
 

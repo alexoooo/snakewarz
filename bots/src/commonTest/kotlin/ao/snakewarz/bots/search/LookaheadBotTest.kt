@@ -16,8 +16,8 @@ import kotlin.test.assertEquals
 class LookaheadBotTest {
     @Test
     fun `the depth knob selects each measured fixed tree`() {
-        val caps = intArrayOf(4, 16, 64)
-        for (depth in 1..3) {
+        val caps = intArrayOf(4, 16, 64, 256, 1_024)
+        for (depth in 1..5) {
             val board = boardOf(
                 7,
                 8,
@@ -41,12 +41,12 @@ class LookaheadBotTest {
         val depth = LookaheadBot.KNOBS[1] as BotKnob.Integer
 
         assertEquals(4, search.min)
-        assertEquals(64, search.max)
+        assertEquals(1_024, search.max)
         assertEquals(4, search.step)
         assertEquals(false, depth.tradeoff)
         assertEquals(3, depth.default)
         assertEquals(1, depth.min)
-        assertEquals(3, depth.max)
+        assertEquals(5, depth.max)
     }
 
     private fun direction(bot: Bot, board: Board, cap: Int): Direction =

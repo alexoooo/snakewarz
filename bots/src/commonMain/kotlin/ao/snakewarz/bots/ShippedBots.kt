@@ -104,10 +104,10 @@ public object ShippedBots : BotRegistry {
         )
 
         // P4's fixed mini-search bridge. It keeps Cartographer's ordering and whole-policy fallback,
-        // then exhausts one to three individual turns at caps of 4, 16 and 64 evaluations. Depth 3
-        // beat Cartographer directly on all six research boards and took nontrivial games from both
-        // FMC@400 and UCT@600, but its map-separated profile is not an empty-12 ladder claim. One
-        // slug exposes the measured engine; `depth` selects its shape without freezing three ids.
+        // then exhausts one to five individual turns at caps from 4 through 1,024 evaluations. The
+        // deeper two shapes were retained after the arena Gauntlet gate found depth 1 trivial; depth
+        // 5 cleared it in 87% of shared-opening games and stayed inside the tiny Chrome lane. One
+        // slug exposes the measured engine; `depth` selects its shape without freezing five ids.
         register("lookahead", "Lookahead", ::LookaheadBot, LookaheadBot.KNOBS)
 
         // Contributed to the original project. Not a ladder rung, and kept for a reason that is not

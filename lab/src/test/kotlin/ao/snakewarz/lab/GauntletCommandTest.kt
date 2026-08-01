@@ -30,7 +30,7 @@ import kotlin.test.assertTrue
  */
 class GauntletCommandTest {
     @Test
-    fun `the research candidate is the frozen P2 finalist table`() {
+    fun `the research candidate carries the post-human-gate Level 3 finalist`() {
         val actual = GauntletCandidate.levels.map { level ->
             val settings = level.opponent.params.names.joinToString(",") {
                 "$it=${level.opponent.params.string(it, "")}"
@@ -50,7 +50,7 @@ class GauntletCommandTest {
             listOf(
                 "1|chase|0||12x12|pillars|0",
                 "2|cartographer|0||16x16|rooms|0",
-                "3|lookahead|16|depth=2|12x12|arena|0",
+                "3|lookahead|1024|depth=5|12x12|arena|0",
                 "4|puct|600|eval=territory|12x12|scatter|0",
                 "5|puct|600|eval=territory|12x12|islands|0",
                 "6|alphabeta|600|eval=territory|12x12|pinwheel|0",

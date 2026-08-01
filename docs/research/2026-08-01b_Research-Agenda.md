@@ -45,8 +45,8 @@ The agenda succeeds when all of the following are true:
 | Phase | Workstream | State |
 |---|---|---|
 | P1 | Close, instrument and recalibrate | complete |
-| P2 | Exhaust the existing configuration space | complete; human gate open |
-| P3 | Adversarial opening books | planned |
+| P2 | Exhaust the existing configuration space | complete; stronger playable gate open |
+| P3 | Adversarial opening books | in progress for Level 6 |
 | P4 | Map-control and exact endgame hybrids | planned |
 | P5 | Search carried across turns | planned |
 | P6 | Bounded dynamic thinking | planned |
@@ -175,6 +175,28 @@ scores 87% [83,91] and still costs only 2.0 ms. The lab-only `2026-08-01b` table
 cheapest machine-qualified four profiles, with levels 1, 2 and 7 unchanged. P3 is conditional on the
 release owner's fresh attempt bands: a level that passes stops here; a level that remains too easy is
 unresolved and may receive exact-map algorithm work.
+
+The first human follow-up cleared the still-shipped depth-1 Level 3 on its first attempt and called it
+trivial. It did not test depth 2: the previous handoff overlooked that `depth` is a hidden
+hyperparameter and therefore cannot be selected in Custom mode. Rather than mislabel that play trace,
+the candidate advanced to the strongest already frozen P2 point, depth 5 @1,024. It beat depth 1 by
+87% [83,91], scored 62% [55,68] against UCT@100 and 36% [30,42] against PUCT@250, and its 2.0 ms
+Chrome worst remains inside the 3.5 ms lane. The playable Level 3 carries that profile for the next
+human gate; P3 remains conditional on whether this material step is still trivial.
+
+To make that gate real rather than another Custom-mode approximation, the complete P2 candidate
+table is now wired into the playable campaign while it remains under research: depth-5 Lookahead on
+Level 3, territory PUCT@600 on Levels 4 and 5, and territory alpha-beta@600 on Level 6. The exact
+boards, map seeds, indices, Levels 1–2 and Level 7 are unchanged. This is not the P8 promotion: no
+`warden` identity or v3 progress key is frozen until the human bands qualify the profiles.
+
+The required seed-81001 profile rerun found one unresolved machine gate rather than averaging it
+away. UCT@100 scored 69/66/38/19/15/19/11%, within the five-point tolerance. PUCT@250 scored
+98/99/57/43/34/41/17%, a seven-point Level 5-to-6 reversal. Islands territory alpha-beta@400 was
+tested as an already-frozen alternative: it directly beats the old UCT@600 by 76% [69,81] and costs
+3.5 ms worst in Chrome, but its UCT@100 cell was 11%, producing a larger eight-point reversal into
+Level 6. It is rejected rather than using intransitivity to hide the weak point. Level 6 therefore
+earns P3 with an explicit target: improve both reference cells at the 600-evaluation/5.5 ms cap.
 
 One cost disagreement remains recorded rather than averaged. Pinwheel territory PUCT@600 read 6.9 ms
 in P2 after its retained P7 qualification read 3.3 ms, despite stable within-pair controls. P2 does

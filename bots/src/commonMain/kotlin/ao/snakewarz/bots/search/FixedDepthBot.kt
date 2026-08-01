@@ -15,12 +15,11 @@ import ao.snakewarz.core.rules.MatchOutcome
 /**
  * P4's deliberately small bridge between a no-tree policy and the full search bots.
  *
- * The configured shape is fixed: one greedy ply, an exhaustive reply guard, or a three-ply paranoid
- * alpha-beta. It never keeps a partial answer. [ao.snakewarz.botapi.scratch.Scratch.playout] refusing
- * one required static leaf resets the arena and invalidates the whole tree, so the exact root
- * Cartographer choice computed before searching is returned instead. Terminal leaves are the game's
- * answer and cost nothing; every nonterminal leaf is one [TerritoryEval]. Depths four and five are
- * unreleased research shapes; the shipped bot still accepts only one through three.
+ * The configured shape is fixed: one greedy ply, an exhaustive reply guard, or up to five paranoid
+ * plies. It never keeps a partial answer. [ao.snakewarz.botapi.scratch.Scratch.playout] refusing one
+ * required static leaf resets the arena and invalidates the whole tree, so the exact root Cartographer
+ * choice computed before searching is returned instead. Terminal leaves are the game's answer and
+ * cost nothing; every nonterminal leaf is one [TerritoryEval].
  */
 internal class FixedDepthBot(
     setup: BotSetup,
@@ -137,7 +136,7 @@ internal class FixedDepthBot(
                     remainingDepth = requestedDepth - 1,
                     alphaIn = alpha,
                     betaIn = INFINITE,
-                    prune = requestedDepth >= SHIPPED_MAX_DEPTH,
+                    prune = requestedDepth >= ALPHA_BETA_DEPTH,
                 )
             }
 
@@ -251,7 +250,7 @@ internal class FixedDepthBot(
     }
 
     private companion object {
-        const val SHIPPED_MAX_DEPTH = 3
+        const val ALPHA_BETA_DEPTH = 3
         const val MAX_DEPTH = 5
         val DIRECTIONS = Direction.entries.size
 

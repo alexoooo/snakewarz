@@ -195,6 +195,11 @@ the new-match form and its seats, `TournamentPanel` the schedule and the matrix,
 link, `SettingsPanel` the theme and the speed.
 Every one of them is rendered from the same `UiModel` on the way through `Chrome.render`.
 
+The home screen's release badge is written into `index.html` whenever the app processes its browser
+resources, which covers the development server and both development and production distributions.
+That task is neither cached nor considered up to date, so its UTC timestamp identifies this browser
+build rather than one whose resources Gradle restored.
+
 - **`#panel-setup` is the tall one and is the reason panels scroll.** It carries the board size, the
   map, four seats with their knob grids and the seed, so it is what `.panel-body`'s `overflow-y:
   auto` exists for. It is also **what the rest of the tree means by "the sidebar"** — the phrase is in

@@ -49,8 +49,8 @@ internal object GauntletCandidate {
         level(1, "chase", 0, 12, MapShape.PILLARS),
         level(2, "cartographer", 0, 16, MapShape.ROOMS),
 
-        // P2's cheapest direct clear; deeper research depths remain available if the human gate fails.
-        level(3, "lookahead", 16, 12, MapShape.ARENA, "depth" to "2"),
+        // The cheapest clear was trivial for the release owner; depth five is the material P2 step.
+        level(3, "lookahead", 1_024, 12, MapShape.ARENA, "depth" to "5"),
         level(4, "puct", 600, 12, MapShape.SCATTER, "eval" to "territory"),
 
         // The same search has a distinct exact-map result; alpha-beta then supplies the final step.
