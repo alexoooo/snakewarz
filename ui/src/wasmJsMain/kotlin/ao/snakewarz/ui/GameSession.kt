@@ -60,8 +60,9 @@ import kotlinx.browser.window
  * There are two clocks, and which one runs is decided by `Match.interactive` rather than by a mode
  * flag. Bots are paced by [TurnScheduler], because watching them is the point. A match with a person
  * in it is **turn-based**: a keypress plays the round it belongs to and a press on the board plays
- * exactly one move, and the scheduler runs only for as long as that press is *held* — walking the
- * rest of the route at the speed on the slider. The moment that person is eliminated the match stops
+ * exactly one player move, and the scheduler runs only for as long as that press is *held* — walking
+ * the rest of the route at the speed on the slider. Letting go finishes the opponents' outstanding
+ * turns before parking on the player again. The moment that person is eliminated the match stops
  * being interactive and the scheduler takes the ending over outright, so the survivors finish the
  * game while they watch.
  */
@@ -73,7 +74,7 @@ public class GameSession(
 ) {
     private val chrome = Chrome(registry, portraits, ::dispatch)
     private val renderer = BoardRenderer(chrome.canvas, chrome.overlay)
-    private val scheduler = TurnScheduler(::advance, ::renderChrome)
+    private val scheduler = TurnScheduler(::advance, ::renderChrome) { match.interactive }
     private val batch = TournamentRunner(::batchFrame)
 
     /**
@@ -546,15 +547,16 @@ public class GameSession(
      * no hold, no step, no clock. Pressing your own head is a zero-length route, which exists, so it
      * takes hold and plays nothing; that is how a freehand drawing starts.
      *
-     * Holding is what keeps it going. One move is played here and [TurnScheduler] walks the rest at
-     * the speed on the slider, so a quick click is exactly one step: the `pointerup` a few
-     * milliseconds later discards what is left of the route.
+     * Holding is what keeps it going. One player move is played here and [TurnScheduler] walks the
+     * rest at the speed on the slider, so a quick click is exactly one player step: the `pointerup`
+     * a few milliseconds later discards what is left of the route and finishes the opponents' turns.
      *
      * **The ordering below is safe without a `!scheduler.running` guard.** `endPath()` runs first
      * and stops the clock, and `TurnScheduler.start()` only arms a `requestAnimationFrame` — so
      * nothing fires between here and the handler returning. A quick click's `pointerdown` and
      * `pointerup` land in separate tasks but both before the next frame, so `start()` and then
-     * `stop()` cancel out and the one step is the whole of it, by construction.
+     * `stop()` cancel out. The one player step above and the opponent responses [endPath] finishes
+     * are therefore the whole gesture, by construction.
      */
     private fun pathBegan(clientX: Double, clientY: Double) {
         endPath()
@@ -628,12 +630,15 @@ public class GameSession(
     }
 
     /**
-     * Ends the route, empties the queue it filled, and stops the clock it started.
+     * Ends the route, empties the queue it filled, and parks the match on the player's next turn.
      *
      * **This is what letting go does, and it is the whole of "release stops the snake":** what was
      * left of the route is discarded rather than played out, so the snake halts on the square it is
-     * on that turn. An arrow key and a tournament taking the arena end a drag by the same call,
-     * because there is one route and one way it ends.
+     * on that turn. The clock stops first, then [playRound] lets only the opponents still owed a move
+     * answer before the match waits on the player again. Clearing the queue before that call is
+     * load-bearing: it is what prevents the player's next route move from being consumed too. An
+     * arrow key and a tournament taking the arena end a drag by the same call, because there is one
+     * route and one way it ends.
      *
      * The guard below is entirely one thing now: **it is what stops a click pausing a match of bots
      * or a replay.** Every press on the board comes through here first, and on a board this player
@@ -646,8 +651,8 @@ public class GameSession(
         }
         forgetPath()
         scheduler.stop()
+        playRound()
         refreshOverlay()
-        renderChrome()
     }
 
     /**
@@ -1376,8 +1381,9 @@ public class GameSession(
     /**
      * Plays turns until it is the player's move again.
      *
-     * One key buys one round: the loop stops on the turn an interactive slot has nothing to play,
-     * which is the player's own next turn.
+     * One key buys one round. A released pointer route reaches the same resting place after its queue
+     * has been cleared: any opponents still owed a turn answer, then the loop stops when the player
+     * has nothing queued on their own next turn.
      *
      * That stopping turn is one step *past* the round — asking a player who has nothing queued
      * consumes no turn, it only reports that they are waiting — so the bound is a slot per snake

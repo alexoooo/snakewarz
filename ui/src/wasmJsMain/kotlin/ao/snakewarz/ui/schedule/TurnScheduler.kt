@@ -21,10 +21,17 @@ import kotlin.time.TimeSource
  * Pacing cannot affect a result. [step] makes at most one bot call and its outcome does not depend
  * on how many steps preceded it in the same frame, so every guard below changes how *fast* a match
  * plays and never how it ends. That is what makes it safe to bail out of a frame halfway through.
+ *
+ * A live player is the one case where an intermediate position has to be visible. The browser paints
+ * only after this callback returns, so spending three turns in one frame makes the first snake look
+ * as if it moved twice in a row and can hide the position in which a collision was decided.
+ * [oneTurnPerFrame] lets `GameSession` cap held pointer routes at one while bot matches and replays
+ * retain the catch-up loop.
  */
 internal class TurnScheduler(
     private val step: () -> Progress,
     private val onFrame: () -> Unit,
+    private val oneTurnPerFrame: () -> Boolean = { false },
 ) {
     /** What [step] managed to do, and therefore whether the frame should keep asking. */
     enum class Progress {
@@ -127,6 +134,12 @@ internal class TurnScheduler(
             }
 
             if (played >= MAX_TURNS_PER_FRAME) {
+                break
+            }
+            if (oneTurnPerFrame()) {
+                // A display cannot show intermediate turns from one callback. Drop excess credit
+                // rather than carrying a visual skip into every frame after a stall.
+                accumulator = minOf(accumulator, 1.0)
                 break
             }
             if (frameStart.elapsedNow() > FRAME_BUDGET) {

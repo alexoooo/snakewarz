@@ -41,6 +41,11 @@ press starts it, so the same clock that paces two bots walks a person's snake al
 asked for. Which clock runs still branches on `Match.interactive` and on nothing else — what a press
 changes is whether the scheduler is *started*, not what decides.
 
+Its catch-up rule does branch there: a live player's scheduler exposes **at most one turn per browser
+frame**. A browser paints only after the animation callback returns, so batching three turns would
+hide two intermediate positions and make the first snake appear to move twice. Bot matches and
+replays may still spend accumulated turns in one frame; only their final position matters.
+
 **A press is the one thing that puts a live player on the scheduler**, and two sentences are what make
 the whole interaction legible:
 
@@ -54,10 +59,11 @@ the whole interaction legible:
 So: press a square there is a route to, and `GameSession` takes hold, swaps the whole queue with
 `InputBuffer.replace`, plays **exactly one move** along it and starts the scheduler. Keep holding and
 the rest is walked at the speed on the slider; a quick click costs one step and no more, because the
-`pointerup` a few milliseconds later discards what is left. Press a square with no route — a wall, a
-sealed pocket, off the board — and nothing happens at all: no hold, no step, no clock, which is what
-the empty preview already said. Press your own head and the zero-length route counts as existing, so
-it takes hold and plays nothing; that is how a freehand drawing starts.
+`pointerup` a few milliseconds later discards what is left, lets the opponents finish the current
+round and parks on the player's next turn. Press a square with no route — a wall, a sealed pocket,
+off the board — and nothing happens at all: no hold, no step, no clock, which is what the empty
+preview already said. Press your own head and the zero-length route counts as existing, so it takes
+hold and plays nothing; that is how a freehand drawing starts.
 
 **There is no grace radius any more, and the reason it had one is why it is not missed.** It existed
 because a fingertip covers several squares of a large board while the browser reports one point
@@ -73,20 +79,28 @@ between a stray click and a lost snake otherwise is CSS: `#panel-scrim` (`z-inde
 while either is up. That is a **CSS invariant with no Kotlin counterpart** — the pointer has nothing
 like `Shell.boardHasKeys`.
 
-Five consequences, each of which is a thing to get wrong:
+Six consequences, each of which is a thing to get wrong:
 
 - **One move per press means `playRound` is the wrong primitive.** It plays until an interactive slot
   has nothing queued, and with a whole route just swapped in that is a slot per snake plus the poll —
   the entire route, not a square of it. `GameSession.playPlayerMove` loops until the player's own
   `movesMade` changes instead, and keeps `playRound`'s two escapes: bail on anything but `CONTINUED`,
-  and hand the ending to the clock the moment the match stops being interactive.
+  and hand the ending to the clock the moment the match stops being interactive. Release calls
+  `playRound` only **after clearing that route**, so it can finish the opponents' outstanding turns
+  without buying the player a second move.
 - **Letting go is the stop.** Release, cancel or `lostpointercapture` all discard the rest of the
   route, empty the queue and stop the clock, so the snake halts on the square it is on that turn
-  rather than finishing the route. Holding is what makes it move, and that is the whole interaction.
+  rather than finishing the route. The rest of the round still finishes before the match parks on
+  the player's turn; carrying an AI turn into the next press makes the two controls appear to move
+  twice in turn. Holding is what makes the player's snake move, and that is the whole interaction.
 - **A route that empties while still held needs no state at all.** The queue runs dry,
   `InteractiveBot` answers `Pending`, `Match.step` reports `AwaitingInput`, and the scheduler clamps
   its accumulator and waits — so no debt builds while the player thinks, and dragging further just
   refills the queue. There is no "parked" flag and there must not be one.
+- **A held route spends at most one turn per rendered frame.** `TurnScheduler.oneTurnPerFrame` is
+  supplied from `Match.interactive`; after a stall it drops excess credit rather than drawing only
+  the last of several turns. Do not impose that ceiling on bots or replays, whose scheduler is also
+  their catch-up clock.
 - **`consumePlan` is the single authority over the queue while a route is held**, and it is three
   obligations in one place. A plan is anchored on the head, so `PathPlanner.advance()` drops its first
   square on every move the player's slot makes — miss that and the painted route trails a square

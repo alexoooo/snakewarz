@@ -12,6 +12,14 @@ and two canvases. The overlay carries **the snakes themselves** and is painted w
 a stray click while another UI layer is open; `#panel-scrim` and `#dialog-result` are full-viewport
 and above `#board`. Changing their stacking or box can change the game.
 
+When that press ends, discard its remaining route and finish the opponents' outstanding turns before
+parking on the player again. A pointer gesture must not carry an AI turn into the next gesture; this
+is the resting-state invariant it shares with arrow/WASD input.
+
+While a press is held, expose at most one match turn per browser frame. Multiple turns inside one
+animation callback paint only their final position and make a snake appear to move twice; bot matches
+and replays retain `TurnScheduler`'s multi-turn catch-up loop.
+
 `SteerPad` is the arrow keys for a device without them. It is out of flow inside `.board-wrap`, which
 `BoardRenderer.fit` measures. Putting it in flow makes the board reserve space for the pad. Position
 it through `GameSession.fitBoard`, the single fitting entry point.

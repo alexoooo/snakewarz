@@ -63,6 +63,23 @@ class TurnSchedulerTest {
     }
 
     @Test
+    fun `an interactive frame exposes one turn even when the clock can afford two`() {
+        // A browser paints after the callback, not after each canvas write inside it. Letting two
+        // turns land here would hide the first position and can make one snake appear to move twice.
+        val run = Run(oneTurnPerFrame = true)
+
+        run.scheduler.start()
+        run.scheduler.frame(0.0)
+        run.scheduler.frame(250.0)
+
+        assertEquals(1, run.steps, "two turns of credit still produce one visible turn")
+
+        run.scheduler.frame(375.0)
+        assertEquals(2, run.steps, "the next frame may expose the next turn")
+        run.scheduler.stop()
+    }
+
+    @Test
     fun `waiting on a person does not consume a turn, and does not bank them either`() {
         // A player who thinks for five seconds must not have five seconds of turns fired at them on
         // the next keypress.
@@ -109,7 +126,10 @@ class TurnSchedulerTest {
     }
 
     /** A scheduler wired to a counter, at a rate that divides exactly into the timestamps above. */
-    private class Run(var answer: TurnScheduler.Progress = TurnScheduler.Progress.CONTINUED) {
+    private class Run(
+        var answer: TurnScheduler.Progress = TurnScheduler.Progress.CONTINUED,
+        oneTurnPerFrame: Boolean = false,
+    ) {
         var steps = 0
         var frames = 0
 
@@ -119,6 +139,7 @@ class TurnSchedulerTest {
                 answer
             },
             onFrame = { frames++ },
+            oneTurnPerFrame = { oneTurnPerFrame },
         ).also { it.turnsPerSecond = 8.0 }
     }
 }
