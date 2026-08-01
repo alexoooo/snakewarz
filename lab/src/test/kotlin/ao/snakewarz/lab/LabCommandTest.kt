@@ -330,6 +330,29 @@ class LabCommandTest {
     }
 
     @Test
+    fun `a map seed can be pinned independently from the tournament seed`() {
+        val command = LabCommand.of(
+            "play uct space --rows 12 --cols 12 --map scatter --map-seed 0 --seed 82004".split(' '),
+            ShippedBots,
+        ) as PlayCommand
+
+        assertEquals(
+            generateMap(12, 12, MapShape.SCATTER, seed = 0L).walls().toList(),
+            command.config.walls().toList(),
+        )
+        assertEquals(82004L, command.config.seed)
+    }
+
+    @Test
+    fun `a map seed without a map is refused rather than silently pinning empty`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of("play uct space --map-seed 0".split(' '), ShippedBots)
+        }
+
+        assertContains(failure.message.orEmpty(), "--map-seed")
+    }
+
+    @Test
     fun `no map at all is the same run as the empty map, byte for byte`() {
         // What lets every command written before maps existed keep its meaning, and every batch
         // already in the log stay comparable with a new one that spells the default out.
@@ -537,7 +560,7 @@ class LabCommandTest {
     @Test
     fun `gauntlet can select the pinned lab-only candidate table`() {
         val command = LabCommand.of(
-            "gauntlet --table p7-candidate --against puct:budget=250 --rounds 4 --seed 81001".split(' '),
+            "gauntlet --table 2026-08-01b --against puct:budget=250 --rounds 4 --seed 81001".split(' '),
             ShippedBots,
         ) as GauntletCommand
 

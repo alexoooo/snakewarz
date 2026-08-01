@@ -80,9 +80,10 @@ internal interface LabCommand {
 
         private val PLAY_FLAGS = setOf(
             "rows", "cols", "rounds", "seed", "budget", "format", "openings", "threads",
-            "replications", "replays", "log", "map", "density",
+            "replications", "replays", "log", "map", "map-seed", "density",
         )
-        private val TIME_FLAGS = setOf("rows", "cols", "seed", "budget", "passes", "map", "density")
+        private val TIME_FLAGS =
+            setOf("rows", "cols", "seed", "budget", "passes", "map", "map-seed", "density")
 
         /**
          * No geometry here, and that is the point: every board a `gauntlet` run plays comes off the
@@ -117,12 +118,12 @@ internal interface LabCommand {
         )
 
         private val TUNE_FLAGS = setOf(
-            "knobs", "rows", "cols", "seed", "budget", "openings", "threads", "map", "density",
+            "knobs", "rows", "cols", "seed", "budget", "openings", "threads", "map", "map-seed", "density",
             "passes", "block", "max-pairs", "journal", "elo1",
         )
 
         private val SPSA_FLAGS = setOf(
-            "knobs", "rows", "cols", "seed", "budget", "openings", "threads", "map", "density",
+            "knobs", "rows", "cols", "seed", "budget", "openings", "threads", "map", "map-seed", "density",
             "iterations", "boards", "spread", "stride", "max-pairs", "journal", "elo1",
         )
 
@@ -189,7 +190,7 @@ internal interface LabCommand {
         private const val DEFAULT_WORST = 5
 
         private val AB_FLAGS = setOf(
-            "rows", "cols", "seed", "budget", "openings", "threads", "log", "map", "density",
+            "rows", "cols", "seed", "budget", "openings", "threads", "log", "map", "map-seed", "density",
             "elo0", "elo1", "alpha", "beta", "block", "max-pairs",
         )
 
@@ -219,25 +220,25 @@ internal interface LabCommand {
                                             [--budget N] [--format head|ffa]
                                             [--openings mirrored|fixed|complete] [--replications N]
                                             [--threads N]
-                                            [--map SHAPE] [--density F]
+                                            [--map SHAPE] [--map-seed N] [--density F]
                                             [--replays decisive|none|all] [--log DIR|none]
               time <entrant> [--rows N] [--cols N] [--seed N] [--budget N] [--passes N]
-                             [--map SHAPE] [--density F]
+                             [--map SHAPE] [--map-seed N] [--density F]
               rate [--log DIR] [--board RxC] [--budget N] [--format head|ffa] [--build SHA]
                    [--openings mirrored|fixed] [--map SHAPE] [--since RUN] [--pool true]
               ab <baseline> <candidate> [--elo0 N] [--elo1 N] [--alpha N] [--beta N]
                                         [--block N] [--max-pairs N] [--rows N] [--cols N]
                                         [--seed N] [--budget N] [--openings ...] [--threads N]
-                                        [--map SHAPE] [--density F]
+                                        [--map SHAPE] [--map-seed N] [--density F]
               report <entrant> [--against <entrant>] [--worst N] [--log DIR]
               phases <entrant> [--against <entrant>] [--log DIR]
               policy --log DIR --expert <entrant> [--positions N] [--seed N]
               tune <entrant> [--knobs a,b,c] [--passes N] [--block N] [--max-pairs N]
                              [--rows N] [--cols N] [--seed N] [--budget N] [--openings ...]
-                             [--threads N] [--map SHAPE] [--density F] [--journal FILE]
+                             [--threads N] [--map SHAPE] [--map-seed N] [--density F] [--journal FILE]
               spsa <entrant> [--knobs a,b,c] [--iterations N] [--boards N] [--spread N] [--stride N]
                              [--rows N] [--cols N] [--seed N] [--budget N] [--openings ...]
-                             [--threads N] [--map SHAPE] [--density F] [--journal FILE]
+                             [--threads N] [--map SHAPE] [--map-seed N] [--density F] [--journal FILE]
                              [--elo1 N] [--max-pairs N]
               train [--log DIR] [--rows N] [--cols N] [--stride N] [--positions N] [--hidden N]
                     [--epochs N] [--rate N] [--decay N] [--batch N] [--seed N] [--out FILE]
@@ -254,7 +255,7 @@ internal interface LabCommand {
                             [--positions-per-threshold N] [--seed N]
                             [--max-nodes-per-position N] [--max-total-nodes N]
                             [--memory-mib N] [--max-seconds N]
-              gauntlet [--table shipped|p7-candidate] [--against <entrant>] [--rounds N] [--seed N]
+              gauntlet [--table shipped|2026-08-01b] [--against <entrant>] [--rounds N] [--seed N]
                        [--openings ...] [--threads N]
                        [--log DIR|none]
 
@@ -289,7 +290,7 @@ internal interface LabCommand {
               train --log .lab/p2b-field-20 --rows 20 --cols 20 --model .lab/shipped-model.txt
               gauntlet --rounds 40
               gauntlet --rounds 40 --against uct:budget=100
-              gauntlet --table p7-candidate --rounds 200 --against puct:budget=250
+              gauntlet --table 2026-08-01b --rounds 200 --against puct:budget=250
 
             `tune` and `spsa` both search a bot's declared knobs and recommend; neither ever edits a
             default. Adopting one moves every golden move-stream hash, and that is a question for a
@@ -578,8 +579,9 @@ internal interface LabCommand {
          * The map every match of the run is played on: `--map <shape>` at this run's own geometry.
          *
          * One map per run rather than one per match, so a batch is a comparison on a board rather
-         * than a comparison across boards. The seed is the run's, so `--map scatter` is reproducible
-         * from the command line alone and two runs at different seeds are two different scatterings.
+         * than a comparison across boards. By default the map uses the run seed, so old commands
+         * remain reproducible. `--map-seed` pins a seeded wall layout independently when fresh
+         * tournament openings must be played on an exact shipped board.
          *
          * `--map empty` is the default and produces no walls at all, so a run that names it is
          * byte-identical to a run that says nothing — which is what lets every existing command and
@@ -589,7 +591,7 @@ internal interface LabCommand {
          * A shape that cannot be drawn at this size refuses by name from [generateMap], because a
          * cross with no arms is a bug in the game rather than a small cross.
          */
-        private fun Flags.walls(rows: Int, cols: Int, seed: Long): IntArray {
+        private fun Flags.walls(rows: Int, cols: Int, defaultSeed: Long): IntArray {
             val slug = text("map") ?: MapShape.EMPTY.slug
             val shape = MapShape.ofSlug(slug)
                 ?: error("no such map: '$slug'. Known: ${MapShape.entries.joinToString { it.slug }}")
@@ -600,8 +602,13 @@ internal interface LabCommand {
                 "--density asks a map for a fraction of the board, so it needs --map. " +
                     "The default map is '${MapShape.EMPTY.slug}' and has no walls to place."
             }
+            require(text("map-seed") == null || text("map") != null) {
+                "--map-seed pins a map layout, so it needs --map. " +
+                    "The default map is '${MapShape.EMPTY.slug}' and has no layout to pin."
+            }
 
-            return generateMap(rows, cols, shape, decimal("density", SHIPPED_DENSITY), seed).walls()
+            val mapSeed = long("map-seed", defaultSeed)
+            return generateMap(rows, cols, shape, decimal("density", SHIPPED_DENSITY), mapSeed).walls()
         }
 
         private fun tuneOf(entrants: List<String>, flags: Flags, registry: BotRegistry): TuneCommand {

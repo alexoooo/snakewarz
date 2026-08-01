@@ -11,6 +11,7 @@ import ao.snakewarz.lab.strength.Bootstrap
 import ao.snakewarz.lab.strength.Interval
 import ao.snakewarz.lab.strength.Ladder
 import ao.snakewarz.lab.strength.bootstrapIntervals
+import ao.snakewarz.lab.strength.pairwiseScoreIntervals
 import ao.snakewarz.lab.strength.winShareIntervals
 import ao.snakewarz.match.map.MapShape
 import ao.snakewarz.match.map.generateMap
@@ -155,7 +156,26 @@ internal class RateCommand(
             longevityAgainstVictory(ladder, victory, order, log, width)
         }
         residuals(ladder, log, width)
+        if (format == TournamentFormat.HEAD_TO_HEAD) {
+            directCells(ladder, played, log)
+        }
         diversity(played, runs, log)
+    }
+
+    /** Direct qualification cells, with every matchup from a shared opening resampled together. */
+    private fun directCells(ladder: Ladder, played: List<LoggedMatch>, log: (String) -> Unit) {
+        val intervals = pairwiseScoreIntervals(played, ladder.specs)
+        log("")
+        log("[lab] direct cells, shared-opening 95% intervals:")
+        for (one in 0 until ladder.size) {
+            for (other in one + 1 until ladder.size) {
+                val interval = intervals[one][other] ?: continue
+                log(
+                    "  ${ladder.label(one)} vs ${ladder.label(other)}: " +
+                        "${percent(interval.score)} [${percent(interval.low).trim()}..${percent(interval.high).trim()}]",
+                )
+            }
+        }
     }
 
     /**

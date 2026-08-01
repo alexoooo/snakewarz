@@ -40,22 +40,22 @@ internal class GauntletTrialLevel(
     }
 }
 
-/** The exact seven-level campaign table while its replacement machine profile is measured. */
+/** The 2026-08-01b lab-only table, carrying the current machine-qualified P2 finalists. */
 internal object GauntletCandidate {
-    const val TABLE: String = "p7-candidate"
+    const val TABLE: String = "2026-08-01b"
 
     val levels: List<GauntletTrialLevel> = listOf(
         // Each retained shape appears once: the open lattice is the gentlest wall lesson.
         level(1, "chase", 0, 12, MapShape.PILLARS),
         level(2, "cartographer", 0, 16, MapShape.ROOMS),
 
-        // P4's smallest useful search; deeper lookahead left no stable P7 rung under both references.
-        level(3, "lookahead", 4, 12, MapShape.ARENA, "depth" to "1"),
-        level(4, "flat-monte-carlo", 400, 12, MapShape.SCATTER),
+        // P2's cheapest direct clear; deeper research depths remain available if the human gate fails.
+        level(3, "lookahead", 16, 12, MapShape.ARENA, "depth" to "2"),
+        level(4, "puct", 600, 12, MapShape.SCATTER, "eval" to "territory"),
 
-        // Search advances from learning around blocks to territory planning through wide lanes.
-        level(5, "uct", 600, 12, MapShape.ISLANDS),
-        level(6, "puct", 600, 12, MapShape.PINWHEEL, "eval" to "territory"),
+        // The same search has a distinct exact-map result; alpha-beta then supplies the final step.
+        level(5, "puct", 600, 12, MapShape.ISLANDS, "eval" to "territory"),
+        level(6, "alphabeta", 600, 12, MapShape.PINWHEEL, "eval" to "territory"),
 
         // P5's deployable common-field winner, on the complete empty-8 opening population it won.
         level(7, "alphabeta", 1_700, 8, MapShape.EMPTY, "eval" to "territory"),

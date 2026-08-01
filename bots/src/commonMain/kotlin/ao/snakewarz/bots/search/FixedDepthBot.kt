@@ -19,7 +19,8 @@ import ao.snakewarz.core.rules.MatchOutcome
  * alpha-beta. It never keeps a partial answer. [ao.snakewarz.botapi.scratch.Scratch.playout] refusing
  * one required static leaf resets the arena and invalidates the whole tree, so the exact root
  * Cartographer choice computed before searching is returned instead. Terminal leaves are the game's
- * answer and cost nothing; every nonterminal leaf is one [TerritoryEval].
+ * answer and cost nothing; every nonterminal leaf is one [TerritoryEval]. Depths four and five are
+ * unreleased research shapes; the shipped bot still accepts only one through three.
  */
 internal class FixedDepthBot(
     setup: BotSetup,
@@ -136,7 +137,7 @@ internal class FixedDepthBot(
                     remainingDepth = requestedDepth - 1,
                     alphaIn = alpha,
                     betaIn = INFINITE,
-                    prune = requestedDepth == MAX_DEPTH,
+                    prune = requestedDepth >= SHIPPED_MAX_DEPTH,
                 )
             }
 
@@ -250,7 +251,8 @@ internal class FixedDepthBot(
     }
 
     private companion object {
-        const val MAX_DEPTH = 3
+        const val SHIPPED_MAX_DEPTH = 3
+        const val MAX_DEPTH = 5
         val DIRECTIONS = Direction.entries.size
 
         const val FREE = 0

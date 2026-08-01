@@ -67,6 +67,20 @@ README](research/wip/README.md) asks for from the other end. The 2026-07-28 ledg
 temp directory it lived in and this document exists anyway, because it had been written from it first.
 That is the order, not the lucky escape it looks like.
 
+### A human gate needs a trace
+
+Machine qualification and human difficulty answer different questions. The 2026-08-01 Gauntlet was
+monotone under two fixed machine references and still let one human session clear levels 1 through 6
+in roughly five minutes. Record a human gate as local research evidence with attempt count, elapsed
+first-clear time, survival length and death shape. A note such as "felt easy" is enough to reject a
+candidate, but not enough to tune its replacement or distinguish a weak opponent from a fortunate
+opening.
+
+Human gate results are product checks, not population estimates. Do not train from them or claim a
+general completion rate unless a later agenda declares a sampling and overfitting protocol. When a
+gate fails, preserve the machine result beside it: the disagreement is the finding and prevents a
+later phase from treating the same reference curve as human calibration.
+
 ---
 
 ## Writing one — brainstorming

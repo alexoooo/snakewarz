@@ -54,6 +54,22 @@ class FixedDepthBotTest {
     }
 
     @Test
+    fun `research depths four and five complete legally within their full-width caps`() {
+        for (depth in 4..5) {
+            val board = decisionBoard()
+            val budget = Budget(capFor(depth))
+            val bot = FixedDepthBot(setupFor(board, board.toAct), depth)
+
+            val direction = choose(bot, board, budget)
+
+            assertTrue(direction in board.legalMoves(board.toAct))
+            assertEquals(depth, bot.lastCompletedDepth)
+            assertFalse(bot.lastFallbackUsed)
+            assertTrue(bot.lastStaticLeaves <= capFor(depth))
+        }
+    }
+
+    @Test
     fun `exact leaf budget completes and one less returns the exact root policy`() {
         for (depth in 1..3) {
             val probeBoard = fullBranchBoard()

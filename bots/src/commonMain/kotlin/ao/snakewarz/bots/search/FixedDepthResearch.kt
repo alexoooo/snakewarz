@@ -3,15 +3,16 @@ package ao.snakewarz.bots.search
 import ao.snakewarz.botapi.registry.BotFactory
 
 /**
- * Temporary JVM-only access to P4's completed fixed-depth search shapes.
+ * Temporary cross-target access to completed fixed-depth search shapes.
  *
- * These factories are research plumbing rather than released bot identities. Their `p4-` lab ids
- * may appear in local aggregate rows, but they must never be retained in a replay because the Wasm
- * application cannot resolve them.
+ * These factories are research plumbing rather than released bot identities. Depths one through
+ * three reproduce the shipped implementation; depths four and five exist only for the 2026-08-01b
+ * exact-level experiment. Lab ids may label local aggregate rows, but they must never be retained in
+ * a replay or enter `ShippedBots`.
  */
 public object FixedDepthResearch {
-    /** Greedy one-ply, exhaustive reply guard and completed three-ply alpha-beta, in depth order. */
-    public val cases: List<FixedDepthCase> = (1..3).map { depth ->
+    /** Completed paranoid searches at depths one through five, in depth order. */
+    public val cases: List<FixedDepthCase> = (1..5).map { depth ->
         FixedDepthCase(
             key = "depth-$depth",
             depth = depth,

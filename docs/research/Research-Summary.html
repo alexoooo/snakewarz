@@ -102,13 +102,13 @@
 <div class="wrap">
 
 <h1>Research summary</h1>
-<p class="sub m">snakewarz · two agendas · sixteen phases · 2026-07-28 → 2026-07-30</p>
+<p class="sub m">snakewarz · three closed agendas · twenty-three phases · 2026-07-28 → 2026-08-01</p>
 
 <p class="lede">
-  Both research agendas are closed. The first built a frontier of experimental bots and shipped
-  none of them; the second measured that frontier at an equal wall clock and shipped the one thing
-  nobody had proposed. This page is the account: what each phase attempted, what it found, and where
-  the ladder stands now.
+  Three research agendas are closed. The first built a frontier of experimental bots, the second
+  measured it at an equal wall clock, and the third rebuilt the single-player campaign around walls,
+  complete openings and browser cost. This page is the account: what each phase attempted, what it
+  found, and where the ladder and Gauntlet stand now.
 </p>
 
 <p class="note">
@@ -514,7 +514,44 @@
 </blockquote>
 
 <!-- ══════════════════════════════════════════════════════════════════ -->
-<h2>What the two agendas produced besides bots</h2>
+<h2>Agenda 2026-08-01 — rebuilding the Gauntlet</h2>
+<p class="sub">Seven phases, six map-separated baselines, a seven-level campaign, and one failed human ramp.</p>
+
+<p>
+  The third agenda treated every wall layout as a different game. It added the complete empty-8
+  opening population (40 oriented starts, both seatings), fixed Chrome effort lanes, and six separate
+  baseline fields. Its policy work shipped <code>cartographer</code>; its fixed mini-search shipped
+  <code>lookahead</code>. A learned action policy failed its held-out agreement gate, and the exact
+  solver stopped honestly at its 728 MiB feasibility bound after finding no correction to make
+  through the largest complete tier.
+</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Outcome</th><th>Evidence retained at the close</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Complete boss measurement</strong></td>
+      <td>Territory alpha-beta@1700 won the deployable empty-8 common field, directly cleared both
+        chamber incumbents, fit the 10.5 ms boss lane, and is described as strongest measured rather
+        than optimal.</td></tr>
+    <tr><td><strong>Machine-qualified campaign</strong></td>
+      <td>UCT@100 scored 69/66/61/63/25/25/11%; PUCT@250 scored
+        98/99/95/82/55/45/17%, with no adjacent rise above five points and no forfeits.</td></tr>
+    <tr><td><strong>Human gate failed</strong></td>
+      <td>One roughly five-minute session cleared levels 1 through 6. Level 7 alone supplied the
+        intended challenge, so machine monotonicity did not establish human difficulty.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  The shipped seven levels preserve replay compatibility and use a fresh
+  <code>snakewarz.gauntlet.v2</code> campaign identity. The follow-up agenda keeps levels 1, 2 and 7,
+  and reopens only levels 3 through 6 on their exact maps.
+</p>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>What the first two agendas produced besides bots</h2>
 
 <p>
   Across sixteen phases, <strong>one added a bot</strong> and <strong>one moved a shipped
@@ -584,9 +621,10 @@
 
 <footer>
   <p>
-    Generated 2026-07-30 at <span class="m">ef41d27</span>. Sources:
+    Updated 2026-08-01 at <span class="m">838775b</span>. Sources:
     <a href="2026-07-28_Research-Agenda.md">2026-07-28_Research-Agenda.md</a>,
-    <a href="2026-07-29_Research-Agenda.md">2026-07-29_Research-Agenda.md</a>.
+    <a href="2026-07-29_Research-Agenda.md">2026-07-29_Research-Agenda.md</a>, and
+    <a href="2026-08-01_Research-Agenda.md">2026-08-01_Research-Agenda.md</a>.
     Method and vocabulary: <a href="../Research-Process.md">Research-Process.md</a>,
     <a href="../Workflow.md#deciding-whether-a-change-helped">Workflow.md</a>.
   </p>

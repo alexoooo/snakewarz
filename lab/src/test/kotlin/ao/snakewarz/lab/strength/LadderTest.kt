@@ -101,6 +101,25 @@ class LadderTest {
     }
 
     @Test
+    fun `direct score intervals are deterministic complementary and bracket their cells`() {
+        val ladder = ladderOf(batchOf(listOf("space", "wallhug", "pressure"), rounds = 20).matches)
+        val once = pairwiseScoreIntervals(ladder.matches, ladder.specs, draws = 80)
+        val again = pairwiseScoreIntervals(ladder.matches, ladder.specs, draws = 80)
+
+        for (one in 0 until ladder.size) {
+            for (other in one + 1 until ladder.size) {
+                val interval = assertNotNull(once[one][other])
+                val reverse = assertNotNull(once[other][one])
+                val repeated = assertNotNull(again[one][other])
+                assertTrue(interval.low <= interval.score && interval.score <= interval.high)
+                assertEquals(1.0, interval.score + reverse.score, 1e-9)
+                assertEquals(interval.low, repeated.low, 0.0)
+                assertEquals(interval.high, repeated.high, 0.0)
+            }
+        }
+    }
+
+    @Test
     fun `one board is not enough evidence to draw a bar from`() {
         // A single seed group resampled produces itself every time, and an interval of zero width
         // would read as certainty about one game.

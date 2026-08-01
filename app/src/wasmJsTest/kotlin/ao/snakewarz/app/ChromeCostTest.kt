@@ -10,6 +10,7 @@ import ao.snakewarz.botapi.registry.BotFactory
 import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.botapi.registry.BotRegistry
 import ao.snakewarz.bots.ShippedBots
+import ao.snakewarz.bots.search.FixedDepthResearch
 import ao.snakewarz.core.random.SplitMix64
 import ao.snakewarz.core.rules.BoardView
 import ao.snakewarz.core.rules.EliminationReason
@@ -52,6 +53,18 @@ class ChromeCostTest {
 
     @Test
     fun `phase five empty 8x8 allowance grid`() = pricePhaseFive("exact", PHASE_FIVE_GRID)
+
+    @Test
+    fun `phase two level three arena grid`() = pricePhaseTwo(ARENA_12, PHASE_TWO_LEVEL_THREE)
+
+    @Test
+    fun `phase two level four scatter grid`() = pricePhaseTwo(SCATTER_12, PHASE_TWO_SEARCH_GRID)
+
+    @Test
+    fun `phase two level five islands grid`() = pricePhaseTwo(ISLANDS_12, PHASE_TWO_SEARCH_GRID)
+
+    @Test
+    fun `phase two level six pinwheel grid`() = pricePhaseTwo(PINWHEEL_12, PHASE_TWO_SEARCH_GRID)
 
     @Test
     fun `phase five empty 8x8 allowance curve additions`() =
@@ -116,6 +129,16 @@ class ChromeCostTest {
             entrants = entrants,
             tape = tape,
         )
+    }
+
+    private fun pricePhaseTwo(board: BoardSpec, entrants: List<EntrantSpec>) {
+        val tape = fixedTape(board)
+        println(
+            "[chrome-cost] phase=2 grid=frozen exact-level-board=true board=${board.label} " +
+                "geometry=${board.rows}x${board.cols} map=${board.shape.slug} map-seed=${board.mapSeed} " +
+                "entrants=${entrants.size} no-interpolation=true",
+        )
+        priceFixedTape(phase = 2, board = board, entrants = entrants, tape = tape)
     }
 
     private fun pricePhaseSeven() {
@@ -432,8 +455,9 @@ class ChromeCostTest {
         slug: String,
         val allowance: Int,
         val params: BotParams = BotParams.EMPTY,
+        entryOverride: BotEntry? = null,
     ) {
-        val entry: BotEntry = ShippedBots.entryOf(BotId(slug))
+        val entry: BotEntry = entryOverride ?: ShippedBots.entryOf(BotId(slug))
 
         val expandedLabel: String = buildString {
             append(entry.id.slug).append(":budget=").append(allowance)
@@ -534,6 +558,27 @@ class ChromeCostTest {
                     intArrayOf(300, 400, 500, 600, 800, 1_000),
                     mapOf("eval" to "chamber"),
                 )
+
+        val PHASE_TWO_LEVEL_THREE = (2..5).map { depth ->
+            val research = checkNotNull(FixedDepthResearch.case("depth-$depth"))
+            EntrantSpec(
+                label = "lookahead-research-depth-$depth",
+                slug = "lookahead",
+                allowance = 1 shl (depth * 2),
+                entryOverride = BotEntry(
+                    id = BotId("chrome-depth-$depth"),
+                    displayName = "Chrome depth $depth",
+                    factory = research.botFactory,
+                ),
+            )
+        }
+
+        val PHASE_TWO_SEARCH_GRID =
+            grid("uct", intArrayOf(400, 600, 800)) +
+                grid("puct", intArrayOf(400, 600, 800), mapOf("eval" to "territory")) +
+                grid("puct", intArrayOf(300, 400, 600), mapOf("eval" to "chamber")) +
+                grid("alphabeta", intArrayOf(400, 600, 800), mapOf("eval" to "territory")) +
+                grid("alphabeta", intArrayOf(300, 400, 600), mapOf("eval" to "chamber"))
 
         val PHASE_FIVE_CURVE_ADDITIONS =
             grid(

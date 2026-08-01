@@ -41,7 +41,7 @@ different fixed limits; none may move effort from an easy turn to a later one.
 | P4 | The fixed mini-search bridge | complete |
 | P5 | The empty-8x8 championship | complete |
 | P6 | Solve what can be solved on empty 8x8 | complete |
-| P7 | Rebuild and measure the Gauntlet | in progress: shipped and machine-qualified; human play gate open |
+| P7 | Rebuild and measure the Gauntlet | complete |
 
 The coordinator owns this table and the "What P*n* actually found" sections. Agents report; they do
 not edit either.
@@ -762,7 +762,7 @@ only longer pauses, and the boss feels qualitatively harder than the preceding f
 manual play note. Update `Gauntlet`'s KDoc and [`../Bots.md`](../Bots.md) with the new measurements;
 remove their stale notices only after the exact shipped configurations have been run.
 
-#### What P7 has actually found so far
+#### What P7 actually found
 
 The shipped campaign is seven levels, not eleven. After the machine-qualified opponent curve was
 selected, the release owner retired the four enclosed shapes `cross`, `ring`, `diagonals` and
@@ -795,7 +795,14 @@ separately from the fresh match seed, so a retry changes turn order and bot rand
 redrawing `scatter` or `islands`. The rebuilt campaign starts fresh under
 `snakewarz.gauntlet.v2`; old development progress and per-level runs remain unread under their old
 keys, while ordinary replay links remain compatible because they carry wall squares rather than a
-shape name. Only the required human play pass at the first, one middle and boss levels remains.
+shape name.
+
+The human gate falsified the machine-qualified ramp. One roughly five-minute session cleared levels
+1 through 6; only level 7 supplied the intended challenge. The first two levels remain acceptable and
+the empty-8 boss remains successful, but levels 3 through 6 are materially too easy for their product
+roles. Machine monotonicity under UCT@100 and PUCT@250 was therefore necessary and not sufficient.
+That result closes this agenda and is the starting condition of
+[`2026-08-01b_Research-Agenda.md`](2026-08-01b_Research-Agenda.md).
 
 ---
 
@@ -842,6 +849,20 @@ as unranked passengers here.
 **A broad refit of the learned value leaf.** Map transfer is a real open question, but P3 trains an
 action policy because it directly targets the missing no-tree rung. Refit `eval=learned` only if a
 phase establishes that the value leaf is the bottleneck in a qualified candidate.
+
+---
+
+## Open at the close
+
+- Levels 3 through 6 need exact-map specialists or stronger qualified configurations; preserving
+  their indices, boards, shapes and seeds is a product constraint for the next agenda.
+- The two machine references establish ordering but do not predict human first-clear difficulty.
+  Future gates must retain attempt count, elapsed first-clear time, survival length and death shape.
+- Dynamic effort is worth reopening only behind a deterministic evaluation bank and a measured hard
+  synchronous-turn cap. The constant-effort campaign proved responsive but left strength unused on
+  easy turns.
+- Empty 8x8 remains unsolved. The final boss is strongest measured under the complete-opening field
+  and browser envelope, never optimal.
 
 ---
 
