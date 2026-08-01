@@ -178,7 +178,7 @@ class RolloutTruncationTest {
     fun `a rollout that ends on its own is reported rather than judged`() {
         // Depth is generous and the board is a corridor, so the match really finishes inside it. A
         // judged verdict here would be a draw, and the real result is not one.
-        val board = boardOf(1, 2, 0 to 0, 0 to 1)
+        val board = boardOf(1, 3, 0 to 0, 0 to 2)
         val space = SpaceOwnership(board.grid, board.snakeCount)
         val scratch = turnOn(board, board.toAct, ao.snakewarz.core.Budget(1_000))
 
@@ -190,7 +190,7 @@ class RolloutTruncationTest {
             RolloutPolicy(RolloutPolicy.UNIFORM, board.grid),
         )
 
-        assertTrue(!result.isDraw, "a two-square board resolves, it does not tie")
+        assertTrue(!result.isDraw, "a three-square board resolves, it does not tie")
     }
 
     // -- internals

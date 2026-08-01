@@ -30,23 +30,24 @@ class PathPlannerTest {
     }
 
     @Test
-    fun `a route turns once rather than stepping diagonally`() {
-        // The backward reconstruction prefers the predecessor continuing the direction just taken, so
-        // a shortest route comes out as an L. A staircase is what a drag draws, and only a drag.
+    fun `a shortest route is a staircase approximating the straight line`() {
         val grid = Grid(9, 9)
         val planner = PathPlanner(grid)
         planner.begin(grid.cellAt(0, 0))
 
         assertTrue(planner.route(openBoard(grid), grid.cellAt(3, 5)))
 
-        assertEquals(8, planner.moveCount, "three rows and five columns, however they are ordered")
-        var turns = 0
+        assertEquals(8, planner.moveCount, "three rows and five columns is eight moves")
+        assertEquals(3, (0 until planner.moveCount).count { planner.directions[it] == Direction.SOUTH.ordinal })
+        assertEquals(5, (0 until planner.moveCount).count { planner.directions[it] == Direction.EAST.ordinal })
+
+        var straightRun = 1
+        var longestRun = 1
         for (i in 1 until planner.moveCount) {
-            if (planner.directions[i] != planner.directions[i - 1]) {
-                turns++
-            }
+            straightRun = if (planner.directions[i] == planner.directions[i - 1]) straightRun + 1 else 1
+            longestRun = maxOf(longestRun, straightRun)
         }
-        assertEquals(1, turns, "an L has exactly one corner")
+        assertTrue(longestRun <= 2, "a 3-by-5 diagonal should interleave its axes, not make an L")
     }
 
     @Test

@@ -14,6 +14,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -56,6 +57,7 @@ class MatchLogTest {
         assertEquals(written.id, read.id)
         assertEquals(written.comparabilityKey, read.comparabilityKey)
         assertEquals(BOARD, read.rows)
+        assertTrue(read.lastSnakeMustBeMoving)
         assertEquals("FIXED", read.openings)
         assertEquals(listOf("space:budget=0", "wallhug:budget=0"), read.contestants)
     }
@@ -171,6 +173,22 @@ class MatchLogTest {
         assertEquals(emptyList(), log.runs())
         assertEquals(emptyList(), log.matches())
         assertNull(log.replay("nobody", 0))
+    }
+
+    @Test
+    fun `the first run schema keeps its original ending rule`() {
+        val directory = Files.createTempDirectory("snakewarz-log")
+        Files.writeString(
+            directory.resolve("runs.tsv"),
+            "run\tstartedAt\tbuild\tformat\trows\tcols\tgrowEveryNthMove\tmaxTurns\t" +
+                "budgetPerTurn\trounds\tseed\topenings\tthreads\tmap\tcontestants\n" +
+                "old\t2026-07-31T00:00:00Z\tdeadbee\tHEAD_TO_HEAD\t9\t9\t2\t4096\t0\t2\t1\t" +
+                "MIRRORED\t1\tempty\tspace:budget=0 wallhug:budget=0\n",
+        )
+
+        val run = MatchLog(directory).runs().single()
+
+        assertFalse(run.lastSnakeMustBeMoving)
     }
 
     private fun configOf(contestants: List<Contestant>, rounds: Int): TournamentConfig = TournamentConfig(

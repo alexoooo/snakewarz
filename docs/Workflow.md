@@ -191,7 +191,7 @@ distinct games, 15-25 against it over thirty-six.
 
 Every `play` and `ab` appends to `.lab/` (gitignored), which is what `rate` and `report` read.
 
-- `runs.tsv` — one row per batch: board, rules, allowance, openings, **the map**, and a **build
+- `runs-v2.tsv` — one row per batch: board, rules, allowance, openings, **the map**, and a **build
   fingerprint** (`git rev-parse --short HEAD`, plus `+dirty`). The map is a fingerprint of the wall
   squares — `empty`, or `40w1a2b3c4d` — and **never a shape name**, so a header cannot keep saying
   `cross` after the generator was redrawn while every rating fitted across the change silently pools
@@ -201,6 +201,8 @@ Every `play` and `ab` appends to `.lab/` (gitignored), which is what `rate` and 
   key wherever the walls still reproduce it, and names the map on every summary line, `empty`
   included. An expanded spec pins a bot's settings; nothing else pins its code, and pooling across a
   change averages away the improvement that change was made to measure.
+  `runs.tsv` is the read-only first schema; its rows decode with the immediate-survivor rule they
+  predate, so old measurements remain comparable on their original terms.
 - `matches.tsv` — one row per **(match, seat)**, the match's own columns repeated on each. That
   denormalisation is deliberate: a run killed mid-write leaves a line that does not parse and gets
   dropped, rather than a dangling join.

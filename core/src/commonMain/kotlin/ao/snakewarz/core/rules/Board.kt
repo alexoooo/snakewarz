@@ -35,7 +35,8 @@ import ao.snakewarz.core.snake.SnakeView
  *   length 1 there is no neck, so a first-move reversal is perfectly legal. That is intended.
  * - A dead snake's body stays on the board as an obstacle. In a three-way match, the first casualty
  *   leaves a wall behind, exactly as in the legacy engine.
- * - The last snake standing wins immediately, even if it is itself trapped.
+ * - The last snake moving wins. A sole survivor with no legal move takes its forced fatal turn, so a
+ *   board on which nobody can move ends in a draw.
  */
 public class Board(
     override val grid: Grid,
@@ -409,12 +410,16 @@ public class Board(
     private fun evaluateOutcome(): Boolean {
         outcome = when {
             aliveCount == 0 -> MatchOutcome(SnakeId.NONE, MatchEnd.ALL_ELIMINATED)
-            aliveCount == 1 && snakeCount > 1 -> MatchOutcome(SnakeId(soleSurvivor()), MatchEnd.LAST_SNAKE_STANDING)
+            aliveCount == 1 && snakeCount > 1 && soleSurvivorCanMove() ->
+                MatchOutcome(SnakeId(soleSurvivor()), MatchEnd.LAST_SNAKE_STANDING)
             turnIndex >= rules.maxTurns -> MatchOutcome(SnakeId.NONE, MatchEnd.TURN_LIMIT)
             else -> null
         }
         return outcome != null
     }
+
+    private fun soleSurvivorCanMove(): Boolean =
+        !rules.lastSnakeMustBeMoving || legalMoves(SnakeId(soleSurvivor())).isNotEmpty
 
     private fun soleSurvivor(): Int {
         for (slot in 0 until snakeCount) {

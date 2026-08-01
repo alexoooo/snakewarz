@@ -149,12 +149,14 @@ class ReplayCodecTest {
     @Test
     fun `configuring a match costs bytes, and not configuring one costs none`() {
         val slots = listOf(BotId("cycle"), BotId("south"))
-        val plain = MatchSetup.create(12, 12, slots, seed = 77, budgetPerTurn = 40_000)
+        val oldRules = RulesConfig(lastSnakeMustBeMoving = false)
+        val plain = MatchSetup.create(12, 12, slots, seed = 77, rules = oldRules, budgetPerTurn = 40_000)
         val tuned = MatchSetup.create(
             12,
             12,
             slots,
             seed = 77,
+            rules = oldRules,
             budgetPerTurn = 40_000,
             budgets = intArrayOf(40_000, 4_000),
         )
@@ -162,8 +164,8 @@ class ReplayCodecTest {
         val plainPayload = ReplayCodec.encode(Match(plain, TestRegistry.ALL).also { it.runToCompletion() }.record())
         val tunedPayload = ReplayCodec.encode(Match(tuned, TestRegistry.ALL).also { it.runToCompletion() }.record())
 
-        // The whole reason for two versions: an unconfigured replay is what it always was.
-        assertEquals('A', plainPayload.first(), "an unconfigured payload still opens with version 1")
+        // Old rules remain byte-identical; the moving-winner flag is what opts a new match into v4.
+        assertEquals('A', plainPayload.first(), "an old-rules payload still opens with version 1")
         assertTrue(
             tunedPayload.length - plainPayload.length < 24,
             "configuring two slots cost ${tunedPayload.length - plainPayload.length} characters",
@@ -177,6 +179,7 @@ class ReplayCodecTest {
             8,
             listOf(BotId("cycle"), BotId("south")),
             seed = 4,
+            rules = RulesConfig(lastSnakeMustBeMoving = false),
             budgets = intArrayOf(10, 20),
         )
         val record = Match(setup, TestRegistry.ALL).also { it.runToCompletion() }.record()
@@ -208,6 +211,7 @@ class ReplayCodecTest {
             cols = 10,
             slots = listOf(BotId("cycle"), BotId("south")),
             seed = 2005,
+            rules = RulesConfig(lastSnakeMustBeMoving = false),
             budgetPerTurn = SHIPPED_BUDGET,
         )
         val match = Match(setup, TestRegistry.ALL)
@@ -272,13 +276,30 @@ class ReplayCodecTest {
 
     @Test
     fun `the version written is the oldest one that can express the record`() {
-        val plain = MatchSetup.create(12, 12, MAPPED_SLOTS, seed = 5)
-        val tuned = MatchSetup.create(12, 12, MAPPED_SLOTS, seed = 5, budgets = intArrayOf(10, 20))
-        val mapped = MatchSetup.create(12, 12, MAPPED_SLOTS, seed = 5, walls = latticeWalls(12, 12))
+        val oldRules = RulesConfig(lastSnakeMustBeMoving = false)
+        val plain = MatchSetup.create(12, 12, MAPPED_SLOTS, seed = 5, rules = oldRules)
+        val tuned = MatchSetup.create(
+            12,
+            12,
+            MAPPED_SLOTS,
+            seed = 5,
+            rules = oldRules,
+            budgets = intArrayOf(10, 20),
+        )
+        val mapped = MatchSetup.create(
+            12,
+            12,
+            MAPPED_SLOTS,
+            seed = 5,
+            rules = oldRules,
+            walls = latticeWalls(12, 12),
+        )
+        val moving = MatchSetup.create(12, 12, MAPPED_SLOTS, seed = 5)
 
         assertEquals(1, versionOf(plain), "nothing tuned and no map")
         assertEquals(ReplayCodec.CONFIGURED_VERSION, versionOf(tuned), "a per-slot allowance")
-        assertEquals(ReplayCodec.FORMAT_VERSION, versionOf(mapped), "a map")
+        assertEquals(ReplayCodec.MAPPED_VERSION, versionOf(mapped), "a map")
+        assertEquals(ReplayCodec.FORMAT_VERSION, versionOf(moving), "the moving-winner rule")
     }
 
     @Test
@@ -333,12 +354,12 @@ class ReplayCodecTest {
         val stale = mapped.copyOf().also { it[0] = ReplayCodec.CONFIGURED_VERSION.toByte() }
 
         val plain = base64.decode(ReplayCodec.encode(play(MatchSetup.create(8, 8, MAPPED_SLOTS, seed = 4))))
-        val unknown = plain.copyOf().also { it[1] = 4 }
+        val unknown = plain.copyOf().also { it[1] = it[1].toInt().or(8).toByte() }
 
         assertFailsWith<IllegalArgumentException>("version 2 cannot carry a map") {
             ReplayCodec.decode(base64.encode(stale))
         }
-        assertFailsWith<IllegalArgumentException>("flags bit 2 means nothing yet") {
+        assertFailsWith<IllegalArgumentException>("flags bit 3 means nothing yet") {
             ReplayCodec.decode(base64.encode(unknown))
         }
     }
@@ -411,7 +432,7 @@ class ReplayCodecTest {
             cols = 5,
             slots = MAPPED_SLOTS,
             seed = 11,
-            rules = RulesConfig(maxTurns = 100),
+            rules = RulesConfig(maxTurns = 100, lastSnakeMustBeMoving = false),
             budgetPerTurn = 0,
             walls = latticeWalls(5, 5),
         )

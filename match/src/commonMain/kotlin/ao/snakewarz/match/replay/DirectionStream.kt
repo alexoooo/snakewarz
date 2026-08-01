@@ -6,7 +6,7 @@ import ao.snakewarz.core.grid.Direction
  * The moves of a match, **two bits each**.
  *
  * Two bits and not three. The obvious alternative reserves extra codes for resign and forfeit, which
- * costs 50% more across the entire stream to describe events that happen at most `slots - 1` times
+ * costs 50% more across the entire stream to describe events that happen at most `slots` times
  * in a whole match; those go in a side table instead. A suicide needs no symbol at all — it is a
  * recorded direction that turns out to be illegal when replayed, so it describes itself.
  *

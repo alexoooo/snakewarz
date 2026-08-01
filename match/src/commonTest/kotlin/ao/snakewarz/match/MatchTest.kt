@@ -54,7 +54,11 @@ class MatchTest {
 
         assertEquals(MoveOutcome.TRAPPED, result.outcome)
         assertEquals(EliminationReason.TRAPPED, match.view.snake(SnakeId(0)).eliminationReason)
-        assertEquals(MatchEnd.LAST_SNAKE_STANDING, match.outcome?.end, "the survivor wins even boxed in itself")
+        assertNull(match.outcome, "the sole survivor is also boxed in and still owes its fatal turn")
+
+        val survivor = assertIs<StepResult.Advanced>(match.step())
+        assertEquals(MoveOutcome.TRAPPED, survivor.outcome)
+        assertEquals(MatchEnd.ALL_ELIMINATED, match.outcome?.end)
     }
 
     @Test
@@ -132,9 +136,10 @@ class MatchTest {
         val match = matchInOrder(1, 2, "east", "cycle")
 
         assertIs<StepResult.Advanced>(match.step())
+        assertIs<StepResult.Advanced>(match.step())
         val finished = assertIs<StepResult.Finished>(match.step())
 
-        assertEquals(MatchEnd.LAST_SNAKE_STANDING, finished.outcome.end)
+        assertEquals(MatchEnd.ALL_ELIMINATED, finished.outcome.end)
         assertEquals(finished.outcome, assertIs<StepResult.Finished>(match.step()).outcome, "and stays finished")
     }
 
@@ -194,10 +199,8 @@ class MatchTest {
 
     @Test
     fun `a solo match can be recorded even when its only snake leaves`() {
-        // The one place "at most slots - 1 snakes can be eliminated" is wrong. A contested match
-        // ends the moment one survivor is left, so nobody is ever the last to go; a solo match has
-        // no survivor to crown and ends with ALL_ELIMINATED, so its single snake really can be.
-        // Getting this wrong made a lone player resigning unrecordable.
+        // A solo match has no opponent to outlast, so its snake can leave and produce the one-entry
+        // terminal table that a plain "one fewer than the field" bound gets wrong.
         val match = matchInOrder(5, 5, "quitter")
 
         val outcome = match.runToCompletion()

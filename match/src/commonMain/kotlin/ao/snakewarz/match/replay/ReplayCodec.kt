@@ -25,7 +25,7 @@ import kotlin.io.encoding.Base64
  * test runs on the JVM in milliseconds. Padding is dropped because `=` in a URL is noise.
  *
  * ```
- * version : byte           flags : byte -- bit 0: per-slot configuration, bit 1: an obstacle map
+ * version : byte           flags : byte -- bit 0: configuration, bit 1: map, bit 2: moving winner
  * rows-1  : varint         cols-1  : varint          seed : 8 bytes, little endian
  * growEveryNthMove, maxTurns, budgetPerTurn, slotCount : varint
  * per slot : varint slug length, slug bytes
@@ -53,10 +53,10 @@ import kotlin.io.encoding.Base64
  *
  * ### Why the version is the oldest one that can express the record
  *
- * A match nobody configured, on a board with no map, is written as **version 1 with no flags**, byte
- * for byte as it was before either existed — so no link anybody has already shared has changed, and
- * a default match's URL is no longer than it used to be. Per-slot configuration raises it to version
- * 2 and a map raises it to version 3, and [versionFor] is the only place that says so.
+ * A record using the old immediate-survivor rule, with no per-slot configuration or map, is written
+ * as **version 1 with no flags**, byte for byte as it was before any of those features existed. A
+ * per-slot configuration raises it to version 2, a map raises it to version 3, and the default
+ * moving-winner rule raises it to version 4. [versionFor] is the only place that says so.
  *
  * Writing the *oldest version that can express the record* is what buys both. The version alone
  * would cost every plain replay two bytes and a needless incompatibility; the flag alone would leave
@@ -65,7 +65,7 @@ import kotlin.io.encoding.Base64
  */
 public object ReplayCodec {
     /** Bumped only for a layout change. A decoder rejects anything it does not recognise. */
-    public const val FORMAT_VERSION: Int = 3
+    public const val FORMAT_VERSION: Int = 4
 
     /** The oldest layout still written, for a record with nothing per-slot to say and no map. */
     private const val UNCONFIGURED_VERSION: Int = 1
@@ -73,13 +73,19 @@ public object ReplayCodec {
     /** What a configured record on an empty board is written at, which is what it always was. */
     public const val CONFIGURED_VERSION: Int = 2
 
+    /** The version that introduced the wall bitmap. */
+    internal const val MAPPED_VERSION: Int = 3
+
     /** Flags bit 0: the per-slot allowance and knob block is present. */
     private const val CONFIGURED: Int = 1
 
     /** Flags bit 1: a wall bitmap is present, one bit per playable square. */
     private const val MAPPED: Int = 2
 
-    private const val KNOWN_FLAGS: Int = CONFIGURED or MAPPED
+    /** Flags bit 2: a trapped sole survivor takes its fatal turn rather than winning. */
+    private const val LAST_SNAKE_MOVING: Int = 4
+
+    private const val KNOWN_FLAGS: Int = CONFIGURED or MAPPED or LAST_SNAKE_MOVING
 
     private val BASE64 = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
 
@@ -87,7 +93,10 @@ public object ReplayCodec {
         val setup = record.setup
         val out = Writer()
         val configured = setup.configured
-        val flags = (if (configured) CONFIGURED else 0) or (if (setup.mapped) MAPPED else 0)
+        val flags =
+            (if (configured) CONFIGURED else 0) or
+                (if (setup.mapped) MAPPED else 0) or
+                (if (setup.rules.lastSnakeMustBeMoving) LAST_SNAKE_MOVING else 0)
 
         out.byte(versionFor(flags))
         out.byte(flags)
@@ -183,7 +192,11 @@ public object ReplayCodec {
         }
 
         val seed = input.long()
-        val rules = RulesConfig(growEveryNthMove = input.varint(), maxTurns = input.varint())
+        val rules = RulesConfig(
+            growEveryNthMove = input.varint(),
+            maxTurns = input.varint(),
+            lastSnakeMustBeMoving = flags and LAST_SNAKE_MOVING != 0,
+        )
         val budgetPerTurn = input.varint()
 
         val slotCount = input.varint()
@@ -276,7 +289,8 @@ public object ReplayCodec {
      * decoder asks what the payload had to have been written at to mean what it claims.
      */
     private fun versionFor(flags: Int): Int = when {
-        flags and MAPPED != 0 -> FORMAT_VERSION
+        flags and LAST_SNAKE_MOVING != 0 -> FORMAT_VERSION
+        flags and MAPPED != 0 -> MAPPED_VERSION
         flags and CONFIGURED != 0 -> CONFIGURED_VERSION
         else -> UNCONFIGURED_VERSION
     }

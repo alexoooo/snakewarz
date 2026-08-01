@@ -1552,7 +1552,7 @@ public class GameSession(
 
     private fun outcomeText(shown: Match, outcome: MatchOutcome): String = when (outcome.end) {
         MatchEnd.LAST_SNAKE_STANDING ->
-            "${labelsFor(shown).of(outcome.winner)} wins — last snake standing"
+            "${labelsFor(shown).of(outcome.winner)} wins — last snake moving"
 
         MatchEnd.ALL_ELIMINATED -> "nobody left standing"
         MatchEnd.TURN_LIMIT -> "a draw — the turn limit ran out"

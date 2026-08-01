@@ -18,12 +18,11 @@ import ao.snakewarz.match.stats.SlotStats
  * game does not produce one loser per winner: the winner outlasted the whole field, snakes eliminated
  * on the same move drew with each other, and survivors of a turn-limit game drew among themselves.
  *
- * For two contestants the two rules agree, but only because of an engine detail: [ao.snakewarz.core.rules.Board]
- * resolves a field of two down to `LAST_SNAKE_STANDING` the instant one of them dies, so the
- * `movesMade` comparison below never has to break a tie. That is one rules change away from not
- * holding, which is the argument for asking the format rather than assuming the answer. Verified
- * rather than reasoned: over 14,400 two-seat matches on a 12x12 the outlasting score and the outright
- * win rate came out equal to the last digit for all nine shipped bots, with no draw in any of them.
+ * For two contestants the two rules usually agree. A trapped sole survivor is the exception: the
+ * engine calls the two fatal turns a draw, while free-for-all scoring can still distinguish how many
+ * moves each snake survived. That is the argument for asking the format rather than assuming the
+ * answer. Before moving-winner draws existed, 14,400 two-seat matches on a 12x12 put the outlasting
+ * score and outright win rate on the same last digit for all nine shipped bots.
  *
  * ### Past two seats this rates a survival order, and that is not a victory order
  *

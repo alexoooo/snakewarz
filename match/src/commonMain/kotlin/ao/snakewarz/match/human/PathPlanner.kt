@@ -105,8 +105,8 @@ public class PathPlanner(private val grid: Grid) {
     }
 
     /**
-     * Replaces everything after the anchor with the straightest shortest route to [target], reporting
-     * whether one exists.
+     * Replaces everything after the anchor with a shortest route to [target], choosing the route that
+     * stays closest to the straight grid line between them.
      *
      * **Breadth-first rather than "append the square if it is adjacent."** A press names where to go
      * rather than how, and the answer has to go *round* a body and round a wall — a shape the straight
@@ -124,12 +124,10 @@ public class PathPlanner(private val grid: Grid) {
      *
      * Two honesty notes:
      *
-     * - The route is reconstructed backwards from [target], preferring at each step the predecessor
-     *   that continues the direction just taken. That buys long straight runs — an L rather than a
-     *   staircase — with no second search, but among obstacles it is a **heuristic** and can cost one
-     *   extra turn. The exact answer is lexicographic `(length, turns)` over `(square, direction)`
-     *   states: four times the state and four times the memory, for a cosmetic property of a board
-     *   somebody is looking at. The trade was made deliberately.
+     * - The route is reconstructed backwards from [target], preferring at each depth the predecessor
+     *   nearest the ideal line. On an open board that produces an interleaved staircase; around
+     *   obstacles it remains a heuristic among equally short routes, with the search depth still the
+     *   authority over length.
      * - Because a snake **cannot wait in place**, this cannot express "loop around and come back once
      *   the tail clears" — a square whose neighbours are all dequeued before it opens is never
      *   reached. Soundness is unaffected, since a route that *is* found is walkable, and the failure
@@ -313,20 +311,32 @@ public class PathPlanner(private val grid: Grid) {
      * walking backwards over the depths the search left behind.
      */
     private fun reconstruct(target: Int, steps: Int) {
+        val anchor = path[0]
+        val anchorRow = grid.rowOf(Cell(anchor))
+        val anchorCol = grid.colOf(Cell(anchor))
+        val targetRow = grid.rowOf(Cell(target))
+        val targetCol = grid.colOf(Cell(target))
         path[steps] = target
         var walk = target
-        var taken = -1
 
         for (index in steps downTo 1) {
             var chosen = -1
-            if (taken >= 0 && precedes(walk - grid.offsetOf(DIRECTIONS[taken]), index - 1)) {
-                // Continuing the direction just taken is what turns a shortest route into an L.
-                chosen = taken
-            } else {
-                for (i in DIRECTIONS.indices) {
-                    if (precedes(walk - grid.offsetOf(DIRECTIONS[i]), index - 1)) {
+            var bestError = Long.MAX_VALUE
+            for (i in DIRECTIONS.indices) {
+                val predecessor = walk - grid.offsetOf(DIRECTIONS[i])
+                if (precedes(predecessor, index - 1)) {
+                    val error = lineError(
+                        predecessor,
+                        anchorRow,
+                        anchorCol,
+                        targetRow,
+                        targetCol,
+                        steps,
+                        index - 1,
+                    )
+                    if (error < bestError) {
                         chosen = i
-                        break
+                        bestError = error
                     }
                 }
             }
@@ -337,10 +347,26 @@ public class PathPlanner(private val grid: Grid) {
             moves[index - 1] = DIRECTIONS[chosen].ordinal
             walk -= grid.offsetOf(DIRECTIONS[chosen])
             path[index - 1] = walk
-            taken = chosen
         }
 
         cellCount = steps + 1
+    }
+
+    /** Squared distance from [cell] to the ideal straight-line position at [atDepth], without floats. */
+    private fun lineError(
+        cell: Int,
+        anchorRow: Int,
+        anchorCol: Int,
+        targetRow: Int,
+        targetCol: Int,
+        steps: Int,
+        atDepth: Int,
+    ): Long {
+        val rowError =
+            (grid.rowOf(Cell(cell)) - anchorRow).toLong() * steps - (targetRow - anchorRow).toLong() * atDepth
+        val colError =
+            (grid.colOf(Cell(cell)) - anchorCol).toLong() * steps - (targetCol - anchorCol).toLong() * atDepth
+        return rowError * rowError + colError * colError
     }
 
     private fun precedes(cell: Int, atDepth: Int): Boolean =

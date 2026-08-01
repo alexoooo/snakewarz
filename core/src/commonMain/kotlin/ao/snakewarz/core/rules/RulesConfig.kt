@@ -11,10 +11,14 @@ package ao.snakewarz.core.rules
  * @param maxTurns a hard ceiling on the number of individual moves in a match, after which it is a
  *   draw. New in the rewrite: the legacy engine had no cap. A browser cannot be allowed to hang, and
  *   bounded matches are what make bounded MCTS rollouts possible.
+ * @param lastSnakeMustBeMoving whether a sole survivor must still have a legal move to win. When it
+ *   is trapped, it takes its forced fatal turn and the match ends with nobody moving. Old replay
+ *   formats decode this as `false`, preserving the immediate-survivor rule they were recorded under.
  */
 public data class RulesConfig(
     public val growEveryNthMove: Int = 2,
     public val maxTurns: Int = 4096,
+    public val lastSnakeMustBeMoving: Boolean = true,
 ) {
     init {
         require(growEveryNthMove >= 1) { "growEveryNthMove must be at least 1, was $growEveryNthMove" }

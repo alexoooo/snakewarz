@@ -21,7 +21,7 @@ import ao.snakewarz.match.TerminalEvent
 public class MatchRecord(
     public val setup: MatchSetup,
     public val moves: DirectionStream,
-    /** At most `slots - 1` entries, ascending by turn. */
+    /** At most one entry per slot, ascending by turn. */
     public val terminals: List<TerminalEvent>,
     /** `null` if the recording stops before the match ended. */
     public val outcome: MatchOutcome?,
@@ -149,12 +149,10 @@ public class MatchRecord(
         /**
          * How many snakes can possibly leave without moving.
          *
-         * In a contested match the last survivor wins the moment everyone else is out, so the
-         * answer is one fewer than the field. A **solo** match has no survivor to crown and ends
-         * with `ALL_ELIMINATED`, so its one snake really can be the one that leaves — which is the
-         * case a plain `slots - 1` gets wrong, and the reason a lone player resigning used to be
-         * unrecordable.
+         * A trapped sole survivor still takes a turn. An interactive player makes a fatal move, but
+         * a bot may resign or forfeit instead, so every slot can legitimately appear in this table.
+         * The bound remains the field size because a dead slot is never asked twice.
          */
-        fun maxTerminals(slotCount: Int): Int = if (slotCount <= 1) slotCount else slotCount - 1
+        fun maxTerminals(slotCount: Int): Int = slotCount
     }
 }

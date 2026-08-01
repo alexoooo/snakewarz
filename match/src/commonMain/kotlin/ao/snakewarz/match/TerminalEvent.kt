@@ -6,7 +6,7 @@ import ao.snakewarz.core.snake.SnakeId
 /**
  * A turn on which a snake left the match without moving — the replay's side table.
  *
- * Only `RESIGNED` and `FORFEIT` appear here, and there are at most `slots - 1` of them in a whole
+ * Only `RESIGNED` and `FORFEIT` appear here, and there are at most `slots` of them in a whole
  * match. `TRAPPED` and `SUICIDE` are not events at all: they are recorded directions that turn out
  * to be fatal when replayed, so they cost nothing beyond the two bits every turn costs anyway.
  *

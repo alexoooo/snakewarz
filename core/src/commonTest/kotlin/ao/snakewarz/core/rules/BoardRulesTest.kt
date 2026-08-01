@@ -147,16 +147,33 @@ class BoardRulesTest {
     }
 
     @Test
-    fun `the last snake standing wins immediately, even trapped`() {
-        // A deliberate change from the legacy engine, which asked the survivor for one more move and
-        // called the match a draw if that move was also fatal.
+    fun `a trapped sole survivor takes its fatal turn before the match ends`() {
         val board = boardOf(1, 2, 0 to 0, 0 to 1)
 
         board.apply(SnakeId(0), Direction.EAST)
 
-        assertEquals(DirectionSet.EMPTY, board.legalMoves(SnakeId(1)), "the winner has nowhere to go either")
-        assertEquals(MatchOutcome(SnakeId(1), MatchEnd.LAST_SNAKE_STANDING), board.outcome)
+        assertEquals(DirectionSet.EMPTY, board.legalMoves(SnakeId(1)), "the survivor has nowhere to go either")
+        assertNull(board.outcome, "nobody has won while the last snake cannot move")
         assertEquals(1, board.aliveCount)
+
+        assertEquals(MoveOutcome.TRAPPED, board.apply(SnakeId(1), Direction.WEST))
+        assertEquals(MatchOutcome(SnakeId.NONE, MatchEnd.ALL_ELIMINATED), board.outcome)
+        assertEquals(0, board.aliveCount)
+    }
+
+    @Test
+    fun `old rules still crown a trapped survivor for replay compatibility`() {
+        val board = boardOf(
+            1,
+            2,
+            0 to 0,
+            0 to 1,
+            rules = RulesConfig(lastSnakeMustBeMoving = false),
+        )
+
+        board.apply(SnakeId(0), Direction.EAST)
+
+        assertEquals(MatchOutcome(SnakeId(1), MatchEnd.LAST_SNAKE_STANDING), board.outcome)
     }
 
     @Test

@@ -65,10 +65,10 @@ the head to the square the pointer named; a drag calls `trace`, which draws the 
 end towards the pointer and cuts it where it is blocked. Each part of that is load-bearing:
 
 - **`route` is breadth-first rather than "append the square if it is adjacent".** A press names where
-  to go rather than how, so the answer has to go *round* a body and round a wall — a shape the
-  straight line between two squares cannot be assumed to have. `trace` is the opposite on purpose: a
-  4-connected staircase with no search in it, because a drag names the way and must not be allowed to
-  detour or to jump.
+  to go rather than how, so the answer has to go *round* a body and round a wall. Among equally short
+  routes, reconstruction stays nearest the straight grid line, producing a staircase on an open
+  board. `trace` uses the same 4-connected staircase without search, because a drag names the way and
+  must not be allowed to detour or jump.
 - **A square is passable at plan index `i` if it is free now, or its owner is alive and will have
   retracted past it within `i - 1` of that snake's own moves.** `Clearance` is that arithmetic, and
   **two unrelated reasons produce the same `i - 1`** — collapse them into one and whichever is fixed
@@ -157,10 +157,11 @@ negative passes every ceiling downstream.
 ### The version, the flags, and why an old link is byte-identical
 
 The header opens with a version byte and a flags byte. Bit 0 is a per-slot configuration block, bit 1
-a wall bitmap; `versionFor(flags)` is the **only** place that maps one to the other, and it says the
-version written is *the oldest that can express the record*. So a match nobody configured on a board
-with no map is still version 1 with no flags, byte for byte as it was before either feature existed —
-no link anybody has shared has changed, and a default match's URL is no longer than it used to be.
+a wall bitmap, and bit 2 says a trapped sole survivor takes its fatal turn. `versionFor(flags)` is the
+**only** place that maps those features to versions, and it says the version written is *the oldest
+that can express the record*. Versions 1–3 carry the immediate-survivor rule they were recorded
+under, so an old link still decodes and re-encodes byte for byte; a new match uses version 4 even when
+it has no map or per-slot configuration.
 
 Writing the newest version unconditionally would have cost every plain replay two bytes and a needless
 incompatibility. Writing a flag without raising the version would leave an older page reporting *"the

@@ -31,8 +31,9 @@ class GoldenMoveStreamTest {
     @Test
     fun `wall hugger against wall hugger is fixed with no randomness at all`() {
         // Consumes no RNG, so this one is pinned by the rules alone. If it ever moves, the engine
-        // moved.
-        assertEquals(-6119216452350361752L, hashOf("wallhug", "wallhug", seed = 0))
+        // moved. Re-pinned from -6119216452350361752 when a trapped survivor began owing its fatal
+        // turn; the new stream is exactly the old stream plus that final north move.
+        assertEquals(-6807198478660944021L, hashOf("wallhug", "wallhug", seed = 0))
     }
 
     @Test
@@ -88,8 +89,10 @@ class GoldenMoveStreamTest {
         // A smaller board than the rest, on purpose: this one simulates, and the suite it belongs to
         // also runs in a real browser, where the engine is slower. Twenty rollouts a turn is still
         // hundreds of thousands of simulated moves over a match, which is plenty to pin.
+        // Re-pinned from 6424283122996719906 when a trapped survivor began owing its fatal turn;
+        // that changes the endings scored inside the search as well as the live match's final move.
         assertEquals(
-            6424283122996719906L,
+            2935789030642645579L,
             hashOf("flat-monte-carlo", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = SEARCH_BUDGET),
         )
     }
@@ -107,8 +110,10 @@ class GoldenMoveStreamTest {
         // three sequential tests at `elo0=0, elo1=10` -- 3.5 at +21 ±14 over 1,100 boards, 2.5 at
         // +20 ±14 over 1,240, and the adopted 3.0 at +24 ±15 over 960 boards from a seed base
         // neither sweep had touched. `UctBot.EXPLORATION` carries both tables.
+        // Re-pinned from 7247267489204944759 for the last-snake-moving ending rule, which changes
+        // the rollout results the tree learns from as well as the live match's final move.
         assertEquals(
-            7247267489204944759L,
+            3233546072208393327L,
             hashOf("uct", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = SEARCH_BUDGET),
         )
     }
@@ -201,8 +206,10 @@ class GoldenMoveStreamTest {
         // used to justify that by saying `territory` is `puct`'s default and `chamber` is
         // `alphabeta`'s. Half of that is now false — both defaults are `territory` — and it does not
         // matter, because neither leaf is pinned by a default any more.
+        // Re-pinned from -3589698981299349624 when a trapped survivor began owing its fatal turn;
+        // the new stream is exactly the old stream plus that final north move.
         assertEquals(
-            -3589698981299349624L,
+            7757850650334854603L,
             hashOf(
                 "alphabeta",
                 "random",

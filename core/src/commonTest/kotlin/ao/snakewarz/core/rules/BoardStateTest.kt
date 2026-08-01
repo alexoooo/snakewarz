@@ -175,11 +175,11 @@ class BoardStateTest {
 
     @Test
     fun `only the snake to act may move, and only while the match is running`() {
-        val board = boardOf(1, 2, 0 to 0, 0 to 1)
+        val board = boardOf(2, 2, 0 to 0, 1 to 1)
 
         assertFailsWith<IllegalArgumentException> { board.apply(SnakeId(1), Direction.WEST) }
 
-        board.apply(SnakeId(0), Direction.EAST)
+        board.apply(SnakeId(0), Direction.NORTH)
         assertTrue(board.outcome != null)
 
         assertFailsWith<IllegalStateException> { board.apply(SnakeId(1), Direction.WEST) }

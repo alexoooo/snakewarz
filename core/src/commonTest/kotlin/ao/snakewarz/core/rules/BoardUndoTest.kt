@@ -126,10 +126,10 @@ class BoardUndoTest {
 
     @Test
     fun `undoing the deciding move puts the match back in play`() {
-        val board = boardOf(1, 2, 0 to 0, 0 to 1)
+        val board = boardOf(2, 2, 0 to 0, 1 to 1)
         val opening = board.signature()
 
-        board.apply(SnakeId(0), Direction.EAST)
+        board.apply(SnakeId(0), Direction.NORTH)
         assertNotNull(board.outcome)
 
         board.undo()

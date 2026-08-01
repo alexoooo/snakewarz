@@ -105,8 +105,10 @@ class BotLadderTest {
         // So the tree is worth having at both, and the constant decides how much of it survives being
         // cramped. The recorded "10 of 20" it replaces was stale before this change, which is the
         // argument for a threshold rather than an equality: a figure nothing asserts drifts unnoticed.
+        // The last-snake-moving ending rule re-measured the cramped pairing at 12 of 20; twelve still
+        // asserts the majority this test is about without counting a mutually trapped ending as a win.
         val cramped = winsFor("uct", "flat-monte-carlo", budget = CRAMPED_BUDGET)
-        assertTrue(cramped >= 13, "at a tenth of the allowance the tree paid in only $cramped of $ROUNDS")
+        assertTrue(cramped >= 12, "at a tenth of the allowance the tree paid in only $cramped of $ROUNDS")
 
         assertBeats("uct", "flat-monte-carlo", atLeast = 15)
     }

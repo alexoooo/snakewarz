@@ -25,6 +25,7 @@ internal class RunHeader(
     val cols: Int,
     val growEveryNthMove: Int,
     val maxTurns: Int,
+    val lastSnakeMustBeMoving: Boolean,
     val budgetPerTurn: Int,
     val rounds: Int,
     val seed: Long,
@@ -44,7 +45,9 @@ internal class RunHeader(
      * them — the geometry, the rules and the allowance are identical.
      */
     val comparabilityKey: String
-        get() = "$build|$format|${rows}x$cols|$map|$growEveryNthMove|$maxTurns|$budgetPerTurn|$openings"
+        get() =
+            "$build|$format|${rows}x$cols|$map|$growEveryNthMove|$maxTurns|" +
+                "$lastSnakeMustBeMoving|$budgetPerTurn|$openings"
 
     override fun toString(): String =
         "RunHeader($id, $build, ${rows}x$cols, $map, ${contestants.size} entrants)"
@@ -65,6 +68,7 @@ internal class RunHeader(
             cols = config.cols,
             growEveryNthMove = config.rules.growEveryNthMove,
             maxTurns = config.rules.maxTurns,
+            lastSnakeMustBeMoving = config.rules.lastSnakeMustBeMoving,
             budgetPerTurn = config.budgetPerTurn,
             rounds = config.rounds,
             seed = config.seed,

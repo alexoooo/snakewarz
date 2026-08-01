@@ -156,10 +156,10 @@ class BoardScratchTest {
 
     @Test
     fun `playing on after the playout is over is a mistake, not a silent no-op`() {
-        val board = boardOf(1, 2, 0 to 0, 0 to 1)
+        val board = boardOf(2, 2, 0 to 0, 1 to 1)
         val playout = BoardScratch(board, Budget(100)).playout()
 
-        assertEquals(MoveOutcome.TRAPPED, playout.advance(Direction.EAST))
+        assertEquals(MoveOutcome.SUICIDE, playout.advance(Direction.NORTH))
         assertNotNull(playout.outcome)
         assertFailsWith<IllegalStateException> { playout.advance(Direction.WEST) }
     }
