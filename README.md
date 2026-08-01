@@ -98,7 +98,7 @@ It runs on the animation frame in slices of a few milliseconds, so the page stay
 throughout and the board shows whichever match the batch is currently on. No server, no worker, and
 nothing to install.
 
-[CLAUDE.md](CLAUDE.md) is the map of the design — the module graph, the forbidden dependency edges
+[AGENTS.md](AGENTS.md) is the map of the design — the module graph, the forbidden dependency edges
 and the handful of rules that are easy to get subtly wrong — and it routes to a file per audience
 under [docs/](docs). The measurements behind the tuning constants live beside the constants
 themselves; [docs/Bots.md](docs/Bots.md) says which is where.
@@ -122,6 +122,8 @@ the Gradle wrapper.
 # local dev server with hot reload
 ./gradlew :app:wasmJsBrowserDevelopmentRun
 ```
+
+In native Windows PowerShell, use `.\gradlew.bat` in place of `./gradlew`.
 
 Most modules test in seconds. `:bots` takes a couple of minutes, because the tests that claim one bot
 is stronger than another play several hundred complete matches to say so.
@@ -199,6 +201,6 @@ a URL.
 
 ## Contributing
 
-Read [CLAUDE.md](CLAUDE.md) first — it documents the module graph, the forbidden dependency edges,
-and the four non-obvious engine facts that a rewrite tends to get wrong, and it routes to the rest of
+Read [AGENTS.md](AGENTS.md) first — it documents the module graph, the forbidden dependency edges,
+and the five non-obvious game invariants that a rewrite tends to get wrong, and it routes to the rest of
 [`docs/`](docs): the rules a change is reviewed against, and one file per module.

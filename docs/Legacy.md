@@ -2,7 +2,7 @@
 
 **For:** comparing the live code against the pre-rewrite Java, or working out why the rewrite
 disagrees with it. Nothing in here is outstanding work.
-**Assumes:** [`../CLAUDE.md`](../CLAUDE.md) — the module graph, the forbidden dependency edges and
+**Assumes:** [`../AGENTS.md`](../AGENTS.md) — the module graph, the forbidden dependency edges and
 the five non-obvious facts live there and are **not repeated here**. Fact 4, that legality is
 evaluated before the tail retracts, is the one legacy rule the rewrite *does* keep.
 

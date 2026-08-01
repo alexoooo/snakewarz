@@ -1,11 +1,14 @@
 # Workflow
 
 **For:** running a build, a benchmark or `:lab`, and for when a build task behaves strangely.
-**Assumes:** [`../CLAUDE.md`](../CLAUDE.md) — it carries the short command list and the one hazard
+**Assumes:** [`../AGENTS.md`](../AGENTS.md) — it carries the short command list and the one hazard
 you have to know before you type a command you already think you know: never background
 `wasmJsBrowserDevelopmentRun`. The full reasoning for that is below.
 
 ## Commands
+
+The examples use the POSIX/Git Bash wrapper spelling. In native Windows PowerShell, replace
+`./gradlew` with `.\gradlew.bat`.
 
 ```bash
 ./gradlew build                              # both targets, JVM tests, checkModulePurity, ktlintCheck

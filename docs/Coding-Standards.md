@@ -12,7 +12,7 @@ Every rule has an id, so a review or a commit can cite one ("violates SW-01").
   to any Kotlin codebase of this shape. Ids are permanent and never reused, so a citation stays valid
   for as long as the rule does; the numbering has gaps where one was retired.
 
-The architecture these rules serve is in [`../CLAUDE.md`](../CLAUDE.md), which holds the module graph
+The architecture these rules serve is in [`../AGENTS.md`](../AGENTS.md), which holds the module graph
 and the forbidden edges, gives the reasoning behind both, and routes to the per-module detail in this
 directory. Where a rule is enforced by a test or a Gradle task rather than by review, that is named
 in the rule.
@@ -147,7 +147,7 @@ target and is how a suspected regression gets settled.
 
 ## SW-04 — Module purity is not negotiable
 
-**The forbidden dependency edges in [`../CLAUDE.md`](../CLAUDE.md#forbidden-dependency-edges) are the
+**The forbidden dependency edges in [`../AGENTS.md`](../AGENTS.md#forbidden-dependency-edges) are the
 load-bearing constraint of the architecture. Do not add one, even temporarily, and do not add one to
 make a test compile.**
 
@@ -501,7 +501,7 @@ The module and the package answer different questions, and neither substitutes f
 
 - A **module** is an *enforcement* boundary. It is what turns a forbidden edge into a build failure,
   and it is what `internal` is scoped to. Add one when a responsibility needs a fence — the module
-  table in [`../CLAUDE.md`](../CLAUDE.md#module-graph) states each module's one job, and code that
+  table in [`../AGENTS.md`](../AGENTS.md#technology-and-module-graph) states each module's one job, and code that
   fits none of those sentences is the signal.
 - A **package** is a *navigation* boundary. It is free to add, enforced by nothing, and exists so a
   reader opening a module sees a few named groups instead of one wall of files.
@@ -762,7 +762,7 @@ run-configuration XML) — neither as a fix nor as a suggestion.** These files a
 gitignored, and freely regenerated or discarded by the IDE.
 
 The canonical home for launch and run setup is the build itself — a Gradle task, or `:lab`'s
-command-line arguments — plus a documented command in [`../CLAUDE.md`](../CLAUDE.md#commands). If an
+command-line arguments — plus a documented command in [`../AGENTS.md`](../AGENTS.md#commands). If an
 IDE run configuration is convenient, the *user* creates it in the IDE.
 
 **Why:** IDE state files are not source. A "fix" written into `.idea/` is invisible to version

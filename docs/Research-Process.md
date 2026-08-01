@@ -235,7 +235,7 @@ without it.
   µs/turn column.
 - Do not edit the agenda's Status table. Report; the coordinator writes.
 - Never background `wasmJsBrowserDevelopmentRun`. Port 8099, killed when finished, is the
-  agent's static server — see CLAUDE.md.
+  agent's static server — see [`../AGENTS.md`](../AGENTS.md).
 ```
 
 ---

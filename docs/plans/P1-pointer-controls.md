@@ -66,7 +66,7 @@ will "fix" one of them:
 
 - **For your own body** it is an ordering rule: `Board.apply` tests `occupancy.isFree(target)` at line
   198 *before* `body.popTail()` at line 200, so legality is read before the tail retracts. That is
-  non-obvious fact #4 in `CLAUDE.md`.
+  non-obvious fact #4 in `AGENTS.md`.
 - **For everyone else** it is a move count, not an ordering — an opponent's retraction happens inside
   its own move and is already visible once that move is done. `Board.advanceToAct` cycles from the
   current position skipping the dead, so between two consecutive player moves every living snake moves

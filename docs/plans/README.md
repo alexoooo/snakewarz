@@ -2,7 +2,7 @@
 
 > **Shipped. All six phases are done and this is now a record rather than a plan.** Read it to find
 > out *why* something is shaped the way it is — the decision table below is where the answers are —
-> and read the code, [`../../CLAUDE.md`](../../CLAUDE.md) and `docs/` for what the program does today.
+> and read the code, [`../../AGENTS.md`](../../AGENTS.md) and `docs/` for what the program does today.
 > Where a phase document and the tree disagree, **the tree is right**: a plan records what was
 > intended, and several details were settled differently once the code was in front of somebody.
 >
@@ -12,7 +12,7 @@
 
 **For:** anyone asking why a shipped thing in the pointer, the gauntlet, the map catalogue or the
 paint is shaped the way it is.
-**Assumes:** [`../../CLAUDE.md`](../../CLAUDE.md) — the module graph, the forbidden dependency edges
+**Assumes:** [`../../AGENTS.md`](../../AGENTS.md) — the module graph, the forbidden dependency edges
 and the five non-obvious facts. They are **not** repeated here.
 
 Release 3 was gameplay feel and how the thing looks. **Nothing in it changed the engine, the bot
@@ -99,7 +99,7 @@ beside what it governs:
   the redraw invalidated, kept and labelled rather than deleted.
 
 Three links pointed into this directory while it described Release 2 and were repointed when it
-closed: the *"ask why a shipped thing is shaped the way it is"* row of `CLAUDE.md`'s reading table,
+closed: the *"ask why a shipped thing is shaped the way it is"* row of `AGENTS.md`'s reading table,
 the *Current state* sentence naming this directory a closed plan, and the delivery note near the top
 of [`../research/2026-07-30_Research-Agenda.md`](../research/2026-07-30_Research-Agenda.md).
 

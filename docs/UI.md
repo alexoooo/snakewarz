@@ -2,7 +2,7 @@
 
 **For:** changing anything in `ui/`, `app/.../index.html`, `app/.../styles.css`, the boot path, or
 the GitHub Pages deployment.
-**Assumes:** [`../CLAUDE.md`](../CLAUDE.md) — the module graph, the forbidden dependency edges and
+**Assumes:** [`../AGENTS.md`](../AGENTS.md) — the module graph, the forbidden dependency edges and
 the five non-obvious facts live there and are **not repeated here**.
 **Enforced elsewhere:** `checkModulePurity` fails the build on `:ui → :bots`, so nothing here can
 tell a wall hugger from a human. It does not check anything below that.

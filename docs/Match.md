@@ -1,7 +1,7 @@
 # Match
 
 **For:** touching `match/` — human input, the turn driver, stats, replays, tournaments.
-**Assumes:** [`../CLAUDE.md`](../CLAUDE.md) — the module graph, the forbidden dependency edges and
+**Assumes:** [`../AGENTS.md`](../AGENTS.md) — the module graph, the forbidden dependency edges and
 the five non-obvious facts live there and are **not repeated here**.
 **Enforced elsewhere:** `checkModulePurity` fails the build on `:match → :bots`; the driver resolves
 bots through the `BotRegistry` *interface* and `:app` injects the implementation.

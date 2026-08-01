@@ -1,7 +1,7 @@
 # Bots
 
 **For:** adding or changing a bot, or touching `bots/` and `bot-api/`.
-**Assumes:** [`../CLAUDE.md`](../CLAUDE.md) — the module graph, the forbidden dependency edges and
+**Assumes:** [`../AGENTS.md`](../AGENTS.md) — the module graph, the forbidden dependency edges and
 the five non-obvious facts live there and are **not repeated here**.
 **Reviewed against:** [`Coding-Standards.md`](Coding-Standards.md), especially SW-01 determinism,
 SW-02 portable arithmetic, SW-03 the hot path and SW-05 frozen identifiers.

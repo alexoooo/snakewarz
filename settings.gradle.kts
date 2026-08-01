@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-// See CLAUDE.md for the module graph, for why there are seven modules rather than seven packages,
+// See AGENTS.md for the module graph, for why there are seven modules rather than seven packages,
 // and -- most importantly -- for the forbidden dependency edges between them.
 include(":core")
 include(":bot-api")

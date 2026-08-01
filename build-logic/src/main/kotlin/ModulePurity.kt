@@ -64,7 +64,7 @@ fun Project.registerModulePurityCheck(forbiddenProjects: Set<String>, forbiddenM
                         appendLine("Module $modulePath may not depend on:")
                         violations.sorted().forEach { appendLine("  - $it") }
                         appendLine()
-                        appendLine("See \"Forbidden dependency edges\" in CLAUDE.md. Do not add these, even")
+                        appendLine("See \"Forbidden dependency edges\" in AGENTS.md. Do not add these, even")
                         appendLine("temporarily, and not in a test source set either — a test dependency is")
                         appendLine("still an edge in the graph. When a module seems to need something below")
                         appendLine("it, the dependency is pointing the wrong way: invert it behind an")

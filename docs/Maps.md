@@ -1,7 +1,7 @@
 # Maps
 
 **For:** adding a map shape, or touching `match/map/`.
-**Assumes:** [`../CLAUDE.md`](../CLAUDE.md) — the module graph, the forbidden dependency edges and
+**Assumes:** [`../AGENTS.md`](../AGENTS.md) — the module graph, the forbidden dependency edges and
 the five non-obvious facts live there and are **not repeated here**. Fact 5, that an interior wall is
 the border ring's byte and that `BoardView.openCount` rather than `Grid.playableCount` is the
 denominator, is the one this document is downstream of.

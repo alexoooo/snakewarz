@@ -3,7 +3,7 @@
 **Modules:** `:ui`, `:app`
 **Depends on:** 3.1 needs [P1](P1-pointer-controls.md) — it is the page that documents those controls.
 The other six items are independent of everything and of each other.
-**Read first:** [`../UI.md`](../UI.md), and `ui/CLAUDE.md` on `model/` being under CC-06 pressure.
+**Read first:** [`../UI.md`](../UI.md), and `ui/AGENTS.md` on `model/` being under CC-06 pressure.
 
 Names below are written as they are **after** [P2](P2-gauntlet-rename.md). If this phase lands first,
 read `Gauntlet` as `Ladder` throughout.
