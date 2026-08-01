@@ -13,9 +13,8 @@ import kotlin.math.abs
  * other on any ρ-invariant map.
  *
  * The recipe is usually described as "draw the top half and reflect", and [halfRows] is that half.
- * Mirroring per *placement* is the same set and one constraint weaker: a spiral arm is a single
- * connected curve that crosses the middle, so it cannot be expressed inside one half at all, and
- * restricting the caller would buy nothing the mirror does not already guarantee.
+ * Mirroring per *placement* produces the same set while letting each drawing operation carry the
+ * guarantee itself; restricting the caller would buy nothing the mirror does not already enforce.
  */
 internal class HalfBoard(val rows: Int, val cols: Int) {
     private val wall = BooleanArray(rows * cols)

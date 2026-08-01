@@ -1,8 +1,10 @@
 package ao.snakewarz.match.gauntlet
 
+import ao.snakewarz.botapi.knob.BotParams
 import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.match.human.PlayableRegistry
 import ao.snakewarz.match.map.MapShape
+import ao.snakewarz.match.map.generateMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -11,7 +13,7 @@ import kotlin.test.assertTrue
  * The claims the level table makes about *itself*, which are the ones a unit test can settle.
  *
  * Whether the levels get harder is not one of them and cannot be: it takes several hundred complete
- * matches on eleven different boards, and it is `:lab`'s `gauntlet` subcommand. What is checked here
+ * matches on seven different boards, and it is `:lab`'s `gauntlet` subcommand. What is checked here
  * is everything that would make that measurement meaningless — a repeated configuration, a level that
  * cannot be seated, a map a shape refuses to draw.
  *
@@ -21,7 +23,7 @@ import kotlin.test.assertTrue
  */
 class GauntletTest {
     @Test
-    fun `eleven levels, numbered from one, in order`() {
+    fun `seven levels, numbered from one, in order`() {
         assertEquals(EXPECTED_LEVELS, Gauntlet.size)
         assertEquals((1..EXPECTED_LEVELS).toList(), Gauntlet.levels.map { it.index })
         assertEquals(Gauntlet.levels.first(), Gauntlet.levelAt(1))
@@ -29,11 +31,9 @@ class GauntletTest {
     }
 
     @Test
-    fun `eleven different opponents, which is the whole claim the gauntlet makes`() {
-        // Eleven play styles, and no level is another one thinking for longer: the move that beats
-        // level 4 must not beat level 10. So the claim is on the *configuration* rather than on the
-        // slug -- `alphabeta` appears twice under two appraisals, which is the boss and is the point
-        // of it, and it would be a repeated opponent only if the settings matched too.
+    fun `seven different opponent configurations`() {
+        // Seven play styles, and no level is another one merely thinking for longer. The claim is on
+        // configuration rather than slug so pinned settings remain part of an opponent's identity.
         val configurations = Gauntlet.levels.map { it.opponent.slug to it.params }
         assertEquals(
             configurations.size,
@@ -46,6 +46,23 @@ class GauntletTest {
     }
 
     @Test
+    fun `the campaign uses every surviving wall shape once before the empty boss`() {
+        assertEquals(
+            listOf(
+                MapShape.PILLARS,
+                MapShape.ROOMS,
+                MapShape.ARENA,
+                MapShape.SCATTER,
+                MapShape.ISLANDS,
+                MapShape.PINWHEEL,
+                MapShape.EMPTY,
+            ),
+            Gauntlet.levels.map { it.shape },
+        )
+        assertTrue(Gauntlet.levels.all { it.mapSeed == 0L })
+    }
+
+    @Test
     fun `every level's board is big enough for the map it draws`() {
         for (level in Gauntlet.levels) {
             assertTrue(
@@ -55,7 +72,7 @@ class GauntletTest {
 
             // And the shape's own guarantees hold at that size: symmetric, one region, ends paired.
             // `generateMap` checks all four, so drawing it is the assertion.
-            val map = level.map(SEED)
+            val map = level.map()
             assertEquals(level.rows, map.rows)
             assertEquals(level.cols, map.cols)
             assertTrue(
@@ -74,7 +91,7 @@ class GauntletTest {
             assertEquals(level.rows, setup.rows)
             assertEquals(level.cols, setup.cols)
             assertEquals(level.budgetPerTurn, setup.budgetPerTurn)
-            assertEquals(level.map(SEED).walls().toList(), setup.walls().toList())
+            assertEquals(level.map().walls().toList(), setup.walls().toList())
             assertEquals(level.params, setup.paramsFor(OPPONENT_SLOT))
             assertTrue(setup.paramsFor(HUMAN_SLOT).isEmpty, "level ${level.index} configures the player")
         }
@@ -89,6 +106,30 @@ class GauntletTest {
 
         assertEquals(BotId("random"), setup.slots[HUMAN_SLOT])
         assertEquals(2, setup.slotCount)
+    }
+
+    @Test
+    fun `a retry changes the match seed without redrawing the level`() {
+        val level = GauntletLevel(
+            index = 1,
+            title = "Pinned",
+            blurb = "A randomized shape whose fixture is held still.",
+            opponent = BotId("random"),
+            params = BotParams.EMPTY,
+            budgetPerTurn = 0,
+            rows = 16,
+            cols = 16,
+            shape = MapShape.ISLANDS,
+            mapSeed = SEED,
+        )
+        val first = level.setup(SEED, PlayableRegistry.HUMAN_ID)
+        val retry = level.setup(SEED + 1, PlayableRegistry.HUMAN_ID)
+        val redrawn = generateMap(16, 16, MapShape.ISLANDS, seed = SEED + 1)
+
+        assertEquals(SEED, first.seed)
+        assertEquals(SEED + 1, retry.seed)
+        assertEquals(first.walls().toList(), retry.walls().toList())
+        assertTrue(first.walls().toList() != redrawn.walls().toList(), "fixture seeds drew the same islands")
     }
 
     @Test
@@ -112,7 +153,7 @@ class GauntletTest {
     }
 
     private companion object {
-        const val EXPECTED_LEVELS = 11
+        const val EXPECTED_LEVELS = 7
         const val HUMAN_SLOT = 0
         const val OPPONENT_SLOT = 1
         const val SEED = 7L

@@ -8,25 +8,26 @@ SW-02 portable arithmetic, SW-03 the hot path and SW-05 frozen identifiers.
 
 ## The shipped registry
 
-`ShippedBots` has **two sections, and only the first is a ladder**. The ladder is registered weakest
+`ShippedBots` has **four sections, and only the first is a ladder**. The ladder is registered weakest
 first: `random`, `wallhug`, `space`, `pressure`, `chase`, `flat-monte-carlo`, `uct`, `puct`,
 `alphabeta`. Each rung beats the one below it over twenty matches — `BotLadderTest` is the gate, and
-it is the only test in the suite a *correct but useless* bot would fail. Then come the bots
-contributed to the original project, ordered by slug and claiming nothing about strength:
-`burninhell`. Both sections are gated by the same contract suite.
+it is the only test in the suite a *correct but useless* bot would fail. Then come the measured
+wall-map specialist `cartographer` and fixed-depth bridge `lookahead`, both outside that empty-12
+ordering, followed by the bots contributed to the original project, ordered by slug and claiming
+nothing about strength: `burninhell`. All four sections are gated by the same contract suite.
 
-There used to be a third, **experimental**, holding `puct` and `alphabeta` — registered but asserting
-nothing, because the only readings anybody had were at *equal allowance*, where a dear leaf is handed
-several times the wall clock a cheap one gets. Three equal-clock fields settled it: `puct` clears
+The specialist section used to be the **experimental** home of `puct` and `alphabeta` — registered
+but asserting nothing, because the only readings anybody had were at *equal allowance*, where a dear
+leaf is handed several times the wall clock a cheap one gets. Three equal-clock fields settled it: `puct` clears
 `uct` by +54/+58/+62 Elo on 8×8/12×12/20×20 and `alphabeta` clears `puct` on all three, so both were
-seated and the section is empty. **Read `BotLadderTest`'s KDoc before quoting the top rung** — at 8×8
+seated. **Read `BotLadderTest`'s KDoc before quoting the top rung** — at 8×8
 `alphabeta` loses its head-to-head to `puct` while rating above it, and the ladder is a 12×12
 instrument.
 
 `:ui` opens slot 2 on the slug `uct` — the page should start on the game somebody came here to play
 — and falls back to `entries.first()` when a registry does not offer it, so registration order still
-shows through there. Append new bots; do not prepend. Of the ten, only `flat-monte-carlo`, `uct`,
-`puct` and `alphabeta` touch `Turn.scratch`; the other six consume no budget at all.
+shows through there. Append new bots; do not prepend. Of the twelve, only `flat-monte-carlo`, `uct`,
+`puct`, `alphabeta` and `lookahead` touch `Turn.scratch`; the other seven consume no budget at all.
 
 ### A bot earns its place by what it lets you measure
 
@@ -40,11 +41,49 @@ keeping one:
 | `space` | flood-fill room ranking, and the zero-allowance fallback `uct` and `puct` both delegate to |
 | `pressure` | the adjacency-penalty heuristic, and the rung between room and pursuit |
 | `chase` | the strongest reactive bot, and the only free one that takes games off a searcher — 13% against a `uct` field |
+| `cartographer` | the wall-aware no-tree specialist: guarded path, local shape, room and mover-owned ground in one zero-budget sweep |
+| `lookahead` | the tiny-search bridge: Cartographer ordering and fallback around one to three complete turns |
 | `flat-monte-carlo` | **the ablation control**: `uct`'s rollout policy and allowance with the tree removed |
 | `uct` | the flagship |
 | `burninhell` | the second bot that draws no randomness, which is what `ArenaTest` measures openings with |
 | `puct` | the frontier, and ahead of `uct` at an equal allowance *and* at equal clock |
 | `alphabeta` | the only **exact** search, over `puct`'s own default leaf — what a full-width minimax is worth here |
+
+`cartographer` is the result of the 2026-08-01 wall-aware no-tree phase, not a renamed old reactive
+bot. Six fixed rules were compared over 28,000 fresh-seed matches on five separate maps, with Chase
+and UCT@600 in every field. The adopted full-owned rule beat Chase directly on every map: 121-75 on
+`arena`, 124-76 on `cross`, 145-55 on `rooms`, 106-94 on `double-spiral` and 121-79 on the seeded
+`islands` layout. Its map-local ratings and opening-blocked 95% intervals were +27 [+10,+41],
+-21 [-38,-4], +111 [+96,+127], +90 [+73,+107] and +53 [+35,+70], respectively. Do not average those
+five numbers: each wall layout is a different game.
+
+One live-board pass ranks legal destinations by guarded opponent path, mover-owned connected ground,
+the existing local PUCT prior and tail-aware room. Exact raw ties use a position/destination hash, not
+RNG or direction declaration order. It applies no transition, requests no scratch, allocates nothing
+per move and consumes zero evaluations. In Chrome 151, paired over the six research boards, its
+median mean was 9–37 µs and its largest raw turn was 0.20 ms, inside the fixed 0.25 ms free lane.
+
+It is deliberately outside `BotLadderTest`'s empty-12 ordering. In the 1,200-match adoption field it
+beat Chase directly 106-91 but rated below it through larger losses to FMC and UCT; on the exact
+twenty-game ladder tape they split 10-10. Calling that a rung would turn a wall-map result into a false
+empty-board claim. It is registered because it supplies the measured free wall specialist the
+Gauntlet research needed, not because the sidebar can express one total ordering.
+
+`lookahead` is the result of the 2026-08-01 fixed mini-search phase. It is one permanent algorithm,
+not three frozen ids: the declared `depth` parameter selects one, two or three individual turns and
+defaults to three. The worst-case complete caps are 4, 16 and 64 evaluations respectively. A forced
+move or terminal line may finish for less, but if one required static leaf cannot be paid the entire
+tree is discarded and the already-computed Cartographer move is returned. It never adopts a partial
+root, silently downgrades its depth or carries unused savings into another turn.
+
+All three depths completed every searchable root on the six fixed research tapes with zero fallback
+at those caps and fit the 3.5 ms tiny Chrome lane; the largest accepted raw turn was 1.4 ms, depth
+three on `rooms`. In separate seven-entrant fields, depth three beat Cartographer directly 80-0,
+71-7, 49-31, 78-2, 69-11 and 78-2 on empty 8x8, `arena`, `cross`, `rooms`, `double-spiral` and
+`islands`. Against FMC@400 it scored 60%, 58%, 27%, 78%, 89% and 66%; against UCT@600 it scored
+24%, 33%, 16%, 38%, 90% and 48%. That is a measured map-general middle with a corridor specialism,
+not a claim that it belongs somewhere in the empty-12 ladder. Only depth three advances to the
+empty-8 championship.
 
 A bot that is merely *weak* is not an instrument: `random` is already the floor, more cleanly, and a
 second one only adds a picker row and a column to every matrix. That is what retired `tomsnake`, an
@@ -54,9 +93,9 @@ paying only when the bot answers no question that another bot here does not answ
 
 ### The single-player gauntlet is a different ordering, and it is measured per level
 
-`Gauntlet` in `:match` seats each of the ten slugs at least once, on **its own board, map and
-allowance** — so it is not the registry order with numbers on it, and it could not be. `BotLadderTest`
-certifies its rungs on an empty 12x12, and neither half of that survives:
+The seven-level `Gauntlet` in `:match` seats each opponent on **its own board, pinned map and fixed
+per-turn allowance** — so it is not the registry order with numbers on it, and it could not be.
+`BotLadderTest` certifies its rungs on an empty 12x12, and neither half of that survives:
 `alphabeta:eval=territory` rates above bare `puct` at 8x8 while losing its head-to-head to it, and a
 six-entrant field on `cross` moved `wallhug` about 400 Elo up the table while compressing the whole
 field to half its empty-board width.
@@ -65,26 +104,39 @@ So the order is measured on the geometry each level plays, by `:lab`'s `gauntlet
 reference against every level in turn, and the ordering is right when the reference's score falls.
 
 ```bash
-./gradlew :lab:run --args="gauntlet --rounds 200"
+./gradlew :lab:run --args="gauntlet --against uct:budget=100 --rounds 200"
+./gradlew :lab:run --args="gauntlet --against puct:budget=250 --rounds 200"
 ```
 
-> **Stale as of 2026-07-31, and shipped that way deliberately.** The table below was taken on the
-> ten-level gauntlet and on the *old* drawings of `rooms`, `diagonals` and `double-spiral`. Since then
-> those three shapes were redrawn, `arena`, `islands` and `pinwheel` were added, four levels changed
-> map and an eleventh level — `alphabeta:eval=chamber` on an empty 8x8 — was added on top. **Eight of
-> the eleven rows now name a board that did not exist when these figures were taken**; only `cross` at
-> level 2, `pillars` at level 3 and `ring` at level 5 are unchanged drawings under unchanged opponents.
->
-> A shape travels as squares and never as a name, so no shared link broke — but a measurement is
-> exactly what a redraw invalidates. `Gauntlet`'s KDoc says which placements are now guesses, the
-> re-measurement is on the research agenda, and the command above is what settles it. Read the numbers
-> below as the last honest reading of a *different* gauntlet, kept because the three bullets under them
-> are still the reason placement is measured at all.
+| # | opponent | board | map | allowance | `uct@100` | `puct@250` | Chrome worst |
+|---|---|---|---|---:|---:|---:|---:|
+| 1 | `chase` | 12x12 | `pillars@0` | — | 69% | 98% | 0.1 ms |
+| 2 | `cartographer` | 16x16 | `rooms@0` | — | 66% | 99% | 0.2 ms |
+| 3 | `lookahead:depth=1` | 12x12 | `arena@0` | 4 | 61% | 95% | 0.2 ms |
+| 4 | `flat-monte-carlo` | 12x12 | `scatter@0` | 400 | 63% | 82% | 2.8 ms |
+| 5 | `uct` | 12x12 | `islands@0` | 600 | 25% | 55% | 4.9 ms |
+| 6 | `puct:eval=territory` | 12x12 | `pinwheel@0` | 600 | 25% | 45% | 3.3 ms |
+| 7 | `alphabeta:eval=territory` | 8x8 | `empty@0` | 1,700 | 11% | 17% | 7.2 ms |
+
+The map seed is part of the level rather than the retry seed. A retry may change turn order and bot
+randomness, but it cannot redraw the walls that were measured. The curve is accepted only when both
+reference profiles stay non-increasing within the declared five-point tolerance; a forfeit voids the
+run rather than becoming evidence about difficulty.
+
+The accepted runs used seed 81001, 200 mirrored matches per level and no forfeits. UCT produced
+200/200 distinct games on every row; PUCT produced 107/161/121/200/200/100/74. Chrome rows used five
+UCT@600-bracketed passes; every row had at least four stable control pairs and fit its frozen lane.
+
+#### Historical measurement of the retired development campaign
+
+The figures below are retained only as the evidence that established the measurement method. They
+describe the retired ten-level campaign and map designs that are no longer offered, not the table
+above.
 
 Two references, 2,000 matches each, mirrored openings, seed 1. `uct@100` is the shipped default and
-is what resolves the whole gauntlet; `puct@250` is carried beside it because a single reference cannot
-be believed on an ordering it saturates at both ends. **The board and map columns are the gauntlet as
-it stood on 2026-07-30**, which is not the one `Gauntlet.levels` ships today — see the note above.
+is what resolved that campaign; `puct@250` is carried beside it because a single reference cannot be
+believed on an ordering it saturates at both ends. The board and map columns are the retired table as
+it stood on 2026-07-30.
 
 | # | opponent | board | map | allowance | `uct@100` | `puct@250` |
 |---|---|---|---|---|---|---|
@@ -246,10 +298,15 @@ measurement say carry the signal — and `LearnedNet` turns them into a probabil
 `LearnedWeights`, a fixed-point literal `:lab`'s `train` fitted to a million logged positions **taken
 at three board sizes, which is the part that turned out to matter**: the fit it replaced was taken at
 one, and lost more to that than to any feature anybody has added.
-**`PositionFeatures` is the only public class in `:bots` besides `ShippedBots`, and that is
-deliberate**: `:lab` cannot see this module's internals, so a trainer that could not import the
-extractor would have to reimplement it, and a copy that drifts by one term produces a bot that is
-merely mediocre with nothing failing anywhere. One definition, read by the trainer and by the bot.
+
+The trainer-facing extractors and model formats are deliberate public seams too. `PositionFeatures`
+is the value row shared by `train` and the learned leaf; `ActionFeatures` is the ten-column legal-move
+row shared by `policy-train` and any future learned action bot; `ActionModel` is its schema-checked Q8
+integer scorer. `:lab` cannot see this module's internals, so a trainer without those seams would have
+to reimplement them, and a copy that drifts by one term produces a bot that is merely mediocre with
+nothing failing anywhere. The 2026-08-01 action fit did **not** earn a bot: on 5,833 held-out inputs it
+reached 49.44% unique top-1 expert agreement against Cartographer's 53.15%, including a 7.98-point loss
+on `double-spiral`. The extractor and grouped instrument remain; the failed weights do not ship.
 
 `truncatedPlayout` and `SpaceOwnership` ship **wired and off**, and the reason is measured rather
 than aesthetic — see `UctBot.ROLLOUT_DEPTH`. Do not turn them on without re-running
@@ -331,8 +388,9 @@ buy is a row in front of somebody who has no way to judge the number and no reas
 default is wrong.
 
 The two lists on `BotEntry` are that split. `params` is complete and is what `:lab` validates against;
-`offered` is the handful a form reads. Of the ten shipped bots, four offer anything at all: an
-allowance, `uct`'s `exploration`, and the `eval` `puct` and `alphabeta` each declare.
+`offered` is the handful a form reads. Of the twelve shipped bots, five offer anything at all: an
+allowance, `uct`'s `exploration`, and the `eval` `puct` and `alphabeta` each declare. `lookahead`'s
+depth remains a measured hyperparameter; its allowance is the player-facing speed/strength tradeoff.
 `ShippedBotsTest` pins that list, so a knob
 cannot arrive on the sidebar without somebody having said so.
 

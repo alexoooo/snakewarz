@@ -58,4 +58,23 @@ internal enum class Openings {
      * sample size. Under [FIXED] the same probe reads 83 / 0 / 17.
      */
     MIRRORED,
+
+    /**
+     * Every opening [MIRRORED] can draw on an empty 8x8, in a fixed order.
+     *
+     * The population is forty **oriented** starts: twenty pairs under the half turn, with each end
+     * appearing once as slot zero. [Arena] plays every one from both seatings per replication. This
+     * is deliberately not every pair of distinct squares [ao.snakewarz.match.MatchSetup] accepts.
+     */
+    COMPLETE,
+
+    ;
+
+    companion object {
+        const val COMPLETE_ROWS: Int = 8
+        const val COMPLETE_COLS: Int = 8
+        const val COMPLETE_POPULATION: Int = 40
+        const val SEATINGS_PER_OPENING: Int = 2
+        const val COMPLETE_ROUNDS_PER_REPLICATION: Int = COMPLETE_POPULATION * SEATINGS_PER_OPENING
+    }
 }

@@ -52,15 +52,15 @@ class MapKeyTest {
 
     @Test
     fun `two maps of one size are two measurements, and the header says so`() {
-        val crossWalls = generateMap(SIDE, SIDE, MapShape.CROSS).walls()
-        val cross = headerOf(crossWalls)
+        val arenaWalls = generateMap(SIDE, SIDE, MapShape.ARENA).walls()
+        val arena = headerOf(arenaWalls)
         val rooms = headerOf(generateMap(SIDE, SIDE, MapShape.ROOMS).walls())
         val bare = headerOf(IntArray(0))
 
         assertEquals(EMPTY_MAP, bare.map)
-        assertNotEquals(cross.comparabilityKey, rooms.comparabilityKey)
-        assertNotEquals(cross.comparabilityKey, bare.comparabilityKey)
-        assertEquals(cross.comparabilityKey, headerOf(crossWalls).comparabilityKey)
+        assertNotEquals(arena.comparabilityKey, rooms.comparabilityKey)
+        assertNotEquals(arena.comparabilityKey, bare.comparabilityKey)
+        assertEquals(arena.comparabilityKey, headerOf(arenaWalls).comparabilityKey)
     }
 
     private fun headerOf(walls: IntArray): RunHeader = RunHeader.of(

@@ -16,11 +16,7 @@ internal fun drawShape(shape: MapShape, half: HalfBoard, density: Double, seed: 
         MapShape.ARENA -> arena(half)
         MapShape.PILLARS -> pillars(half)
         MapShape.PINWHEEL -> pinwheel(half)
-        MapShape.RING -> ring(half)
-        MapShape.CROSS -> cross(half)
-        MapShape.DIAGONALS -> diagonals(half)
         MapShape.ROOMS -> rooms(half)
-        MapShape.DOUBLE_SPIRAL -> doubleSpiral(half)
         MapShape.SCATTER -> scatter(half, density, seed)
         MapShape.ISLANDS -> islands(half, density, seed)
     }
@@ -102,99 +98,6 @@ private fun pinwheel(half: HalfBoard) {
 }
 
 /**
- * A hollow rectangle inset from the border, with one gap in each of its four sides.
- *
- * Only the top side and the upper halves of the two side walls are drawn; the mirror supplies the
- * bottom side and the lower halves. That is where three of the four gaps come from too: the gap
- * drawn in the left wall reappears in the right wall's lower half, so each side is opened once.
- *
- * The left wall's gap may not sit on the middle row of an odd board, which ρ maps to *itself* — the
- * mirror would put the right wall's gap on the same row and the two would cancel, leaving both side
- * walls solid. [ringGapRow] is that row avoided.
- */
-private fun ring(half: HalfBoard) {
-    val rowInset = maxOf(RING_MIN_INSET, half.rows / RING_INSET_DIVISOR)
-    val colInset = maxOf(RING_MIN_INSET, half.cols / RING_INSET_DIVISOR)
-    val gapCol = half.cols / 2
-    val gapRow = ringGapRow(half.rows)
-
-    for (col in colInset..half.cols - 1 - colInset) {
-        if (col != gapCol) {
-            half.set(rowInset, col)
-        }
-    }
-    for (row in rowInset + 1..half.halfRows - 1) {
-        if (row != gapRow) {
-            half.set(row, colInset)
-        }
-        half.set(row, half.cols - 1 - colInset)
-    }
-}
-
-/**
- * A full-width bar and a full-height bar, each broken across the middle.
- *
- * A bar is one square thick on an odd side and two on an even one, because ρ maps the middle column
- * of an odd board to itself and the two middle columns of an even board to each other. The opening
- * is the same either way: [CROSS_GAP] squares of clearance on each side of the middle band, so the
- * four quadrants meet in a small central room rather than along a corridor.
- */
-private fun cross(half: HalfBoard) {
-    val rowLow = (half.rows - 1) / 2
-    val colLow = (half.cols - 1) / 2
-    val colHigh = half.cols / 2
-
-    for (col in colLow..colHigh) {
-        half.setColumn(col, 0, rowLow - CROSS_GAP - 1)
-    }
-    half.setRow(rowLow, 0, colLow - CROSS_GAP - 1)
-    half.setRow(rowLow, colHigh + CROSS_GAP + 1, half.cols - 1)
-}
-
-/**
- * Anti-diagonal bars every [DIAGONAL_PERIOD] squares, each opened at its own middle.
- *
- * A bar is the set `row + col == k`, which ρ maps to the bar `row + col == rows + cols - 2 - k`, so
- * the family is invariant exactly when the anchor makes it so — again [symmetricAnchor], with the
- * anti-diagonal index standing in for a row.
- *
- * **The opening has to be centred on the middle and nowhere else.** ρ reverses a bar end for end, so
- * a run centred on the middle is the one that lands on the image bar's opening. That is also why the
- * opening is three squares on an odd-length bar and four on an even one rather than a flat three: an
- * even-length bar has no single middle square, so a run centred on it has even length too.
- *
- * A solid bar would cut the board in two, so every bar carries an opening, and the openings line up
- * into one corridor along the board's other diagonal. That is what keeps the open squares one region.
- * A bar no longer than its own opening simply does not appear, which is what happens to the short
- * bars in two of the corners.
- */
-private fun diagonals(half: HalfBoard) {
-    // The bar index runs to `rows + cols - 2`, and an even period survives the half turn only where
-    // that is even. Refused here rather than by symmetricAnchor so the message names the shape and
-    // the board, which is what every other refusal in generateMap does.
-    require((half.rows + half.cols) % 2 == 0) {
-        "diagonals needs a board whose sides are both odd or both even, was ${half.rows}x${half.cols}"
-    }
-
-    val last = half.rows + half.cols - 2
-    val first = symmetricAnchor(last + 1, DIAGONAL_PERIOD, atLeast = 0)
-
-    for (bar in first..last step DIAGONAL_PERIOD) {
-        val fromRow = maxOf(0, bar - (half.cols - 1))
-        val toRow = minOf(half.rows - 1, bar)
-        val length = toRow - fromRow + 1
-
-        for (row in fromRow..toRow) {
-            val along = row - fromRow
-            if (along >= (length - 1) / 2 - DIAGONAL_REACH && along <= length / 2 + DIAGONAL_REACH) {
-                continue
-            }
-            half.set(row, bar - row)
-        }
-    }
-}
-
-/**
  * Chambers on a grid of corridors: [bandsOf] rooms each way, one doorway per shared wall.
  *
  * The band count is forced **odd**, which is what puts a room at the centre of the board rather than
@@ -226,36 +129,6 @@ private fun rooms(half: HalfBoard) {
             if (row !in doorRows) {
                 half.set(row, col)
             }
-        }
-    }
-}
-
-/**
- * One arm of a rectangular spiral, wound from the border inward; the mirror supplies the other.
- *
- * The arm walks side after side — top, right, bottom, left, top… — [spiralInsets] squares further in
- * each time, and each side runs from where the previous one ended to where the next one starts, so
- * the arm is one unbroken curve.
- *
- * **Why the two arms never close a ring.** A ring needs all four sides of one rectangle. This arm
- * visits an inset on one side only, and its image visits that inset a half turn away — so an inset is
- * covered on two *opposite* sides at most, and an opposite pair encloses nothing. The arm also stops
- * short of the centre, which is where the two halves of the corridor meet: that is the "one long
- * corridor" the shape is for.
- */
-private fun doubleSpiral(half: HalfBoard) {
-    val sides = spiralSides(half.rows, half.cols)
-
-    for (side in 0 until sides) {
-        val inset = spiralInset(side)
-        val before = spiralInset(maxOf(0, side - 1))
-        val after = spiralInset(side + 1)
-
-        when (side % SPIRAL_SIDES) {
-            0 -> half.setRow(inset, before, half.cols - 1 - after)
-            1 -> half.setColumn(half.cols - 1 - inset, before, half.rows - 1 - after)
-            2 -> half.setRow(half.rows - 1 - inset, half.cols - 1 - before, after)
-            else -> half.setColumn(inset, half.rows - 1 - before, after)
         }
     }
 }
@@ -390,9 +263,6 @@ private fun symmetricAnchor(extent: Int, period: Int, atLeast: Int): Int {
     error("no period-$period lattice on $extent squares survives the half turn")
 }
 
-/** The row the ring's left wall is opened at: the middle, moved off the self-mirroring middle row. */
-private fun ringGapRow(rows: Int): Int = (rows - 1) / 2 - rows % 2
-
 /**
  * The side of the block [MapShape.ARENA] centres on an axis of [extent] squares.
  *
@@ -455,26 +325,6 @@ private fun bandDoors(extent: Int, walls: IntArray): IntArray {
     return doors.copyOf(next)
 }
 
-/**
- * How far in the spiral arm's [side]th side sits.
- *
- * Two sides advance by [SPIRAL_STEP], which leaves a corridor [SPIRAL_STEP] - 1 wide at every angle:
- * an arm is one square of wall, and the arm a half turn away is the next thing out. Advancing a
- * whole step per side would only allow 1 — a corridor nothing can turn round in — or 2, which spends
- * a third of a small board on wall.
- */
-private fun spiralInset(side: Int): Int = SPIRAL_MARGIN + side * SPIRAL_STEP / 2
-
-/** How many sides the arm has room for before its rectangle would collapse onto the centre. */
-private fun spiralSides(rows: Int, cols: Int): Int {
-    val limit = (minOf(rows, cols) - 1) / 2
-    var sides = 0
-    while (spiralInset(sides) < limit) {
-        sides++
-    }
-    return sides
-}
-
 // -- constants
 
 /**
@@ -504,45 +354,11 @@ private const val PINWHEEL_MARGIN: Int = 2
 private const val PINWHEEL_MIN_OFFSET: Int = 2
 private const val PINWHEEL_OFFSET_DIVISOR: Int = 5
 
-private const val RING_MIN_INSET: Int = 1
-private const val RING_INSET_DIVISOR: Int = 5
-
-/** Open squares between a cross bar's end and the middle band, on each side. */
-private const val CROSS_GAP: Int = 1
-
-/**
- * The spacing of the anti-diagonal bars.
- *
- * **Even, which costs the shape a board whose two sides differ in parity.** A period-`p` family is
- * ρ-invariant only where `2a ≡ extent - 1 (mod p)` has a solution, and for even `p` that needs
- * `rows + cols` even — so [diagonals] refuses a 12x13 board. Every board the picker, the gauntlet
- * and the test sweep offer is square or of one parity, and the alternative is a spacing of five or
- * seven: the first is what this shape was too tight at, and the second drops a bar from every board
- * in the catalogue.
- */
-private const val DIAGONAL_PERIOD: Int = 6
-
-/**
- * How far past a bar's middle its opening reaches, on each side.
- *
- * One, so the opening is the three central squares of an odd-length bar and the four central squares
- * of an even one.
- */
-private const val DIAGONAL_REACH: Int = 1
-
 private const val ROOM_SIDE: Int = 7
 private const val ROOM_MIN_BANDS: Int = 3
 
 /** Squares of doorway an odd-length band gives up: the middle and its two neighbours. */
 private const val ODD_BAND_DOOR: Int = 3
-
-private const val SPIRAL_SIDES: Int = 4
-
-/** Squares the spiral advances every two sides: one of wall and the rest of corridor. */
-private const val SPIRAL_STEP: Int = 4
-
-/** The spiral starts one square in, so the border is an open lane the whole way round. */
-private const val SPIRAL_MARGIN: Int = 1
 
 /** What [MapShape.SCATTER] scatters when nobody asked for a density. */
 private const val SCATTER_DEFAULT_DENSITY: Double = 0.12

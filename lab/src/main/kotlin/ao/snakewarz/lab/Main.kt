@@ -1,14 +1,15 @@
 package ao.snakewarz.lab
 
 import ao.snakewarz.bots.ShippedBots
+import ao.snakewarz.lab.policy.PolicyLabRegistry
 
 /**
  * The lab, from a command line.
  *
- * `:app` injects [ShippedBots] into the browser; this injects the same registry into the same
- * `Tournament`, which is what makes a batch run here comparable with one run there rather than merely
- * similar. `:match` still resolves every slot through the `BotRegistry` interface and has still never
- * seen a bot class.
+ * `:app` injects [ShippedBots] into the browser; this injects those same entries plus JVM-only
+ * research overlays. A batch of shipped bots is therefore the same match as one run in the browser,
+ * while an unreleased candidate can be measured without entering the app registry. `:match` still
+ * resolves every slot through the `BotRegistry` interface and has still never seen a bot class.
  *
  * ```
  * ./gradlew :lab:run --args="play puct:eval=territory puct:eval=survival --rounds 40 --budget 40000"
@@ -21,7 +22,8 @@ import ao.snakewarz.bots.ShippedBots
  */
 public fun main(args: Array<String>) {
     try {
-        LabCommand.of(args.toList(), ShippedBots).run(ShippedBots, ::println)
+        val registry = PolicyLabRegistry(ShippedBots)
+        LabCommand.of(args.toList(), registry).run(registry, ::println)
     } catch (failure: IllegalArgumentException) {
         report(failure)
     } catch (failure: IllegalStateException) {

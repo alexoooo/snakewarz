@@ -25,22 +25,25 @@ The examples use the POSIX/Git Bash wrapper spelling. In native Windows PowerShe
 
 # And the lab, for the questions a batch answers rather than a test.
 ./gradlew :lab:run --args="play puct:eval=territory puct:eval=survival --rounds 40 --budget 2000"
+./gradlew :lab:run --args="play uct puct --rows 8 --cols 8 --openings complete --replications 2"
 ./gradlew :lab:run --args="time puct:eval=survival --budget 2000"
 ./gradlew :lab:run --args="rate --board 12x12 --budget 1000"
 ./gradlew :lab:run --args="ab uct uct:exploration=2.5"
 ./gradlew :lab:run --args="report puct:eval=horizon --against uct --worst 5"
 ./gradlew :lab:run --args="phases puct:eval=learned --log .lab/rave-field"
+./gradlew :lab:run --args="policy --log .lab/p1-arena12 --expert alphabeta:budget=1000,eval=territory"
+./gradlew :lab:run --args="policy-train --train 'empty8|.lab/p1-empty8-complete|alphabeta:budget=1000,eval=chamber|800' --validation 'empty8|.lab/p1-empty8-complete|alphabeta:budget=1000,eval=chamber|200' --holdout 'spiral|.lab/p1-double-spiral16|puct:budget=1000,eval=territory|1000'"
 ./gradlew :lab:run --args="tune puct --knobs cpuct,territoryWeight"
 ./gradlew :lab:run --args="spsa puct:eval=chamber --knobs parityWeight,sealPenalty --budget 1000"
 ./gradlew :lab:run --args="train --rows 12 --cols 12 --hidden 16 --epochs 60"
 ./gradlew :lab:run --args="gauntlet --rounds 200"
 
 # And the same questions asked on a board with walls in it.
-./gradlew :lab:run --args="play uct puct --map cross --rows 12 --cols 12 --rounds 100"
-./gradlew :lab:run --args="rate --board 12x12 --budget 1000 --map cross"
+./gradlew :lab:run --args="play uct puct --map arena --rows 12 --cols 12 --rounds 100"
+./gradlew :lab:run --args="rate --board 12x12 --budget 1000 --map arena"
 ```
 
-## The ten subcommands, and which question each answers
+## The twelve subcommands, and which question each answers
 
 They are separate because they are separate measurements, and one of them producing a number does not
 mean another would have produced the same one.
@@ -53,14 +56,16 @@ mean another would have produced the same one.
 | `ab` | **is this change better, and how sure are we** | — | the match log |
 | `report` | why is it losing | the log | — |
 | `phases` | **when** is it losing — before the board splits, or after | the log's replays | — |
+| `policy` | which no-tree readings can see a fixed expert's choice | one P1 board's replays | — |
+| `policy-train` | can one cheap action scorer imitate fixed experts on unseen maps | role-labelled replays | a literal, on stdout |
 | `tune` | what should this knob be, up to about three of them | — | a journal |
 | `spsa` | what should these ten knobs be | — | a journal |
 | `train` | **what should this value function's weights be** | the log's replays | a literal, on stdout |
 | `gauntlet` | **do the single-player levels actually get harder** | — | the match log |
 
 `gauntlet` is the only one that takes no board: every match it plays comes off a `Gauntlet` level, so
-the eleven rows are eleven different boards and one fixed reference. Nothing else in the list can answer
-it — `rate` refuses to pool eleven geometries, correctly, and `ab` compares two entrants on one board
+the seven rows are seven different boards and one fixed reference. Nothing else in the list can answer
+it — `rate` refuses to pool seven geometries, correctly, and `ab` compares two entrants on one board
 where two adjacent levels never share one. [`Bots.md`](Bots.md) carries the last run, which Release 3's
 redraw invalidated and which is labelled there rather than deleted.
 
@@ -84,7 +89,7 @@ output.
 |---|---|---|
 | `play`, `time`, `ab`, `tune`, `spsa` | yes | yes |
 | `rate` | **as a filter** | — |
-| `report`, `phases`, `train` | no — they read the log | — |
+| `report`, `phases`, `policy`, `policy-train`, `train` | no — they read the log | — |
 | `gauntlet` | no — every board comes off the level | — |
 
 Four things about the flag are decisions rather than plumbing:
@@ -93,14 +98,14 @@ Four things about the flag are decisions rather than plumbing:
   run that says nothing. That is what lets every command in this document and every batch already in
   the log keep its meaning.
 - **One map per run, not one per match.** A batch is then a comparison *on* a board rather than a
-  comparison *across* boards. `--map scatter` is the one shape that reads the seed, so it is
-  reproducible from the command line alone and two seeds are two different scatterings.
+  comparison *across* boards. `scatter` and `islands` read the seed, so either is reproducible from
+  the command line alone and two seeds are two different drawings.
 - **`--density` needs `--map`**, because a density with no map behind it draws nothing and would read
-  back as a setting that took effect. Only `scatter` reads one; every other shape is a function of the
-  geometry.
+  back as a setting that took effect. `scatter` and `islands` read it; every other shape is a function
+  of the geometry.
 - **A shape refuses a board too small to express it**, by name, rather than drawing a degenerate
-  version — a cross with no arms is a bug in the game, not a small cross. `MapShape.minimumSide` is
-  the number, and [`Maps.md`](Maps.md) is the catalogue.
+  version — rooms with no chambers are a bug in the game, not small rooms. `MapShape.minimumSide`
+  is the number, and [`Maps.md`](Maps.md) is the catalogue.
 
 ### Fairness on a new map, before any strength number taken on it
 
@@ -139,14 +144,15 @@ this repository.
 ### A map is a different game, not a harder one
 
 **A map changes which bot is stronger, not merely by how much.** This is the single most expensive
-thing to rediscover here, and it is not a small effect:
+thing to rediscover here. The clearest measurements came from two shapes that have since been
+retired for being too closed, but the methodological result remains evidence:
 
-- On `cross` the top pair **inverts** — `uct` finishes above `puct` — and the whole field compresses
-  from **979 Elo to 479**. `wallhug` gains about **400 points**, because a map that gives a room
-  filler rooms to fill is a different question from the one an empty rectangle asks.
-- On `double-spiral` at 16x16, **`puct@250` beats `puct@1000` 77–23**, and loses **23–77** to it on an
-  empty board of the same size. More search is *worse* there: the corridor turns the game into a pure
-  filling race, and a deeper search finds no more of one.
+- On the retired `cross`, the top pair **inverts** — `uct` finishes above `puct` — and the whole field
+  compresses from **979 Elo to 479**. `wallhug` gains about **400 points**, because a map that gives a
+  room filler rooms to fill is a different question from the one an empty rectangle asks.
+- On the retired `double-spiral` at 16x16, **`puct@250` beats `puct@1000` 77–23**, and loses **23–77**
+  to it on an empty board of the same size. More search is *worse* there: the corridor turns the game
+  into a pure filling race, and a deeper search finds no more of one.
 
 Two consequences follow, and both are worth writing on the wall:
 
@@ -173,17 +179,32 @@ to its opposite, so neither side of the draw is the better one — two identical
 on every board, which is the test that keeps it honest. `fixed` is kept because the shipped ladder was
 measured under it.
 
+For an empty 8x8 head-to-head, `--openings complete` removes the sampling question. It enumerates the
+mirrored rule's **forty oriented starts** — twenty pairs under the half turn, with each end appearing
+once as slot zero — and plays every start from both seatings. This is the mirrored population after
+its separation rule, not all 4,032 ordered pairs of distinct squares `MatchSetup` would accept.
+Opening selection is a fixed index and does not read the match seed, so changing a seed changes turn
+order and bot randomness without changing which population member occupies that row.
+
+Complete mode owns its round count: one replication is 40 starts × 2 seatings = 80 rounds per
+pairing. Use `--replications N` to repeat the population; `--rounds` is rejected. A wall, another
+geometry or `--format ffa` is also rejected rather than silently changing what “complete” means.
+The batch prints the worst pairing's direct `40 of 40` coverage before its distinct-game line.
+Coverage says the instrument asked every opening; distinct games still says whether the entrants
+answered those questions differently. Rating intervals resample a complete opening as one block, so
+all of its matchups, both seatings and every replication travel together; sampled and legacy runs
+continue to resample their scheduled seed groups.
+
 **A map does not add a distinct game, and it is easy to assume it does.** `--map` is a function of the
 geometry and the run's own seed, so every match of a batch is played behind *the same* walls; the
 spawns are still the two ends of the board, and the turn order still has two values. Four games on
-`empty` is four games on `double-spiral`. Where this bites hardest is the gauntlet's lower rungs, which
-are **entirely** bots that draw no randomness — `random` excepted, five of the eleven — so a `gauntlet`
-run whose reference is also deterministic measures four games per level however many rounds it is
-given. The run recorded in [`Bots.md`](Bots.md) uses `uct@100` for exactly that reason, and reported
-200 of 200 distinct games on nine of the ten rows it was taken on.
+`empty` is four games on `rooms`. This bites whenever a gauntlet level and its reference are both
+deterministic: that level measures four games however many rounds it is given. Use a stochastic
+reference when profiling the whole campaign, and read the distinct-games line on every row.
 
 **Every batch prints how many of its matches were distinct games.** Read that number before any
-other. The two openings modes gave opposite answers to
+strength claim (and read complete coverage immediately before it when present). The two sampled
+openings modes gave opposite answers to
 `play puct:eval=territory puct:eval=survival --rounds 40 --budget 300`: 22-18 to territory over four
 distinct games, 15-25 against it over thirty-six.
 
@@ -194,16 +215,18 @@ Every `play` and `ab` appends to `.lab/` (gitignored), which is what `rate` and 
 - `runs-v2.tsv` — one row per batch: board, rules, allowance, openings, **the map**, and a **build
   fingerprint** (`git rev-parse --short HEAD`, plus `+dirty`). The map is a fingerprint of the wall
   squares — `empty`, or `40w1a2b3c4d` — and **never a shape name**, so a header cannot keep saying
-  `cross` after the generator was redrawn while every rating fitted across the change silently pools
-  two different games. `--map cross` narrows by *redrawing* cross at each run's own geometry and
-  seed and comparing keys, which is why a run played on the old cross stops matching rather than
+  `rooms` after the generator was redrawn while every rating fitted across the change silently pools
+  two different games. `--map rooms` narrows by *redrawing* rooms at each run's own geometry and
+  seed and comparing keys, which is why a run played on old rooms stops matching rather than
   being pooled under a name that no longer describes it. `rate` prints the shape's slug beside the
   key wherever the walls still reproduce it, and names the map on every summary line, `empty`
   included. An expanded spec pins a bot's settings; nothing else pins its code, and pooling across a
   change averages away the improvement that change was made to measure.
   `runs.tsv` is the read-only first schema; its rows decode with the immediate-survivor rule they
   predate, so old measurements remain comparable on their original terms.
-- `matches.tsv` — one row per **(match, seat)**, the match's own columns repeated on each. That
+- `matches-v2.tsv` — one row per **(match, seat)**, the match's own columns repeated on each, plus a
+  stable complete-opening identity when there is one. `matches.tsv` is the read-only first schema;
+  its rows have no opening identity and remain readable. That
   denormalisation is deliberate: a run killed mid-write leaves a line that does not parse and gets
   dropped, rather than a dangling join.
 - `replays.tsv` — the encoded move streams, apart because they are an order of magnitude larger and
@@ -220,6 +243,90 @@ dropping whatever matches the registry's defaults today.
 > says `1 entrants`, which is the tell. Nothing is corrupt; the batch is in the log and `report` reads
 > it. Use `--log` to give such a batch a directory of its own, or read the matrix `play` already
 > printed. It is not about maps — it reproduces on `--map empty`.
+
+### Comparing the unreleased no-tree policies with an expert
+
+`policy` reads one P1 log directory at a time and plays no new games:
+
+```bash
+./gradlew :lab:run --args="policy --log .lab/p1-arena12 \
+  --expert alphabeta:budget=1000,eval=territory --positions 1000 --seed 72001"
+```
+
+The expert's allowance is part of `--expert` and is required. The command walks every retained replay
+cheaply, divides its completed move stream into early, middle and late thirds, and considers only turns
+with at least two legal moves. Each match contributes at most one hash-min position to a third; from
+those it retains at most `--positions` per third. `--seed` fixes that choice. The thirds use the
+completed replay length and are therefore a hindsight diagnostic, not a phase signal a bot can read;
+the median occupied share beside each row gives their wall-aware board-fill interpretation.
+
+On the second pass the recorded moves still advance the game. One persistent expert and one persistent
+probe per policy are constructed for each seat. The expert is called on **every** turn so its RNG and
+state reach a sampled position exactly as they would in a deployed match; policy probes run only at
+the sampled choice turns, before the expert spends its allowance, and consuming even one evaluation
+fails the command. The output keeps three questions separate:
+
+- `tie` — more than one direction shared the highest raw policy score before its position-derived
+  tie-break;
+- `top1` — the policy's selected direction was the expert's selected direction; and
+- `ceiling` — the expert's direction was somewhere in the raw tied maximum.
+
+Every rate is printed as `count/N` plus a deterministic 95% bootstrap interval. Complete-opening
+identities travel as whole blocks; sampled openings reuse the run's mirrored pair blocks. Positions
+are never treated as independent evidence. A finite sample containing only yes or only no cannot
+bootstrap the unseen outcome, so its interval prints `--` instead of a false zero-width certainty.
+Agreement only says that a policy can see a choice the expert made — strength still comes from a
+field. The directory must contain exactly one run header; combine same-board runs only after a
+separate comparability decision, never by pointing this command at an accumulated directory.
+
+The policy cases appear to the JVM lab as temporary ids such as `p2-full`; they are deliberately absent
+from `ShippedBots` and from the Wasm application. A local field can use them and `rate` can read its
+rows, but it must not write replay payloads:
+
+```bash
+./gradlew :lab:run --args="play chase p2-full flat-monte-carlo:budget=400 \
+  --rows 12 --cols 12 --map arena --rounds 200 --replays none --log .lab/p2-arena12"
+```
+
+`play` rejects a P2 id unless `--replays none` is explicit. `ab` and `gauntlet`, which otherwise keep
+decisive replays when logging, require `--log none` with one. These ids are unreleased research labels
+and may change; a qualifying policy receives a permanent slug only when it ships.
+
+### Fitting a grouped action policy without opening the holdout early
+
+`policy-train` reads three explicit roles. Each option is a semicolon-separated list whose entries
+have exactly four pipe-separated fields:
+
+```text
+label|log-directory|expert-entrant|positions-per-third
+```
+
+For example, a fixed board can appear in both development roles while islands seeds remain entirely
+separate:
+
+```bash
+./gradlew :lab:run --args="policy-train \
+  --train 'arena12|.lab/p1-arena12|alphabeta:budget=1000,eval=territory|800;islands-63001|.lab/p3-source-islands-63001|puct:budget=1000,eval=territory|125' \
+  --validation 'arena12|.lab/p1-arena12|alphabeta:budget=1000,eval=territory|200;islands-63007|.lab/p3-source-islands-63007|puct:budget=1000,eval=territory|125' \
+  --holdout 'spiral16|.lab/p1-double-spiral16|puct:budget=1000,eval=territory|1000;islands-64001|.lab/p3-source-islands-64001|puct:budget=1000,eval=territory|125'"
+```
+
+When the same log occurs in train and validation, its complete-opening or mirrored-pair blocks are
+assigned deterministically to five folds: fold zero is validation and the other four are training.
+An islands seed should instead name only one role, because its wall layout is the grouping unit.
+Exact duplicate action inputs are retained in the earlier role only and conflicting expert labels
+are counted separately.
+
+The command fits each declared L2 value using training examples alone and selects by validation
+log-loss. Its fitting function has no holdout argument, and the command does not open or decode a
+holdout directory until the selected weights have been quantised and printed. The subsequent tables
+compare that frozen model and Cartographer on the same expert-labelled positions, with raw tie,
+unique-top-one, and tie-inclusive ceiling rates grouped by dataset and game third. The default fit is
+80 deterministic full-batch epochs at rate `0.20`, L2 values `0,0.0001,0.001,0.01`, and sampling seed
+`73001`. Replay labeling uses every core but two by default, or the positive count supplied by
+`--threads`. One worker owns one replay's expert, probes, feature buffers and result list; results are
+then collected in replay order and sorted by stable dataset/replay/turn coordinates. Selection and
+fitting remain single-stream deterministic, so changing the worker count cannot change the literal.
 
 ### Naming one back
 

@@ -13,6 +13,42 @@ import kotlin.test.assertTrue
 
 class OpeningSetupTest {
     @Test
+    fun `complete is exactly the forty oriented mirrored starts on an empty 8x8`() {
+        val openings = (0 until Openings.COMPLETE_POPULATION).map(::completeOpeningSpawns)
+
+        assertEquals(Openings.COMPLETE_POPULATION, openings.map { it[0] }.toSet().size)
+        for ((index, spawns) in openings.withIndex()) {
+            val first = spawns[0]
+            val second = spawns[1]
+            assertEquals(7 - first / 8, second / 8, "opening $index")
+            assertEquals(7 - first % 8, second % 8, "opening $index")
+
+            val separation = kotlin.math.abs(first / 8 - second / 8) +
+                kotlin.math.abs(first % 8 - second % 8)
+            assertTrue(separation >= 7, "opening $index is only $separation steps apart")
+            assertTrue(openings.any { it[0] == second && it[1] == first }, "opening $index has no rho mate")
+        }
+    }
+
+    @Test
+    fun `every old mirrored empty-8x8 sample belongs to complete`() {
+        val population = (0 until Openings.COMPLETE_POPULATION)
+            .mapTo(LinkedHashSet()) { completeOpeningSpawns(it).toList() }
+
+        for (seed in 1L..1_000L) {
+            val setup = MatchSetup.create(
+                rows = Openings.COMPLETE_ROWS,
+                cols = Openings.COMPLETE_COLS,
+                slots = SLOTS.map(::BotId),
+                seed = seed,
+                budgetPerTurn = 0,
+            )
+            val sampled = openingSetup(setup, Openings.MIRRORED).spawns().toList()
+            assertTrue(sampled in population, "seed $seed sampled $sampled outside complete")
+        }
+    }
+
+    @Test
     fun `a fixed opening is the one the engine picked`() {
         val setup = setupOf(seed = 3)
 
@@ -67,7 +103,7 @@ class OpeningSetupTest {
     fun `everything but the squares travels through untouched`() {
         // This function rebuilds the header field by field, so a field it forgets is a batch that
         // plays a different match from the one the log records. Nothing else would notice.
-        val setup = setupOf(seed = 5, walls = CROSS)
+        val setup = setupOf(seed = 5, walls = ROOMS)
         val opened = openingSetup(setup, Openings.MIRRORED)
 
         assertEquals(setup.seed, opened.seed)
@@ -150,6 +186,6 @@ class OpeningSetupTest {
         const val COLS = 14
         val SLOTS = listOf("space", "wallhug")
 
-        val CROSS: IntArray = generateMap(ROWS, COLS, MapShape.CROSS).walls()
+        val ROOMS: IntArray = generateMap(ROWS, COLS, MapShape.ROOMS).walls()
     }
 }

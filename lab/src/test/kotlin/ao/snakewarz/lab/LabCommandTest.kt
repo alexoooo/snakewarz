@@ -4,9 +4,12 @@ import ao.snakewarz.botapi.knob.BotKnob
 import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.bots.ShippedBots
 import ao.snakewarz.lab.arena.Openings
+import ao.snakewarz.lab.gauntlet.GauntletCandidate
 import ao.snakewarz.lab.log.Replays
+import ao.snakewarz.lab.policytrain.PolicyTrainCommand
 import ao.snakewarz.lab.tune.SpsaJournal
 import ao.snakewarz.match.MatchSetup
+import ao.snakewarz.match.gauntlet.Gauntlet
 import ao.snakewarz.match.map.MapShape
 import ao.snakewarz.match.map.generateMap
 import ao.snakewarz.match.tournament.TournamentConfig
@@ -18,6 +21,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -30,6 +34,46 @@ import kotlin.test.assertTrue
  * produce a matrix that looks exactly like a real one.
  */
 class LabCommandTest {
+    @Test
+    fun `policy train requires all three explicit dataset roles`() {
+        val dataset = "board|.lab/source|alphabeta:budget=1000,eval=territory|10"
+        val command = LabCommand.of(
+            listOf(
+                "policy-train",
+                "--train",
+                dataset,
+                "--validation",
+                dataset,
+                "--holdout",
+                "held|.lab/held|puct:budget=1000,eval=territory|10",
+                "--threads",
+                "4",
+            ),
+            ShippedBots,
+        )
+
+        assertIs<PolicyTrainCommand>(command)
+        assertFailsWith<IllegalStateException> {
+            LabCommand.of(listOf("policy-train", "--train", dataset, "--validation", dataset), ShippedBots)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LabCommand.of(
+                listOf(
+                    "policy-train",
+                    "--train",
+                    dataset,
+                    "--validation",
+                    dataset,
+                    "--holdout",
+                    "held|.lab/held|puct:budget=1000,eval=territory|10",
+                    "--threads",
+                    "0",
+                ),
+                ShippedBots,
+            )
+        }
+    }
+
     @Test
     fun `an entrant is a bot, an allowance and its knobs`() {
         val contestant = LabCommand.contestantOf("uct:exploration=2.5,budget=4000", ShippedBots)
@@ -196,13 +240,92 @@ class LabCommandTest {
     }
 
     @Test
-    fun `a map is drawn at the run's own geometry and reaches the schedule`() {
-        val command = LabCommand.of(
-            "play uct space --rows 12 --cols 12 --map cross --seed 4".split(' '),
+    fun `complete derives its rounds from replications`() {
+        val once = LabCommand.of(
+            "play space wallhug --rows 8 --cols 8 --openings complete --log none".split(' '),
+            ShippedBots,
+        ) as PlayCommand
+        val twice = LabCommand.of(
+            "play space wallhug --rows 8 --cols 8 --openings complete --replications 2 --log none".split(' '),
             ShippedBots,
         ) as PlayCommand
 
-        assertEquals(generateMap(12, 12, MapShape.CROSS).walls().toList(), command.config.walls().toList())
+        assertEquals(Openings.COMPLETE_ROUNDS_PER_REPLICATION, once.config.rounds)
+        assertEquals(Openings.COMPLETE_ROUNDS_PER_REPLICATION * 2, twice.config.rounds)
+    }
+
+    @Test
+    fun `complete rejects partial or different populations`() {
+        val rounds = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of(
+                "play space wallhug --rows 8 --cols 8 --openings complete --rounds 80".split(' '),
+                ShippedBots,
+            )
+        }
+        assertContains(rounds.message.orEmpty(), "--rounds")
+
+        val board = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of("play space wallhug --openings complete".split(' '), ShippedBots)
+        }
+        assertContains(board.message.orEmpty(), "empty 8x8")
+
+        val map = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of(
+                "play space wallhug --rows 8 --cols 8 --openings complete --map scatter".split(' '),
+                ShippedBots,
+            )
+        }
+        assertContains(map.message.orEmpty(), "empty 8x8")
+
+        val format = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of(
+                "play space wallhug pressure --rows 8 --cols 8 --openings complete --format ffa".split(' '),
+                ShippedBots,
+            )
+        }
+        assertContains(format.message.orEmpty(), "--format head")
+
+        val replications = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of("play space wallhug --replications 2".split(' '), ShippedBots)
+        }
+        assertContains(replications.message.orEmpty(), "--openings complete")
+
+        val zero = assertFailsWith<IllegalArgumentException> {
+            LabCommand.of(
+                "play space wallhug --rows 8 --cols 8 --openings complete --replications 0".split(' '),
+                ShippedBots,
+            )
+        }
+        assertContains(zero.message.orEmpty(), "--replications")
+    }
+
+    @Test
+    fun `complete prints coverage before distinct games`() {
+        val command = LabCommand.of(
+            "play space wallhug --rows 8 --cols 8 --openings complete --threads 2 --log none".split(' '),
+            ShippedBots,
+        )
+        val lines = mutableListOf<String>()
+
+        command.run(ShippedBots, lines::add)
+
+        val coverage = lines.indexOfFirst { it.contains("40 of 40 complete openings covered") }
+        val diversity = lines.indexOfFirst { it.contains("distinct games") }
+        val matrix = lines.indexOfFirst { it.lineSequence().firstOrNull()?.trimEnd()?.endsWith("score") == true }
+        assertTrue(coverage >= 0, lines.toString())
+        assertTrue(diversity > coverage, lines.toString())
+        assertTrue(matrix > diversity, lines.toString())
+        assertTrue(lines.none { it.contains("FORFEITS") }, lines.toString())
+    }
+
+    @Test
+    fun `a map is drawn at the run's own geometry and reaches the schedule`() {
+        val command = LabCommand.of(
+            "play uct space --rows 12 --cols 12 --map arena --seed 4".split(' '),
+            ShippedBots,
+        ) as PlayCommand
+
+        assertEquals(generateMap(12, 12, MapShape.ARENA).walls().toList(), command.config.walls().toList())
         assertEquals(command.config.walls().toList(), TournamentSchedule(command.config).setupFor(0).walls().toList())
     }
 
@@ -231,18 +354,18 @@ class LabCommandTest {
         }
 
         assertContains(failure.message.orEmpty(), "crross")
-        assertContains(failure.message.orEmpty(), "double-spiral")
+        assertContains(failure.message.orEmpty(), "rooms")
     }
 
     @Test
     fun `a board too small for a shape refuses by name rather than drawing half of one`() {
         val failure = assertFailsWith<IllegalArgumentException> {
-            LabCommand.of("play uct space --map double-spiral --rows 12 --cols 12".split(' '), ShippedBots)
+            LabCommand.of("play uct space --map rooms --rows 12 --cols 12".split(' '), ShippedBots)
         }
 
         // A `main` catches this, so what a person sees is the sentence rather than a stack trace.
-        assertContains(failure.message.orEmpty(), "double-spiral")
-        assertContains(failure.message.orEmpty(), "13")
+        assertContains(failure.message.orEmpty(), "rooms")
+        assertContains(failure.message.orEmpty(), "14")
     }
 
     @Test
@@ -267,29 +390,29 @@ class LabCommandTest {
 
     @Test
     fun `every subcommand that plays a board can be given a map to play it on`() {
-        val time = LabCommand.of("time uct --map ring --rows 12 --cols 12".split(' '), ShippedBots) as TimeCommand
-        val ab = LabCommand.of("ab uct space --map ring --rows 12 --cols 12".split(' '), ShippedBots) as AbCommand
+        val time = LabCommand.of("time uct --map arena --rows 12 --cols 12".split(' '), ShippedBots) as TimeCommand
+        val ab = LabCommand.of("ab uct space --map arena --rows 12 --cols 12".split(' '), ShippedBots) as AbCommand
         val tune = LabCommand.of(
-            "tune puct --knobs cpuct --map ring --rows 12 --cols 12".split(' '),
+            "tune puct --knobs cpuct --map arena --rows 12 --cols 12".split(' '),
             ShippedBots,
         ) as TuneCommand
         val spsa = LabCommand.of(
-            "spsa puct --knobs cpuct --map ring --rows 12 --cols 12".split(' '),
+            "spsa puct --knobs cpuct --map arena --rows 12 --cols 12".split(' '),
             ShippedBots,
         ) as SpsaCommand
 
-        val ring = generateMap(12, 12, MapShape.RING).walls().toList()
-        assertEquals(ring, time.walls.toList())
-        assertEquals(ring, ab.walls.toList())
-        assertEquals(ring, tune.walls.toList())
-        assertEquals(ring, spsa.walls.toList())
+        val walls = generateMap(12, 12, MapShape.ARENA).walls().toList()
+        assertEquals(walls, time.walls.toList())
+        assertEquals(walls, ab.walls.toList())
+        assertEquals(walls, tune.walls.toList())
+        assertEquals(walls, spsa.walls.toList())
     }
 
     @Test
     fun `rate narrows the log by map, exactly as it narrows it by board`() {
-        val command = LabCommand.of(listOf("rate", "--map", "cross"), ShippedBots) as RateCommand
+        val command = LabCommand.of(listOf("rate", "--map", "arena"), ShippedBots) as RateCommand
 
-        assertEquals(mapOf("map" to "cross"), command.filters)
+        assertEquals(mapOf("map" to "arena"), command.filters)
     }
 
     @Test
@@ -399,13 +522,41 @@ class LabCommandTest {
         assertEquals(BotId("uct"), command.reference.bot)
         assertEquals(100, command.reference.budgetPerTurn)
         assertEquals(4, command.rounds)
+        assertEquals(GauntletCommand.SHIPPED_TABLE, command.table)
+        assertEquals(Gauntlet.levels.first().mapSeed, command.levels.first().mapSeed)
+        assertTrue(command.seed != command.levels.first().mapSeed, "the match seed must not redraw the level")
 
         // Every board a gauntlet run plays comes off the level, so a `--rows` here would measure
-        // eleven levels on a board none of them is played on.
+        // seven levels on a board none of them is played on.
         val board = assertFailsWith<IllegalArgumentException> {
             LabCommand.of("gauntlet --rows 12".split(' '), ShippedBots)
         }
         assertContains(board.message.orEmpty(), "--rows")
+    }
+
+    @Test
+    fun `gauntlet can select the pinned lab-only candidate table`() {
+        val command = LabCommand.of(
+            "gauntlet --table p7-candidate --against puct:budget=250 --rounds 4 --seed 81001".split(' '),
+            ShippedBots,
+        ) as GauntletCommand
+
+        assertEquals(GauntletCandidate.TABLE, command.table)
+        assertEquals(GauntletCandidate.levels, command.levels)
+        assertTrue(command.levels.all { it.mapSeed == 0L })
+        assertEquals(81_001L, command.seed)
+        assertEquals(BotId("puct"), command.reference.bot)
+        assertEquals(250, command.reference.budgetPerTurn)
+    }
+
+    @Test
+    fun `gauntlet refuses an unknown table before buying matches`() {
+        val failure = assertFailsWith<IllegalStateException> {
+            LabCommand.of("gauntlet --table future --rounds 4".split(' '), ShippedBots)
+        }
+
+        assertContains(failure.message.orEmpty(), "future")
+        assertContains(failure.message.orEmpty(), GauntletCandidate.TABLE)
     }
 
     @Test

@@ -28,15 +28,16 @@ internal class PlayCommand(
         val elapsed = started.elapsedNow()
 
         log("")
+        reportDiversity(batch, log)
+        if (batch.forfeits > 0) {
+            log("[lab] ${batch.forfeits} FORFEITS -- a bot threw. That is a defect, and this batch measured it.")
+        }
+        log("")
         log(batch.table.toString())
         log(
             "[lab] ${batch.reports.size} matches, ${batch.turnsPlayed} turns " +
                 "in ${elapsed.inWholeMilliseconds} ms",
         )
-        reportDiversity(batch, log)
-        if (batch.forfeits > 0) {
-            log("[lab] ${batch.forfeits} FORFEITS -- a bot threw. That is a defect, and this batch measured it.")
-        }
 
         if (logDirectory != null) {
             val header = recordBatch(MatchLog(logDirectory), batch, registry, openings.name, threads, replays)
@@ -54,6 +55,13 @@ internal class PlayCommand(
      * look rather than a verdict: a genuinely drawish pairing can repeat a game honestly.
      */
     private fun reportDiversity(batch: BatchResult, log: (String) -> Unit) {
+        batch.leastOpeningCoverage?.let { worst ->
+            log(
+                "[lab] ${worst.covered} of ${Openings.COMPLETE_POPULATION} complete openings covered " +
+                    "(worst pairing -- $worst)",
+            )
+        }
+
         val worst = batch.leastDiverse ?: return
         val total = batch.reports.mapTo(LinkedHashSet()) { it.moveStreamHash }.size
 

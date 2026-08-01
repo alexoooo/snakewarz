@@ -8,9 +8,9 @@ package ao.snakewarz.match.map
  *
  * **[slug] is frozen once released** (SW-05). It reaches a `:lab` flag, a `:ui` picker and a gauntlet
  * level, so it takes the same charset discipline as `BotId`: lowercase letters, digits and hyphens,
- * safe in a URL and in a filename without escaping. It is deliberately *not* [name] lowercased —
- * `double-spiral` rather than `double_spiral` — so the whole project spells an identifier one way.
- * Name a shape for what it looks like, never for lineage.
+ * safe in a URL and in a filename without escaping. It is deliberately *not* derived from [name],
+ * so the whole project spells an identifier one way. Name a shape for what it looks like, never for
+ * lineage.
  *
  * A shape id never enters a replay: the codec carries the wall bitmap itself, so a shape can be
  * redesigned or deleted without breaking a link anybody has shared. Freezing the slug is about the
@@ -21,8 +21,8 @@ public enum class MapShape(
     /**
      * The smallest board on which the shape can express itself.
      *
-     * [generateMap] refuses a smaller one by name rather than emitting a degenerate map: a cross
-     * with no arms and a spiral with half a turn both look like bugs in the *game*.
+     * [generateMap] refuses a smaller one by name rather than emitting a degenerate map: a pinwheel
+     * with stub arms and rooms with no chambers both look like bugs in the *game*.
      */
     public val minimumSide: Int,
 ) {
@@ -57,25 +57,6 @@ public enum class MapShape(
      */
     PINWHEEL("pinwheel", 11),
 
-    /** A hollow rectangle inset from the border with one gap a side: an inside and an outside. */
-    RING("ring", 7),
-
-    /** One horizontal and one vertical bar with a gap at the centre: four rooms joined at a chokepoint. */
-    CROSS("cross", 7),
-
-    /**
-     * Parallel anti-diagonal bars, each opened at its middle.
-     *
-     * Breaks the axis-aligned assumption in `MovePrior`'s wall reading and in the Manhattan proxy
-     * `SurvivalHorizon` takes for tail distance. The anti-diagonal family is the one that can be
-     * half-turn symmetric at all: a *main*-diagonal bar maps to itself only under a reflection.
-     *
-     * The minimum is ten because a bar shorter than its own opening leaves nothing behind, and ten
-     * is the smallest side at which two of them survive it. One surviving bar is a lone diagonal
-     * wall rather than a family of parallel ones.
-     */
-    DIAGONALS("diagonals", 10),
-
     /**
      * Chambers on a grid of corridors, a doorway two or three squares wide per shared wall.
      *
@@ -85,19 +66,6 @@ public enum class MapShape(
      * rather than rooms.
      */
     ROOMS("rooms", 14),
-
-    /**
-     * Two interleaved arms winding out from the centre, leaving one long corridor.
-     *
-     * **Two arms and not one.** A single spiral is chiral — it cannot be invariant under the half
-     * turn — so it could not be fair under the rule [generateMap] enforces. Two arms, each the
-     * other's image, can be. The game on one is close to pure space-filling, and parity dominates.
-     *
-     * The minimum is thirteen because an arm has to turn twice to wind at all: a corridor two
-     * squares wide puts the third leg five squares in, and the arm only reaches an inset the board's
-     * half-extent is past. One turn is a bend rather than a spiral.
-     */
-    DOUBLE_SPIRAL("double-spiral", 13),
 
     /** Isolated squares scattered to a requested density: the randomiser, for a field that is not four games. */
     SCATTER("scatter", 5),

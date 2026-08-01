@@ -190,7 +190,7 @@ path — a tap is one move and a hold is a move every 250ms, on a keyboard and u
 The page is **three static sections** — `#screen-home`, `#screen-gauntlet`, `#screen-game` — of which
 exactly one is visible, plus four panels, a backdrop and one modal. `Shell` owns which is showing;
 `Chrome` owns the game screen; `HomeScreen` owns which modes are offered; `GauntletScreen` owns the
-eleven level tiles; and one class per panel, under `chrome/panel/`, owns what is behind each — `SetupPanel`
+seven level tiles; and one class per panel, under `chrome/panel/`, owns what is behind each — `SetupPanel`
 the new-match form and its seats, `TournamentPanel` the schedule and the matrix, `SharePanel` the
 link, `SettingsPanel` the theme and the speed.
 Every one of them is rendered from the same `UiModel` on the way through `Chrome.render`.
@@ -255,7 +255,7 @@ Every one of them is rendered from the same `UiModel` on the way through `Chrome
 - **Escape closes the overlay on top; with none open it goes back a screen.** One `ClosePanel` intent
   rather than one per overlay, because which is on top is the session's to know.
 - **Back is one screen out, not one screen home.** A rung of the gauntlet is left to the level
-  select, so walking out of level 7 does not also cost the eleven tiles. `#game-back`'s label is written
+  select, so walking out of level 7 does not also cost the seven tiles. `#game-back`'s label is written
   from the same answer, and the verdict card's way out and Escape are the *same call* — which is
   where the consistency comes from, rather than from three destinations that have to be kept equal.
   The level select's own way out is always the menu: `level` outlives the screen it was chosen on, so
@@ -284,7 +284,7 @@ rung number, `null` for a custom match:
 1. **Which panels are offered.** `Mode` is derived from `level`, and `Mode.offers` hides `#panel-setup`
    and `#panel-tournament`: a level *is* its configuration, so re-seating it would be playing
    something else under its name.
-2. **What the verdict offers.** A lost level shows Retry, a beaten one shows Next level, the eleventh
+2. **What the verdict offers.** A lost level shows Retry, a beaten one shows Next level, the seventh
    shows Home and says *Gauntlet cleared*. `UiModel.nextLevel` is derived from `level` and
    `levelCleared` so the card cannot offer a rung that does not exist.
 3. **What the top bar names** — the level, where a custom match is named by its seat cards. It is the
@@ -292,12 +292,11 @@ rung number, `null` for a custom match:
    against. On a phone the wordmark is hidden by the `max-width: 30rem` rule, and the opponent's name and face on
    the scoreboard are what identify the level there.
 
-**Retry draws a fresh seed.** `GameSession.restart` is the one place the mode is read on the match
-path, and it is a level's whole difference: a rung that replayed identically after a loss would be a
-puzzle with one solution, and the first three opponents draw no randomness at all, so the seed is the
-only thing that varies for them.
+**Retry draws a fresh match seed, not a fresh map.** `GameSession.restart` is the one place the mode
+is read on the match path: another attempt varies turn order and bot randomness, while
+`GauntletLevel.mapSeed` keeps the walls qualified for that rung fixed.
 
-**Progress is `localStorage["snakewarz.ladder.v1"]`, written only on a win.** The value is
+**Progress is `localStorage["snakewarz.gauntlet.v2"]`, written only on a win.** The value is
 `v1:<highest unlocked>:<cleared bits>`, hand-parsed by `GauntletProgress` — not JSON, because there is
 none in the bundle and pulling one in for two integers is what SW-08 is about. `Preferences` owns
 whether the store can be read at all and `GauntletProgress` owns what the text means, which keeps two
@@ -306,10 +305,9 @@ has never heard of, junk, or storage that throws — is a playable level 1, and 
 of the table clamps rather than indexing off it. A level index is **frozen** on release for the same
 reason a `BotId` is: it is the key somebody's saved game is stored under.
 
-**The key still spells the old name, and it always will.** The campaign was called the Ladder when
-that key shipped, so `Preferences.GAUNTLET_KEY` holds `snakewarz.ladder.v1` and the constant and its
-value deliberately disagree — SW-05 freezes what was released, and renaming the string would open
-every existing player back at level 1 with nothing to say why.
+**The key is a new campaign identity.** The retired eleven-level development table remains under its
+old key and this reader does not migrate it: its level numbers named different opponents and maps,
+so carrying the bits forward would claim progress through games the player had not played.
 
 Because progress is only ever written on a win, walking out of a level costs nothing — which is why
 `navigate` and an `#r=` link arriving by hash may both drop `level` without ceremony.
@@ -328,23 +326,23 @@ last rung. Those actions precede Run, Step and Restart so a replay opened by mis
 not hide the way forward.
 
 **Every cleared level also keeps the run that cleared it, one `localStorage` key per rung** —
-`snakewarz.gauntlet.replay.<n>.v1`, written by `GameSession.recordLevelWin` beside the progress write
-and read by `GauntletScreen` per tile. One key each rather than one holding eleven records: writing
+`snakewarz.gauntlet.replay.<n>.v2`, written by `GameSession.recordLevelWin` beside the progress write
+and read by `GauntletScreen` per tile. One key each rather than one holding seven records: writing
 one rung rewrites nothing else, a value that arrives corrupt costs that rung rather than the lot, and
 there is no concatenation format for anybody to parse. The payload is **not a new format** — it is
 `ReplayCodec`'s base64url string, the same one a `#r=` link carries — so a record is self-describing
 and a stored run needs nothing beside it to play back. Only on a **win**, because a level you lost has
 a replay nobody wants and writing one would make the tile's ▷ mean something other than its `Cleared`
 badge; and a payload that will not decode is treated as absent, which is `GauntletProgress.parse`'s
-rule applied to the same store. The `v1` is the lever if the level table ever changes again: bumping
-to `.v2` leaves the old values unread rather than showing somebody a game on a board that no longer
+rule applied to the same store. The `.v2` is the lever if the level table ever changes again: a new
+suffix leaves these values unread rather than showing somebody a game on a board that no longer
 exists.
 
 The tiles are static markup, like the four scoreboard cards, and `GauntletScreen` writes only their
 text, state, picture and whether the ▷ is there. It renders **before** `Shell` in `Chrome.render`,
 because it marks the open tile `[data-focus]` and the shell reads that on the frame the screen
 arrives. It also skips the write entirely when the progress instance and the theme id are both
-unchanged: every screen is rendered once a frame, and eleven tiles of unchanged text sixty times a
+unchanged: every screen is rendered once a frame, and seven tiles of unchanged text sixty times a
 second would be the one wasteful thing on that path. The storage read sits safely inside that cache
 because a run is written on the same turn progress is replaced, so the two can never be a frame apart.
 
@@ -353,7 +351,7 @@ be invalid markup and would never receive the click; the control lives beside it
 over the tile's top-right corner by `.level-replay` in `styles.css`, and is looked up by its own id.
 A locked or unbeaten rung's is `hidden` rather than disabled — the argument `Mode.offers` already
 makes for the panel openers, that a control which can never apply should not be present at all, and
-hiding is also what takes eleven of them out of the tab order on a browser that has cleared nothing.
+hiding is also what takes seven of them out of the tab order on a browser that has cleared nothing.
 
 ### Playing it without a mouse
 
@@ -485,8 +483,8 @@ keep working without a pack knowing a single hex string.
   link was reopened. `startLevel` reads the rung's `shape`, a custom match and a batch read the
   picker's through `MatchOptions.shape`, which is **a decoration hint `setupFrom` never reads**, and
   a `#r=` link gets `null` and the plain pack.
-- **Four packs across eleven shapes, and the `when` has no `else`.** A pack is a feeling, so `empty`
-  and `arena` share one; a twelfth shape is a compile error rather than a board that quietly comes
+- **Four packs across seven shapes, and the `when` has no `else`.** A pack is a feeling, so `empty`
+  and `arena` share one; an eighth shape is a compile error rather than a board that quietly comes
   out plain.
 
 ### Faces, and the seam they arrive through
@@ -494,7 +492,7 @@ keep working without a pack knowing a single hex string.
 **Every opponent has a picture, and `:ui` still cannot tell a wall hugger from a human.** `Portraits`
 is a `fun interface` taking a **slug** and answering a URL or `null`, `GameSession`'s constructor
 takes one, and `:app` fills it from `portraitUrl` — a set of slugs it ships `resources/portrait/*.svg`
-for. A slug because that is the one part of a bot that is frozen; a seam because a table of eleven
+for. A slug because that is the one part of a bot that is frozen; a seam because a table of thirteen
 slugs in `:ui` would be exactly the coupling the `:bots` edge exists to prevent, and because
 `resources/` is `:app`'s to know about.
 
@@ -532,17 +530,17 @@ slugs in `:ui` would be exactly the coupling the `:bots` edge exists to prevent,
 - **`viewBox` is `0 0 96 96` and the coordinates are integers.** It was 32, and three times the
   linear budget is the difference between an emblem and a face. The 6/32 corner ratio scaled to
   18/96, so the frame is unchanged in proportion — which matters because **the tile and the frame are
-  the one thing all eleven share**. An identicon has to sit beside a hand-drawn face on the same card
+  the one thing all thirteen share**. An identicon has to sit beside a hand-drawn face on the same card
   without reading as a different kind of thing, and `identicon.kt` drawing on the same tile at the
   same ratio is what keeps that true. Move one and move the other.
-- **SVG only, and about 4 KB raw a file.** Eleven at that size is noise against
+- **SVG only, and about 4 KB raw a file.** Thirteen at that size is noise against
   [SW-08](Coding-Standards.md#sw-08--the-bundle-is-a-budget)'s budget, which is not the point: the
   ceiling is what stops the next one being a PNG, and a PNG would not be noise. `PortraitUrlTest`
   walks `ShippedBots` plus `PlayableRegistry.HUMAN_ID` and fails when the two lists drift; what it
   cannot reach is the directory itself, so a slug with no file beside the page is a broken image the
   browser reports and no test does. **A malformed file is the same silence** — and the way to write
   one is a double hyphen inside a `<!-- -->`, which XML forbids and which the house comment style
-  reaches for every time it wants a dash. Parse all eleven after editing any of them; the browser's
+  reaches for every time it wants a dash. Parse all thirteen after editing any of them; the browser's
   only report is a torn-page icon on a tile.
 - **The bundle gate measures subdirectories.** CI's size step walks the distribution with `find`
   rather than a glob, because `portrait/` is a directory and a glob would hand `gzip` one, measure it
@@ -760,7 +758,7 @@ list" — it is **does it come off a registry**:
   behind it. `SetupPanel` and `SettingsPanel` check the markup against the enum at boot instead, so a
   shape or a theme with no `<option>` fails at startup naming itself — which is the *cheaper* half of
   what building the list would have bought, without the DOM construction.
-- **The eleven gauntlet tiles** are static markup like the four scoreboard cards. `Gauntlet.levels` is a
+- **The seven gauntlet tiles** are static markup like the four scoreboard cards. `Gauntlet.levels` is a
   fixed table in `:match`, not something a contributor extends, and `GauntletScreen` writes only each
   tile's text, state and picture.
 - **The overlay canvas, the hover label, the steering pad and the seat portraits** are static markup

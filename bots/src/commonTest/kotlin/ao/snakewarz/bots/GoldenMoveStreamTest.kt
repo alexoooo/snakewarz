@@ -52,6 +52,23 @@ class GoldenMoveStreamTest {
     }
 
     @Test
+    fun `the cartographer against random on 20x20`() {
+        // Initial canary for the full-owned P2 rule after five wall-map fields qualified it.
+        assertEquals(-3361584792731511458L, hashOf("cartographer", "random", seed = 2005))
+    }
+
+    @Test
+    fun `lookahead against random on 12x12`() {
+        // Initial canary for P4's adopted depth-three shape. The 64-evaluation cap guarantees the
+        // complete fixed tree rather than exercising its whole-policy fallback, and the suite runs
+        // the same replay-and-appraise path in Chrome.
+        assertEquals(
+            5485164985182975229L,
+            hashOf("lookahead", "random", seed = 2005, rows = 12, cols = 12, budgetPerTurn = 64),
+        )
+    }
+
+    @Test
     fun `the chaser against a room ranker, where its room guard refuses something`() {
         assertEquals(-4075282736796042152L, hashOf("chase", "space", seed = 1, rows = 16, cols = 16))
     }

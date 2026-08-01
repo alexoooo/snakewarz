@@ -58,9 +58,9 @@ class GenerateMapTest {
     @Test
     fun `a shape too big for the board fails by name`() {
         val failure = assertFailsWith<IllegalArgumentException> {
-            generateMap(8, 8, MapShape.DOUBLE_SPIRAL)
+            generateMap(8, 8, MapShape.PINWHEEL)
         }
-        assertTrue(MapShape.DOUBLE_SPIRAL.slug in failure.message.orEmpty(), failure.message)
+        assertTrue(MapShape.PINWHEEL.slug in failure.message.orEmpty(), failure.message)
 
         for (shape in MapShape.entries) {
             if (shape.minimumSide <= 1) continue
@@ -125,15 +125,19 @@ class GenerateMapTest {
     }
 
     @Test
-    fun `a slug is unique, url-safe and not the enum name`() {
+    fun `a slug is unique, url-safe and resolvable`() {
         val slugs = MapShape.entries.map { it.slug }
+        assertEquals(
+            listOf("empty", "arena", "pillars", "pinwheel", "rooms", "scatter", "islands"),
+            slugs,
+            "the playable catalogue and picker order",
+        )
         assertEquals(slugs.size, slugs.toSet().size, "two shapes share a slug")
         for (shape in MapShape.entries) {
             assertTrue(shape.slug.all { it in 'a'..'z' || it in '0'..'9' || it == '-' }, shape.slug)
             assertEquals(shape, MapShape.ofSlug(shape.slug))
         }
-        assertEquals("double-spiral", MapShape.DOUBLE_SPIRAL.slug)
-        assertNull(MapShape.ofSlug("DOUBLE_SPIRAL"))
+        assertNull(MapShape.ofSlug("PINWHEEL"))
         assertNull(MapShape.ofSlug("labyrinth"))
     }
 
@@ -191,11 +195,8 @@ class GenerateMapTest {
         val SCATTERED = setOf(MapShape.SCATTER, MapShape.ISLANDS)
 
         /**
-         * Under 40% wall on every shipped map.
-         *
-         * The densest is the double spiral, which is one square of wall per three of corridor by
-         * construction. A shape past this is a shape that has stopped being a map and started being a
-         * maze, and this is where that gets noticed.
+         * Under 40% wall on every shipped map. A shape past this is a shape that has stopped being a
+         * map and started being a maze, and this is where that gets noticed.
          */
         const val MINIMUM_OPEN_PERCENT: Int = 60
 

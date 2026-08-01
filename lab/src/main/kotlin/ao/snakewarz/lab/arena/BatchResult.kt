@@ -42,6 +42,11 @@ internal class BatchResult(
 
     val leastDiverse: PairingDiversity? = diversity.minByOrNull { it.fraction }
 
+    /** Complete-population coverage per pairing; empty for modes without stable opening identities. */
+    val openingCoverage: List<OpeningCoverage> = buildOpeningCoverage()
+
+    val leastOpeningCoverage: OpeningCoverage? = openingCoverage.minByOrNull { it.covered }
+
     /** One pairing's honest sample size: how many of its matches were distinct games. */
     class PairingDiversity(val label: String, val distinct: Int, val played: Int) {
         val fraction: Double get() = distinct.toDouble() / played
@@ -49,7 +54,30 @@ internal class BatchResult(
         override fun toString(): String = "$label: $distinct of $played distinct"
     }
 
-    private fun buildDiversity(): List<PairingDiversity> {
+    class OpeningCoverage(val label: String, val covered: Int) {
+        override fun toString(): String = "$label: $covered of ${Openings.COMPLETE_POPULATION}"
+    }
+
+    private fun buildDiversity(): List<PairingDiversity> =
+        pairingBlocks().map { block ->
+            PairingDiversity(
+                label = block.first().seating.joinToString(" vs ") { config.contestants[it].label },
+                distinct = block.mapTo(LinkedHashSet()) { it.moveStreamHash }.size,
+                played = block.size,
+            )
+        }
+
+    private fun buildOpeningCoverage(): List<OpeningCoverage> = pairingBlocks().mapNotNull { block ->
+        if (block.none { it.openingIdentity != null }) {
+            return@mapNotNull null
+        }
+        OpeningCoverage(
+            label = block.first().seating.joinToString(" vs ") { config.contestants[it].label },
+            covered = block.mapNotNullTo(LinkedHashSet()) { it.openingIdentity }.size,
+        )
+    }
+
+    private fun pairingBlocks(): List<List<MatchReport>> {
         // A pairing is a block of `rounds` consecutive matches head to head, and the whole schedule
         // free for all -- where matchCount is rounds, so the same arithmetic lands on one block.
         val pairings = config.matchCount / config.rounds
@@ -57,13 +85,6 @@ internal class BatchResult(
         for (report in reports) {
             played[report.index / config.rounds] += report
         }
-
-        return played.filter { it.isNotEmpty() }.map { block ->
-            PairingDiversity(
-                label = block.first().seating.joinToString(" vs ") { config.contestants[it].label },
-                distinct = block.mapTo(LinkedHashSet()) { it.moveStreamHash }.size,
-                played = block.size,
-            )
-        }
+        return played.filter { it.isNotEmpty() }
     }
 }

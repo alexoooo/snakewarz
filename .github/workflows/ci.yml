@@ -36,7 +36,7 @@ jobs:
       # code review question. GitHub Pages serves gzip, so measure gzipped -- not brotli.
       # Source maps are excluded: browsers only fetch them with devtools open.
       #
-      # `find`, and not a glob: the distribution has subdirectories in it -- `portrait/` is eleven
+      # `find`, and not a glob: the distribution has subdirectories in it -- `portrait/` is twelve
       # of them -- and a glob would hand gzip a directory, measure it as zero, and leave every asset
       # under it outside a budget whose whole point is that it cannot be forgotten about.
       - name: Check gzipped transfer size

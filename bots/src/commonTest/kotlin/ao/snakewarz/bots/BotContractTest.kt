@@ -172,7 +172,7 @@ class BotContractTest {
     fun `and none of it changes when the board has a map drawn into it`() {
         // Every primitive in this module asks the board whether a square is free, and an interior
         // wall is a square that never was — so the claims above are expected to hold unchanged on a
-        // board with a shape in it, and this is what turns "expected" into evidence for all ten bots
+        // board with a shape in it, and this is what turns "expected" into evidence for all twelve bots
         // at the price of one fixture. That the loop returns at all is the termination claim: a bot
         // that took a walled region for an empty one would spin here rather than fail.
         forEachSetting { setting ->

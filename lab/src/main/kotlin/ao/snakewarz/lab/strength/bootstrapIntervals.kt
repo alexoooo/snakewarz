@@ -23,9 +23,11 @@ internal class Interval(val low: Double, val high: Double) {
  * standard error off the fit's curvature, say — would report intervals far tighter than the evidence
  * supports, and a tuner reading them would accept changes that are noise.
  *
- * Resampling whole **seed groups** sidesteps all of it. Whatever correlation lives inside a group
- * travels with it, and the resampling never has to know what that correlation was. It costs a refit
- * per draw, and a refit is milliseconds.
+ * Resampling whole experimental blocks sidesteps all of it. A sampled run's block is its seed group;
+ * a complete run's block is the stable opening identity, including every matchup, seating and
+ * replication played from it. Whatever correlation lives inside a block travels with it, and the
+ * resampling never has to know what that correlation was. It costs a refit per draw, and a refit is
+ * milliseconds.
  *
  * ### Percentiles, not a standard deviation
  *
@@ -45,7 +47,7 @@ internal fun bootstrapIntervals(
 ): List<Interval> {
     require(draws > 1) { "an interval needs more than one resampling, was $draws" }
 
-    val groups = ladder.matches.groupBy { it.run to it.pairKey }.values.toList()
+    val groups = bootstrapGroups(ladder.matches)
     if (groups.size < 2) {
         // One group is one board. Nothing can be resampled out of it, and a bar drawn from that
         // would say "certain" about a single game.
@@ -91,9 +93,9 @@ internal fun bootstrapIntervals(
  *
  * A separate function rather than a column of the one above because it resamples the same groups and
  * then *counts* instead of refitting: a win share is an average over matches, so nothing has to be
- * solved and four hundred draws are microseconds. Reported on the same seed-group unit for the
+ * solved and four hundred draws are microseconds. Reported on the same experimental block for the
  * reason that function gives — the three comparisons a free-for-all writes out of one game are not
- * independent, and neither are the matches of one seed group, which is exactly what a group is.
+ * independent, and neither are the matches behind one complete opening or sampled seed group.
  *
  * Returned as a fraction in `0.0..1.0`, `NaN..NaN` where the entrant never played or there is only
  * one group to resample.
@@ -105,7 +107,7 @@ internal fun winShareIntervals(
 ): List<Interval> {
     require(draws > 1) { "an interval needs more than one resampling, was $draws" }
 
-    val groups = ladder.matches.groupBy { it.run to it.pairKey }.values.toList()
+    val groups = bootstrapGroups(ladder.matches)
     if (groups.size < 2) {
         return List(ladder.size) { Interval(Double.NaN, Double.NaN) }
     }
@@ -154,6 +156,13 @@ internal fun winShareIntervals(
 
 private fun percentile(draws: Int, fraction: Double): Int =
     ((draws - 1) * fraction).toInt().coerceIn(0, draws - 1)
+
+/** Complete runs travel as whole openings; old and sampled runs keep their schedule seed groups. */
+internal fun bootstrapGroups(matches: List<LoggedMatch>): List<List<LoggedMatch>> =
+    matches.groupBy { match ->
+        match.openingIdentity?.let { "${match.run}\u0000opening\u0000$it" }
+            ?: "${match.run}\u0000pair\u0000${match.pairKey}"
+    }.values.toList()
 
 internal object Bootstrap {
     /**

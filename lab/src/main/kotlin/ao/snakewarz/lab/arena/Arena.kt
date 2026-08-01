@@ -4,6 +4,7 @@ import ao.snakewarz.botapi.registry.BotRegistry
 import ao.snakewarz.core.grid.Direction
 import ao.snakewarz.match.Match
 import ao.snakewarz.match.tournament.TournamentConfig
+import ao.snakewarz.match.tournament.TournamentFormat
 import ao.snakewarz.match.tournament.TournamentSchedule
 import ao.snakewarz.match.tournament.pairwiseOutcomes
 import java.util.concurrent.Callable
@@ -41,6 +42,19 @@ internal class Arena(
 
     init {
         require(threads > 0) { "a batch needs at least one thread, was $threads" }
+        if (openings == Openings.COMPLETE) {
+            require(config.rows == Openings.COMPLETE_ROWS && config.cols == Openings.COMPLETE_COLS) {
+                "complete openings need an empty 8x8, was ${config.rows}x${config.cols}"
+            }
+            require(config.wallCount == 0) { "complete openings need an empty 8x8, was ${config.wallCount} walls" }
+            require(config.format == TournamentFormat.HEAD_TO_HEAD) {
+                "complete openings need head-to-head, was ${config.format}"
+            }
+            require(config.rounds % Openings.COMPLETE_ROUNDS_PER_REPLICATION == 0) {
+                "complete openings need ${Openings.COMPLETE_ROUNDS_PER_REPLICATION} rounds per replication, " +
+                    "was ${config.rounds}"
+            }
+        }
     }
 
     val matchCount: Int get() = schedule.matchCount
@@ -94,7 +108,8 @@ internal class Arena(
     }
 
     private fun play(index: Int): MatchReport {
-        val setup = openingSetup(schedule.setupFor(index), openings)
+        val openingIndex = completeOpeningIndex(index)
+        val setup = openingSetup(schedule.setupFor(index), openings, openingIndex)
         val match = Match(setup, registry)
         check(!match.interactive) {
             "${setup.slots} seats somebody who plays by hand, and a batch has nobody to ask"
@@ -109,6 +124,7 @@ internal class Arena(
         return MatchReport(
             index = index,
             pairKey = schedule.pairKeyFor(index),
+            openingIdentity = openingIndex?.let(::completeOpeningIdentity),
             seating = schedule.seatingFor(index),
             stats = stats,
             comparisons = pairwiseOutcomes(config.format, stats),
@@ -116,6 +132,15 @@ internal class Arena(
             elapsedMicros = elapsed.inWholeMicroseconds,
             record = if (keepRecords) record else null,
         )
+    }
+
+    /** Opening selection is schedule arithmetic, never a draw from the match or either bot's seed. */
+    private fun completeOpeningIndex(index: Int): Int? {
+        if (openings != Openings.COMPLETE) {
+            return null
+        }
+        val round = index % config.rounds
+        return (round / Openings.SEATINGS_PER_OPENING) % Openings.COMPLETE_POPULATION
     }
 
     companion object {

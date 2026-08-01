@@ -14,7 +14,7 @@ the shipped bots with the arrow keys, or sit out and watch up to four of them fi
 turn at a time, change the speed, scrub back through a finished match, and share the whole thing as a
 link. A 160-turn duel is 129 characters of URL, and no server is involved at any point.
 
-Seven of the ten bots are a ladder, weakest first, and each rung beats the one below it over twenty
+Nine of the twelve bots are a ladder, weakest first, and each rung beats the one below it over twenty
 matches:
 
 | Bot | How it plays |
@@ -26,28 +26,35 @@ matches:
 | Chaser | Walks the shortest path to the nearest opponent, then hands over to Pressure |
 | Flat Monte Carlo | Plays each move out to the end at random, many times, and takes the best |
 | UCT | Monte Carlo tree search with UCB1 |
+| PUCT | AlphaZero's tree search with a hand-written position appraisal in place of a neural network |
+| Alpha Beta | Full-width minimax with alpha-beta pruning and a selectable leaf appraisal |
 
-Two more were contributed to the original 2005 project and are not rungs — they are here for what
-they are, and they play the same contract suite as everything else:
+One wall-map specialist sits outside that empty-12 ordering. It earned a permanent place in five
+map-separated fields, but not a ladder rung:
+
+| Bot | How it plays |
+|---|---|
+| Cartographer | Scores guarded paths, local shape, reachable room and mover-owned ground in one zero-budget board sweep |
+
+One measured fixed-depth bridge sits between that live-board policy and the full searchers without
+claiming another empty-12 ladder rung:
+
+| Bot | How it plays |
+|---|---|
+| Lookahead | Orders and backs up one to three complete turns, falling back to Cartographer if the whole fixed tree will not fit |
+
+One more was contributed to the original 2005 project and claims nothing about strength; it plays the
+same contract suite as everything else:
 
 | Bot | How it plays |
 |---|---|
 | Burnin Hell | First open direction, always north, south, east, west — which comes out as a serpentine sweep of the board |
-| Tom Snake | Pressure one turn in five, Random the other four |
 
-And one is experimental:
-
-| Bot | How it plays |
-|---|---|
-| PUCT | AlphaZero's tree search with a hand-written appraisal of the position where the neural network would be |
-
-PUCT is not a rung because it has not earned one: measured over forty rounds a pairing it is ahead of
-UCT at an equal allowance and only level with it per unit of *time*, and until those two readings
-agree it makes no claim a rung would make. Its `Evaluation` setting is the interesting part —
-`territory` reads a share of the board off one sweep, `survival` works out how many moves each snake
-could actually still make, and `mobility` is a near-free reading that gets the same search for a
-fraction of the clock. Setting two seats to the same bot at two evaluations and running a tournament
-is how those numbers were arrived at.
+The top two searchers earned their ladder places in equal-clock fields, not just at equal evaluation
+allowances. Their `Evaluation` setting is the interesting part — `territory` reads a share of the
+board off one sweep, `survival` works out how many moves each snake could actually still make, and
+`mobility` is a near-free reading that gets more search for the same clock. Setting two seats to the
+same bot at two evaluations and running a tournament is how those numbers are measured.
 
 ## Settings
 

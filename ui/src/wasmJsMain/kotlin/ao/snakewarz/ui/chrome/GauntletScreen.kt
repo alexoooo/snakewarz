@@ -15,14 +15,14 @@ import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLImageElement
 
 /**
- * `#screen-gauntlet`: eleven tiles, one per rung, and which of them may be played.
+ * `#screen-gauntlet`: seven tiles, one per rung, and which of them may be played.
  *
  * [Gauntlet] is `:match`, which this module already sees, so a tile needs no seam and no injected
  * table — unlike the opponent's *name* and *face*, which are facts about a bot and therefore arrive
  * through the `BotRegistry` interface and [Portraits] by slug. Nothing here can tell a wall hugger
  * from a human, which is the whole of why the gauntlet table lives a module down.
  *
- * Eleven is a fixed number, so the tiles are **static markup** and this only ever writes their text,
+ * Seven is a fixed number, so the tiles are **static markup** and this only ever writes their text,
  * their state and their picture — the same arrangement as the four scoreboard cards, and not a third
  * exception to *"Kotlin never constructs structure"*. Title, blurb and the line naming the board are
  * written once at construction, because a level's identity does not change while the page is open.
@@ -69,7 +69,7 @@ internal class GauntletScreen(
      * The progress the tiles were last written for, compared by identity.
      *
      * Every screen is rendered once a *frame*, and while a match runs that is sixty times a second —
-     * so eleven tiles of unchanged text would be the one genuinely wasteful thing on that path. Progress
+     * so seven tiles of unchanged text would be the one genuinely wasteful thing on that path. Progress
      * is an immutable value replaced only when a level is beaten, which makes identity the exact
      * question, and it is the same cache the session keeps over its labels and faces.
      */
@@ -165,7 +165,7 @@ internal class GauntletScreen(
             }
             portrait.showPortrait(face)
             // Gone rather than greyed, so it is out of the tab order too: on a browser that has
-            // cleared nothing there are eleven of these and none of them could ever do anything.
+            // cleared nothing there are seven of these and none of them could ever do anything.
             replay.hidden = !stored
 
             if (landing) {

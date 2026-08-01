@@ -244,7 +244,7 @@ class SetupPanelTest {
          * The shape of `#panel-setup`, cut down to what [SetupPanel] looks up.
          *
          * Every map option is here because the panel fails at boot on a shape the markup forgot,
-         * which is the behaviour that keeps a picker from quietly offering seven of eight maps.
+         * which is the behaviour that keeps a picker from quietly omitting a map.
          */
         val SKELETON = """
             <select id="size">
@@ -257,11 +257,7 @@ class SetupPanelTest {
               <option value="arena">Arena</option>
               <option value="pillars">Pillars</option>
               <option value="pinwheel">Pinwheel</option>
-              <option value="ring">Ring</option>
-              <option value="cross">Cross</option>
-              <option value="diagonals">Diagonals</option>
               <option value="rooms">Rooms</option>
-              <option value="double-spiral">Double spiral</option>
               <option value="scatter">Scatter</option>
               <option value="islands">Islands</option>
               <option id="map-from-replay" value="from-replay" hidden>from replay</option>

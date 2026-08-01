@@ -37,8 +37,10 @@ class PreferencesTest {
         restoreStorage()
         localStorage.removeItem(THEME_KEY)
         localStorage.removeItem(GAUNTLET_KEY)
+        localStorage.removeItem(OLD_GAUNTLET_KEY)
         localStorage.removeItem(replayKey(1))
         localStorage.removeItem(replayKey(2))
+        localStorage.removeItem(oldReplayKey(1))
     }
 
     @Test
@@ -77,6 +79,15 @@ class PreferencesTest {
     }
 
     @Test
+    fun `the retired development campaign is not mistaken for v2 progress`() {
+        localStorage.setItem(OLD_GAUNTLET_KEY, "v1:7:127")
+        localStorage.setItem(oldReplayKey(1), RUN)
+
+        assertNull(Preferences.gauntlet())
+        assertNull(Preferences.levelReplay(1))
+    }
+
+    @Test
     fun `a level's winning run round-trips under its own key`() {
         Preferences.setLevelReplay(1, RUN)
 
@@ -98,7 +109,7 @@ class PreferencesTest {
 
     @Test
     fun `writing one level's run leaves every other level alone`() {
-        // The whole reason there are eleven keys rather than one holding eleven records: beating a
+        // The whole reason there are seven keys rather than one holding seven records: beating a
         // rung rewrites that rung, and a value that arrives corrupt costs that rung and no other.
         Preferences.setLevelReplay(1, RUN)
         Preferences.setLevelReplay(2, OTHER_RUN)
@@ -129,19 +140,18 @@ class PreferencesTest {
         /** `Preferences`' own keys, which are private and stay that way for one test. */
         const val THEME_KEY = "snakewarz.theme.v1"
 
-        /**
-         * The old word, on purpose: the campaign was the Ladder when this key shipped and the key is
-         * somebody's saved place, so SW-05 freezes the string while the name above moved on. This
-         * assertion is what would fail if a rename ever reached it.
-         */
-        const val GAUNTLET_KEY = "snakewarz.ladder.v1"
+        /** The v2 campaign deliberately does not read the retired development table's progress. */
+        const val GAUNTLET_KEY = "snakewarz.gauntlet.v2"
+        const val OLD_GAUNTLET_KEY = "snakewarz.ladder.v1"
 
         /**
          * The per-rung key, written out here rather than asked for, for [GAUNTLET_KEY]'s reason: it
          * is the one genuinely new frozen string in this feature, and a test that derived it from the
          * code it is checking would agree with any rename.
          */
-        fun replayKey(level: Int): String = "snakewarz.gauntlet.replay.$level.v1"
+        fun replayKey(level: Int): String = "snakewarz.gauntlet.replay.$level.v2"
+
+        fun oldReplayKey(level: Int): String = "snakewarz.gauntlet.replay.$level.v1"
 
         val SETUP: MatchSetup = MatchSetup.create(rows = 8, cols = 8, slots = listOf(BotId("space")), seed = 1)
 

@@ -36,6 +36,8 @@ internal class HeadlessMatch(
     rules: RulesConfig = RulesConfig(),
     /** The map, as padded cell indices — `wallsOf` draws one. Empty is a plain rectangle. */
     walls: IntArray = IntArray(0),
+    /** Slot order, explicit for cost tapes that must match the production driver's seeded order. */
+    turnOrder: IntArray = IntArray(entries.size) { it },
     /**
      * Off for the throughput benchmark and on for everything else. Recording allocates once a turn,
      * which is nothing beside a search and is most of the cost of a match between trivial bots — so a
@@ -56,7 +58,7 @@ internal class HeadlessMatch(
     private val paramsPerSlot: List<BotParams> = List(entries.size) { BotParams.EMPTY },
 ) {
     private val grid = Grid(rows, cols)
-    private val board = Board(grid, cornerSpawns(grid, entries.size), rules, wallCells = walls)
+    private val board = Board(grid, cornerSpawns(grid, entries.size), rules, turnOrder, walls)
     private val matchRng = SplitMix64(seed)
     private val budgets = Array(entries.size) { Budget(budgetPerSlot[it]) }
     private val scratches = Array(entries.size) { BoardScratch(board, budgets[it]) }

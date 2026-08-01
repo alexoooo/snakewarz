@@ -51,7 +51,8 @@ internal class Flags(private val values: Map<String, String>, known: Set<String>
         return when (text) {
             "fixed" -> Openings.FIXED
             "mirrored" -> Openings.MIRRORED
-            else -> error("--$name wants fixed or mirrored, was '$text'")
+            "complete" -> Openings.COMPLETE
+            else -> error("--$name wants fixed, mirrored or complete, was '$text'")
         }
     }
 

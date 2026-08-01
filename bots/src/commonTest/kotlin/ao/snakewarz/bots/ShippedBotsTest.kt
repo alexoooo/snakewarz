@@ -20,6 +20,10 @@ class ShippedBotsTest {
                 // reads a registry position.
                 "random", "wallhug", "space", "pressure", "chase", "flat-monte-carlo", "uct",
                 "puct", "alphabeta",
+                // Measured wall-map specialist, outside the empty-12 ladder ordering.
+                "cartographer",
+                // Fixed-depth bridge, also outside the ladder rather than three permanent ids.
+                "lookahead",
                 // Contributed. `tomsnake` was here and was retired; a slug is not reused.
                 "burninhell",
             ),
@@ -58,6 +62,7 @@ class ShippedBotsTest {
                 "uct" to listOf("budget", "exploration"),
                 "puct" to listOf("budget", "eval"),
                 "alphabeta" to listOf("budget", "eval"),
+                "lookahead" to listOf("budget"),
             ),
             ShippedBots.entries
                 .filter { it.offered.isNotEmpty() }
@@ -88,6 +93,9 @@ class ShippedBotsTest {
             ),
             puct.params.map { it.name },
         )
+
+        val lookahead = ShippedBots.entryOf(BotId("lookahead"))
+        assertEquals(listOf("depth"), lookahead.params.map { it.name })
     }
 
     @Test
@@ -105,7 +113,8 @@ class ShippedBotsTest {
         assertEquals(
             listOf(
                 "Random", "Wall Hugger", "Space Filler", "Pressure", "Chaser", "Flat Monte Carlo", "UCT",
-                "PUCT", "Alpha-Beta",
+                "PUCT", "Alpha-Beta", "Cartographer",
+                "Lookahead",
                 "Burnin Hell",
             ),
             ShippedBots.entries.map { it.displayName },

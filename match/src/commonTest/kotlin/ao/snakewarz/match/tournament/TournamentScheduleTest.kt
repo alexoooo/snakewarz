@@ -71,7 +71,7 @@ class TournamentScheduleTest {
         // The field a rebuild forgets. `setupFor` names the config's fields one at a time, so a map
         // left off is a whole batch played on a bare rectangle while the log says otherwise -- and
         // nothing else in the setup would look wrong.
-        val walls = generateMap(rows = 9, cols = 9, shape = MapShape.CROSS).walls()
+        val walls = generateMap(rows = 9, cols = 9, shape = MapShape.PILLARS).walls()
         val schedule = TournamentSchedule(configOf(listOf("cycle", "last", "north"), rounds = 4, walls = walls))
 
         for (index in 0 until schedule.matchCount) {

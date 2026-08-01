@@ -35,6 +35,8 @@ internal val SHIPPED_PORTRAITS: Set<String> = setOf(
     "uct",
     "puct",
     "alphabeta",
+    "cartographer",
+    "lookahead",
     "burninhell",
     "human",
 )

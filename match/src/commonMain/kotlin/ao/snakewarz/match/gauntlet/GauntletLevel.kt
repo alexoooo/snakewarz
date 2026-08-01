@@ -22,6 +22,9 @@ import ao.snakewarz.match.map.generateMap
  * [params] is pinned rather than left to the registry's defaults on purpose. A level is a character a
  * player learns to beat, and a knob default moving under it would quietly hand somebody a different
  * opponent at the same level number.
+ *
+ * [mapSeed] is pinned separately from the match seed. A retry may vary turn order and bot randomness,
+ * but it must not redraw the walls: the board measured in `:lab` is the board shipped to the player.
  */
 public class GauntletLevel(
     /** 1-based, and the identifier saved progress is keyed on. */
@@ -42,6 +45,7 @@ public class GauntletLevel(
     public val rows: Int,
     public val cols: Int,
     public val shape: MapShape,
+    public val mapSeed: Long = 0L,
 ) {
     init {
         require(index >= 1) { "a level is numbered from 1, was $index" }
@@ -54,12 +58,12 @@ public class GauntletLevel(
     }
 
     /**
-     * The walls this level is played behind, at [seed].
+     * The walls this level is played behind, at its pinned [mapSeed].
      *
-     * Only [MapShape.SCATTER] reads the seed, so every other level is the same picture every time it
-     * is opened — which is what makes a level a place a player learns rather than a fresh board.
+     * Some shapes read the seed and some do not. Keeping it here makes both kinds one fixed place a
+     * player can learn, and keeps a fresh match seed from changing the measured configuration.
      */
-    public fun map(seed: Long): BoardMap = generateMap(rows, cols, shape, seed = seed)
+    public fun map(): BoardMap = generateMap(rows, cols, shape, seed = mapSeed)
 
     /**
      * The match: [human] in slot 0, the opponent in slot 1, on this level's board and map.
@@ -73,10 +77,10 @@ public class GauntletLevel(
         slots = listOf(human, opponent),
         seed = seed,
         budgetPerTurn = budgetPerTurn,
-        walls = map(seed).walls(),
+        walls = map().walls(),
         slotParams = listOf(BotParams.EMPTY, params),
     )
 
     override fun toString(): String =
-        "GauntletLevel($index $title, ${opponent.slug}, ${rows}x$cols ${shape.slug}, $budgetPerTurn)"
+        "GauntletLevel($index $title, ${opponent.slug}, ${rows}x$cols ${shape.slug}@$mapSeed, $budgetPerTurn)"
 }

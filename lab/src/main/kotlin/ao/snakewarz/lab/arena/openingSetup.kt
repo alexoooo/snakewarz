@@ -25,19 +25,25 @@ import kotlin.math.abs
  * on a map that leaves too little open ground, this hands back the setup it was given, and the run
  * says so.
  */
-internal fun openingSetup(setup: MatchSetup, openings: Openings): MatchSetup {
+internal fun openingSetup(setup: MatchSetup, openings: Openings, openingIndex: Int? = null): MatchSetup {
     if (openings == Openings.FIXED) {
         return setup
     }
 
     val walls = setup.walls()
-    val spawns = spreadSpawns(
-        rows = setup.rows,
-        cols = setup.cols,
-        walls = walls,
-        count = setup.slotCount,
-        rng = SplitMix64(setup.seed).fork(SPAWN_STREAM),
-    ) ?: return setup
+    val spawns = when (openings) {
+        Openings.FIXED -> error("handled above")
+        Openings.MIRRORED -> spreadSpawns(
+            rows = setup.rows,
+            cols = setup.cols,
+            walls = walls,
+            count = setup.slotCount,
+            rng = SplitMix64(setup.seed).fork(SPAWN_STREAM),
+        ) ?: return setup
+        Openings.COMPLETE -> completeOpeningSpawns(
+            checkNotNull(openingIndex) { "a complete opening needs its population index" },
+        )
+    }
 
     return MatchSetup(
         seed = setup.seed,
@@ -52,6 +58,29 @@ internal fun openingSetup(setup: MatchSetup, openings: Openings): MatchSetup {
         budgets = setup.budgets(),
         slotParams = List(setup.slotCount) { setup.paramsFor(it) },
     )
+}
+
+/** The stable identity written to the match log for one member of the complete population. */
+internal fun completeOpeningIdentity(index: Int): String {
+    require(index in 0 until Openings.COMPLETE_POPULATION) {
+        "complete opening $index is outside 0 until ${Openings.COMPLETE_POPULATION}"
+    }
+    return "empty8-rho-${index.toString().padStart(2, '0')}"
+}
+
+/**
+ * One of the forty oriented starts the mirrored rule accepts on an empty 8x8.
+ *
+ * Ascending slot-zero square is the order. That definition, rather than a random seed that happens
+ * to visit the population, makes the identity above stable and keeps opening selection out of the
+ * match seed and both bots' random streams.
+ */
+internal fun completeOpeningSpawns(index: Int): IntArray {
+    require(index in COMPLETE_FIRST_SPAWNS.indices) {
+        "complete opening $index is outside ${COMPLETE_FIRST_SPAWNS.indices}"
+    }
+    val first = COMPLETE_FIRST_SPAWNS[index]
+    return intArrayOf(first, reflectedSquare(Openings.COMPLETE_ROWS, Openings.COMPLETE_COLS, first))
 }
 
 /**
@@ -124,9 +153,12 @@ private fun seatable(rows: Int, cols: Int, walls: IntArray, spawns: IntArray): B
  */
 private fun reflectedPair(rows: Int, cols: Int, rng: Rng): IntArray? {
     val first = rng.nextInt(rows * cols)
-    val second = (rows - 1 - first / cols) * cols + (cols - 1 - first % cols)
+    val second = reflectedSquare(rows, cols, first)
     return if (first == second) null else intArrayOf(first, second)
 }
+
+private fun reflectedSquare(rows: Int, cols: Int, first: Int): Int =
+    (rows - 1 - first / cols) * cols + (cols - 1 - first % cols)
 
 /** [count] distinct squares, drawn one at a time. `null` if a draw repeats one already taken. */
 private fun scattered(playable: Int, count: Int, rng: Rng): IntArray? {
@@ -166,3 +198,23 @@ private fun wellSpread(spawns: IntArray, cols: Int, floor: Int): Boolean {
     }
     return true
 }
+
+private val COMPLETE_FIRST_SPAWNS: IntArray =
+    (0 until Openings.COMPLETE_ROWS * Openings.COMPLETE_COLS)
+        .filter { first ->
+            val pair = intArrayOf(
+                first,
+                reflectedSquare(Openings.COMPLETE_ROWS, Openings.COMPLETE_COLS, first),
+            )
+            wellSpread(
+                pair,
+                Openings.COMPLETE_COLS,
+                separationFloor(Openings.COMPLETE_ROWS, Openings.COMPLETE_COLS, pair.size),
+            )
+        }
+        .toIntArray()
+        .also { starts ->
+            check(starts.size == Openings.COMPLETE_POPULATION) {
+                "the mirrored empty-8x8 population changed from ${Openings.COMPLETE_POPULATION} to ${starts.size}"
+            }
+        }

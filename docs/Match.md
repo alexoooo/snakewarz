@@ -278,13 +278,13 @@ here, and `:lab`'s `rate` prints the worst of them.
 
 ## The gauntlet is a table here, so it can be measured
 
-`gauntlet/` holds the eleven single-player levels, and it is in `:match` for one reason: `:ui`, `:app`
+`gauntlet/` holds the seven single-player levels, and it is in `:match` for one reason: `:ui`, `:app`
 **and `:lab`** all see this module, while `:ui` may never see `:bots`. Putting the table here is what
 lets `:lab` play the exact match a player will play and *measure* that level 7 is harder than level 6.
 
 - **A `GauntletLevel` is a whole match configuration, not a difficulty number.** Three things move from
-  rung to rung and only one of them is the bot: the geometry ramps 8x8 to 20x20 over the first ten and
-  drops back to 8x8 for the boss, the map shape changes, and a searcher's allowance grows. Each moves
+  rung to rung and only one of them is the bot: the geometry changes, each surviving wall shape is
+  used once before the empty-8 boss, and a searcher's allowance grows. Each moves
   the game about as much as swapping the algorithm does.
   `setup(seed, human)` builds an ordinary `MatchSetup` from all of it — human in slot 0, opponent in
   slot 1, turn order still shuffled from the seed, because a level is meant to be hard rather than
@@ -293,25 +293,22 @@ lets `:lab` play the exact match a player will play and *measure* that level 7 i
 - **The opponent is a slug and its knobs are pinned.** A slug because this module has never seen a bot
   class; pinned because a level is a character a player learns to beat, and a registry default moving
   under it would quietly hand somebody a different opponent at the same number.
-- **`index` is frozen on release**, and harder than a `BotId` is: it is the key somebody's saved
-  progress is stored under. Renumbering the table moves every player's place in it.
-- **Six of the eleven grant an allowance of zero**, which is the honest figure rather than a
+- **`index` is frozen within this campaign identity**, and harder than a `BotId` is: it is the key
+  somebody's saved progress is stored under. A replacement campaign therefore gets a new storage
+  identity instead of pretending old level numbers name the new matches.
+- **Two of the seven grant an allowance of zero**, which is the honest figure rather than a
   placeholder: those bots spend nothing whatever they are handed, and writing a default there would
   imply their difficulty has a knob in it.
-- **Only `scatter` reads the seed**, so ten of the levels are the same picture every time they are
-  opened — which is what makes a level a place a player learns rather than a fresh board.
+- **The wall seed is pinned separately from the match seed.** A retry still changes turn order and bot
+  randomness, but it cannot redraw `scatter` or `islands`. The board qualified in `:lab` is therefore
+  the board a player gets, and a rung remains a place that can be learned.
 
-**The order is measured per level and is not the registry's — but the table shipping today is a
-hypothesis rather than a reading.** `BotLadderTest` certifies its rungs on an empty 12x12 and that
-ordering survives neither a map nor a board size; `:lab`'s `gauntlet` subcommand plays every level's
-opponent on that level's own board, map and allowance against one fixed reference, and the ordering is
-right when the reference's score falls. That run was taken on the ten-level table and on the old
-drawings of `rooms`, `diagonals` and `double-spiral`. Release 3 redrew those three, added three more,
-moved four levels onto different maps and added an eleventh on top — so **only `cross` at level 2,
-`pillars` at level 3 and `ring` at level 5 still stand on a number**, and the rest is an intention
-until the subcommand is re-run. `Gauntlet`'s KDoc says which placements are now guesses and which two
-the measurement placed, and [`Bots.md`](Bots.md#the-single-player-gauntlet-is-a-different-ordering-and-it-is-measured-per-level)
-carries the run, kept and labelled stale rather than deleted.
+**The order is measured per level and is not the registry's.** `BotLadderTest` certifies its rungs on
+an empty 12x12 and that ordering survives neither a map nor a board size; `:lab`'s `gauntlet`
+subcommand plays every level's opponent on that level's own board, pinned map and allowance against
+fixed references. The ordering is accepted when neither reference's score rises beyond the declared
+five-point tolerance. [`Bots.md`](Bots.md#the-single-player-gauntlet-is-a-different-ordering-and-it-is-measured-per-level)
+records the campaign and the qualification rule.
 
 ## No worker, and where the seam would be
 

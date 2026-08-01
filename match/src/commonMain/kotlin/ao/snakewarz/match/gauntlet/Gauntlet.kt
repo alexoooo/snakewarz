@@ -5,201 +5,107 @@ import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.match.map.MapShape
 
 /**
- * The eleven levels, weakest first — ten algorithms on eleven different boards.
+ * The seven-level single-player campaign, weakest first.
  *
- * ### Ten slugs, not one bot at ten allowances
+ * Five trivial reactive opponents were removed. The curve now begins with the strongest useful
+ * reactive opponent, introduces a wall-aware non-search bot, and then teaches progressively broader
+ * search before the empty-board championship winner. The six wall layouts use each surviving
+ * non-empty map shape once; the boss returns to an empty 8x8 for a pure tactical duel.
  *
- * Every level up to the tenth names a different algorithm, so what a player meets on the way up is
- * ten ways of playing rather than one opponent thinking for longer. That is also what makes the curve
- * teachable: the move that beats level 4 does not beat level 6, because level 6 is not level 4 with
- * more time. The eleventh repeats a slug and no configuration — see the boss, below.
+ * Every opponent configuration and [GauntletLevel.mapSeed] is pinned. Retries vary the match seed —
+ * and therefore turn order and bot randomness — without redrawing the level or changing its effort.
+ * `:lab`'s `gauntlet` command measures this exact table on each level's own board.
  *
- * ### **This ordering is a hypothesis. It has not been run since the maps changed**
- *
- * The ten-level table this grew from *was* measured, by the instrument named below, and the run is in
- * `docs/Bots.md`. Then three shapes were redrawn — `rooms`, `diagonals` and `double-spiral` — three
- * were added — `arena`, `islands` and `pinwheel` — and four levels changed map. A shape travels as
- * squares rather than as a name, so redrawing one is invisible to every link anybody has shared and
- * *completely* visible to a measurement: the old numbers were taken on boards that no longer exist.
- *
- * What survives unchanged is three rows — `cross` at level 2, `pillars` at level 3 and `ring` at
- * level 5, each the same drawing under the same opponent it was measured under. **Every other map
- * assignment here is a guess**, including level 6's, which is the one the argument below rested on.
- * The re-measurement is on the research agenda; until it is run, read this table as an intention.
- *
- * ### The order is measured on the geometry each level plays, which is why it has to be re-run
- *
- * `BotLadderTest` certifies its rungs on an **empty 12x12**, and that ordering does not survive a map
- * or a board size. Both are documented failures rather than suspicions: `alphabeta:eval=territory`
- * rates above bare `puct` at 8x8 while losing its head-to-head to it, and a six-entrant field measured
- * on `cross` moved `wallhug` about 400 Elo up the table and compressed the whole field to half its
- * empty-board width. So a level table ordered on one board is a hypothesis about ten others.
- *
- * `:lab`'s `gauntlet` subcommand is the instrument that settles it. It plays every level's opponent on
- * **that level's own board, map and allowance** against one fixed reference, and prints the
- * reference's score per level; the ordering is right when that score falls.
- *
- * ### Two maps were placed by that measurement, and they are why placement is measured at all
- *
- * **`cross` sits at level 2, near the bottom, because it lifts a room-filler enormously.** Its first
- * assignment here was level 4, where it put `space` above the two levels over it. A map that
- * compresses the field can only go under a bot too weak to be lifted past anything. That drawing and
- * that level are both untouched, so this one still stands on its number.
- *
- * **`double-spiral` sits at level 6, under the last opponent that does not search, because it inverted
- * what search is worth.** At 16x16, `puct` at a quarter of an allowance beat the same bot at the full
- * one 77-23 on that map and lost 23-77 on a bare board of the same size — the corridor turned the game
- * into a filling race, and a deeper search finds no more of one. Moving it above level 7 would have
- * made a bigger allowance buy a *weaker* level.
- *
- * **That reading was taken on the old drawing, and the redraw went at exactly the property it rested
- * on**: the corridors alternated one and two squares and are now a uniform two. So level 6 is the
- * placement here with the strongest prior *and* the most specific reason to doubt it — which is the
- * shape of every row in this table now, and the reason a guess is written down as a guess.
- *
- * ### Where this deviates from the shipped registry order, and why
- *
- * `burninhell` is a contributed bot, is not a rung of `BotLadderTest`, and `docs/Bots.md` claims
- * nothing about its strength; its place here was a measurement rather than an inheritance.
- *
- * ### The boss is the top search running its dearest appraisal, on the one board that can afford it
- *
- * Levels 9 and 10 play their **shipped default appraisal** rather than the dearest one available:
- * `eval=chamber` costs about 4.6x `territory` per evaluation, which on a 20x20 overruns `:ui`'s frame
- * slice several times over. Level 11 is where that stops being true — an 8x8 is small enough to pay
- * for it, and a small bare board is a pure tactical duel with nowhere to hide. Eleven levels, ten
- * algorithms, no repeated configuration.
- *
- * It is a different opponent rather than a proven harder one, and `AlphaBetaBot.EVAL` is why the
- * distinction is worth keeping: that leaf finishes *below* the cheap one in a common field on a bare
- * 12x12. Whether it is harder at 8x8 is the last row the re-measurement has to answer.
+ * The final boss is `alphabeta:budget=1700,eval=territory`, the strongest deployable configuration
+ * found by the complete empty-8 championship. That is a strongest-measured result under the browser
+ * envelope, not a claim of solved or unbeatable play.
  */
 public object Gauntlet {
-    /**
-     * Level 1 upward. The index into this list is [GauntletLevel.index] minus one, and [levelAt] is
-     * the lookup that does not make a caller remember that.
-     */
+    /** Level 1 upward, with [GauntletLevel.index] equal to its one-based position. */
     public val levels: List<GauntletLevel> = listOf(
         GauntletLevel(
             index = 1,
-            title = "Static",
-            blurb = "Wanders at random. It has no plan, and it will walk into a wall on its own.",
-            opponent = BotId("random"),
-            params = BotParams.EMPTY,
-            budgetPerTurn = NO_ALLOWANCE,
-            rows = 8,
-            cols = 8,
-            shape = MapShape.ARENA,
-        ),
-        GauntletLevel(
-            index = 2,
-            title = "The Sweeper",
-            blurb = "Sweeps the board column by column. It never once looks at where you are.",
-            opponent = BotId("burninhell"),
-            params = BotParams.EMPTY,
-            budgetPerTurn = NO_ALLOWANCE,
-            rows = 10,
-            cols = 10,
-            shape = MapShape.CROSS,
-        ),
-        GauntletLevel(
-            index = 3,
-            title = "The Hugger",
-            blurb = "Runs for the nearest wall and spirals inward, packing itself away neatly.",
-            opponent = BotId("wallhug"),
-            params = BotParams.EMPTY,
-            budgetPerTurn = NO_ALLOWANCE,
-            rows = 10,
-            cols = 10,
-            shape = MapShape.PILLARS,
-        ),
-        GauntletLevel(
-            index = 4,
-            title = "Room Reader",
-            blurb = "Always takes the move that leaves it the most room. It still ignores you entirely.",
-            opponent = BotId("space"),
-            params = BotParams.EMPTY,
-            budgetPerTurn = NO_ALLOWANCE,
-            rows = 12,
-            cols = 12,
-            shape = MapShape.SCATTER,
-        ),
-        GauntletLevel(
-            index = 5,
-            title = "The Crowder",
-            blurb = "Keeps its own room, then leans on yours. The first opponent that has noticed you.",
-            opponent = BotId("pressure"),
-            params = BotParams.EMPTY,
-            budgetPerTurn = NO_ALLOWANCE,
-            rows = 12,
-            cols = 12,
-            shape = MapShape.RING,
-        ),
-        GauntletLevel(
-            index = 6,
             title = "The Hunter",
-            blurb = "Walks the shortest path to your head and closes the door behind you.",
+            blurb = "Tracks your head and tries to close the distance. The first opponent that fights back.",
             opponent = BotId("chase"),
             params = BotParams.EMPTY,
             budgetPerTurn = NO_ALLOWANCE,
-            rows = 14,
-            cols = 14,
-            shape = MapShape.DOUBLE_SPIRAL,
+            rows = 12,
+            cols = 12,
+            shape = MapShape.PILLARS,
+            mapSeed = MAP_SEED,
         ),
         GauntletLevel(
-            index = 7,
+            index = 2,
+            title = "The Cartographer",
+            blurb = "Reads walls, exits and pockets, then claims safe territory without searching ahead.",
+            opponent = BotId("cartographer"),
+            params = BotParams.EMPTY,
+            budgetPerTurn = NO_ALLOWANCE,
+            rows = 16,
+            cols = 16,
+            shape = MapShape.ROOMS,
+            mapSeed = MAP_SEED,
+        ),
+        GauntletLevel(
+            index = 3,
+            title = "The Lookout",
+            blurb = "Looks one reply ahead, enough to spot traps that a purely reactive opponent cannot see.",
+            opponent = BotId("lookahead"),
+            params = BotParams(mapOf("depth" to "1")),
+            budgetPerTurn = 4,
+            rows = 12,
+            cols = 12,
+            shape = MapShape.ARENA,
+            mapSeed = MAP_SEED,
+        ),
+        GauntletLevel(
+            index = 4,
             title = "The Gambler",
-            blurb = "Plays hundreds of games to the finish in its head and takes whichever move won most.",
+            blurb = "Plays hundreds of complete games in its head and takes whichever move won most.",
             opponent = BotId("flat-monte-carlo"),
             params = BotParams.EMPTY,
             budgetPerTurn = 400,
-            rows = 14,
-            cols = 14,
-            shape = MapShape.DIAGONALS,
+            rows = 12,
+            cols = 12,
+            shape = MapShape.SCATTER,
+            mapSeed = MAP_SEED,
         ),
         GauntletLevel(
-            index = 8,
+            index = 5,
             title = "The Student",
-            blurb = "Same guesses, but it remembers them — and spends its next thousand where they paid.",
+            blurb = "Remembers which imagined games paid off and spends its next search where they did.",
             opponent = BotId("uct"),
             params = BotParams.EMPTY,
             budgetPerTurn = 600,
-            rows = 16,
-            cols = 16,
+            rows = 12,
+            cols = 12,
             shape = MapShape.ISLANDS,
+            mapSeed = MAP_SEED,
         ),
         GauntletLevel(
-            index = 9,
+            index = 6,
             title = "The Planner",
-            blurb = "Starts each search with a hunch, and judges a position by the ground it would own.",
+            blurb = "Starts each search with a territorial hunch, then tests it against complete games.",
             opponent = BotId("puct"),
             params = BotParams(mapOf("eval" to "territory")),
-            budgetPerTurn = 1_000,
-            rows = 16,
-            cols = 16,
+            budgetPerTurn = 600,
+            rows = 12,
+            cols = 12,
             shape = MapShape.PINWHEEL,
+            mapSeed = MAP_SEED,
         ),
         GauntletLevel(
-            index = 10,
-            title = "The Oracle",
-            blurb = "Reads every reply to every move, a dozen turns ahead, and guesses at nothing nearer.",
+            index = 7,
+            title = "Final Boss",
+            blurb = "Reads every reply on an empty 8x8 and fights for every square. Nowhere to hide.",
             opponent = BotId("alphabeta"),
             params = BotParams(mapOf("eval" to "territory")),
-            budgetPerTurn = 1_000,
-            rows = 20,
-            cols = 20,
-            shape = MapShape.ROOMS,
-        ),
-        GauntletLevel(
-            index = 11,
-            title = "Final Boss",
-            blurb = "Reads as deeply as the last one and weighs every room by who reaches it first. Nowhere to hide.",
-            opponent = BotId("alphabeta"),
-            params = BotParams(mapOf("eval" to "chamber")),
-            budgetPerTurn = 1_000,
+            budgetPerTurn = 1_700,
             rows = 8,
             cols = 8,
             shape = MapShape.EMPTY,
+            mapSeed = MAP_SEED,
         ),
     )
 
@@ -214,11 +120,5 @@ public object Gauntlet {
     override fun toString(): String = "Gauntlet($size levels)"
 }
 
-/**
- * What a level grants an opponent that declares no search allowance.
- *
- * Zero rather than a default nobody reads: six of the eleven levels are bots that spend nothing
- * whatever they are handed, and writing the figure they actually use keeps the table from implying
- * that their difficulty has a knob in it.
- */
 private const val NO_ALLOWANCE: Int = 0
+private const val MAP_SEED: Long = 0L

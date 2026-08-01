@@ -141,7 +141,7 @@
     </section>
 
     <!--
-      Eleven tiles, one per rung, and static like the four scoreboard cards: the gauntlet is a fixed
+      Seven tiles, one per rung, and static like the four scoreboard cards: the gauntlet is a fixed
       table, so Kotlin only ever writes each tile's text, its state and its picture. Not a third
       exception to "Kotlin never constructs structure".
 
@@ -160,7 +160,7 @@
             <h1>Gauntlet</h1>
         </div>
         <p class="note">
-            Ten opponents and a Final Boss, and as many attempts as you like. Beat one and the next
+            Six opponents and a Final Boss, and as many attempts as you like. Beat one and the next
             unlocks.
         </p>
 
@@ -247,54 +247,6 @@
                     <span class="level-state"></span>
                 </button>
                 <button id="level-replay-7" type="button" class="level-replay"
-                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
-            </li>
-            <li>
-                <button id="level-8" type="button" class="level locked" disabled>
-                    <img class="portrait" alt="" aria-hidden="true">
-                    <span class="level-no">&mdash;</span>
-                    <span class="level-title">&mdash;</span>
-                    <span class="level-blurb"></span>
-                    <span class="level-meta"></span>
-                    <span class="level-state"></span>
-                </button>
-                <button id="level-replay-8" type="button" class="level-replay"
-                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
-            </li>
-            <li>
-                <button id="level-9" type="button" class="level locked" disabled>
-                    <img class="portrait" alt="" aria-hidden="true">
-                    <span class="level-no">&mdash;</span>
-                    <span class="level-title">&mdash;</span>
-                    <span class="level-blurb"></span>
-                    <span class="level-meta"></span>
-                    <span class="level-state"></span>
-                </button>
-                <button id="level-replay-9" type="button" class="level-replay"
-                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
-            </li>
-            <li>
-                <button id="level-10" type="button" class="level locked" disabled>
-                    <img class="portrait" alt="" aria-hidden="true">
-                    <span class="level-no">&mdash;</span>
-                    <span class="level-title">&mdash;</span>
-                    <span class="level-blurb"></span>
-                    <span class="level-meta"></span>
-                    <span class="level-state"></span>
-                </button>
-                <button id="level-replay-10" type="button" class="level-replay"
-                        aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
-            </li>
-            <li>
-                <button id="level-11" type="button" class="level locked" disabled>
-                    <img class="portrait" alt="" aria-hidden="true">
-                    <span class="level-no">&mdash;</span>
-                    <span class="level-title">&mdash;</span>
-                    <span class="level-blurb"></span>
-                    <span class="level-meta"></span>
-                    <span class="level-state"></span>
-                </button>
-                <button id="level-replay-11" type="button" class="level-replay"
                         aria-label="Watch your winning run" title="Watch your winning run" hidden>&#9655;</button>
             </li>
         </ol>
@@ -442,11 +394,7 @@
                 <option value="arena">Arena</option>
                 <option value="pillars">Pillars</option>
                 <option value="pinwheel">Pinwheel</option>
-                <option value="ring">Ring</option>
-                <option value="cross">Cross</option>
-                <option value="diagonals">Diagonals</option>
                 <option value="rooms">Rooms</option>
-                <option value="double-spiral">Double spiral</option>
                 <option value="scatter">Scatter</option>
                 <option value="islands">Islands</option>
                 <option id="map-from-replay" value="from-replay" hidden>&mdash; from replay &mdash;</option>

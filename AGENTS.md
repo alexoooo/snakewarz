@@ -135,7 +135,7 @@ with `.\gradlew.bat`.
 ./gradlew :lab:run --args="ab uct uct:exploration=2.5"
 ./gradlew :lab:run --args="rate"
 ./gradlew :lab:run --args="spsa puct --knobs cpuct"
-./gradlew :lab:run --args="play uct puct --map cross"
+./gradlew :lab:run --args="play uct puct --map arena"
 ./gradlew :lab:run --args="gauntlet --rounds 200"
 ```
 

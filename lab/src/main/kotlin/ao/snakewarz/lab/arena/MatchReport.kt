@@ -18,6 +18,8 @@ internal class MatchReport(
     val index: Int,
     /** Which matches shared this board — see `TournamentSchedule.pairKeyFor`. */
     val pairKey: Int,
+    /** Stable complete-population member, shared across pairings, seatings and replications. */
+    val openingIdentity: String?,
     /** Which contestant sat in which seat. */
     val seating: IntArray,
     val stats: MatchStats,

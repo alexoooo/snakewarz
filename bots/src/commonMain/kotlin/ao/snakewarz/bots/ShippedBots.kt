@@ -9,10 +9,13 @@ import ao.snakewarz.bots.reactive.BurninHellBot
 import ao.snakewarz.bots.reactive.RandomBot
 import ao.snakewarz.bots.reactive.WallHugBot
 import ao.snakewarz.bots.reactive.chase.ChaseBot
+import ao.snakewarz.bots.reactive.policy.PolicyBot
+import ao.snakewarz.bots.reactive.policy.PolicyVariant
 import ao.snakewarz.bots.reactive.space.PressureBot
 import ao.snakewarz.bots.reactive.space.SpaceBot
 import ao.snakewarz.bots.search.AlphaBetaBot
 import ao.snakewarz.bots.search.FlatMonteCarloBot
+import ao.snakewarz.bots.search.LookaheadBot
 import ao.snakewarz.bots.search.puct.PuctBot
 import ao.snakewarz.bots.search.puct.TerritoryEval
 import ao.snakewarz.bots.search.uct.UctBot
@@ -30,12 +33,12 @@ import ao.snakewarz.bots.search.uct.UctBot
  * The list is ordered by registration and looked up by hash, never iterated by hash — a registry
  * that reorders itself between runs reorders every tournament derived from it.
  *
- * It comes in two sections, and it used to come in three. The first is **the ladder**: nine bots,
- * weakest first, each rung beating the one below it over twenty matches — `BotLadderTest` is what
- * says so. The second is the bots **contributed** to the original 2005 project, ported semantically
- * and ordered by slug. There used to be a third, **experimental** — registered, gated by the same
- * contract suite, and making no claim about strength that nobody had measured. It held `puct` and
- * `alphabeta`, it is empty now, and the block below `uct` records what emptied it.
+ * It comes in four sections. The first is **the ladder**: nine bots, weakest first, each rung beating
+ * the one below it over twenty matches — `BotLadderTest` is what says so. Then come the measured
+ * **map specialist** and **fixed-depth bridge**, both gated by the same contract suite but outside
+ * the empty-12 ordering the sidebar otherwise shows. The last section is the bots **contributed**
+ * to the original 2005 project, ported semantically and ordered by slug. `puct` and `alphabeta` used
+ * to be experimental; the block below `uct` records what promoted them.
  *
  * **A bot earns its place by what it lets you measure, not by what it scores.** A roster is a set of
  * instruments: an Elo floor (`random`), an ablation control (`flat-monte-carlo` is `uct` minus the
@@ -46,9 +49,9 @@ import ao.snakewarz.bots.search.uct.UctBot
  * `random` must stay first, and the reason is not the one this comment used to give. It said `:ui`
  * seats the second slot from the first bot on the list; `Chrome.kt` has seated `DEFAULT_OPPONENT`
  * for some time and falls back to `bots.firstOrNull()` only when a registry does not offer it. So
- * registration order decides the opening opponent for a *custom* registry and nothing else — and the
- * order still has to be weakest-first, because that is the claim `BotLadderTest` asserts rung by
- * rung and the order the sidebar shows.
+ * registration order decides the opening opponent for a *custom* registry and nothing else. The
+ * ladder subsection still has to be weakest-first because `BotLadderTest` asserts it rung by rung;
+ * the explicitly labelled specialist and contributed sections make no such ordering claim.
  *
  * **Slugs are frozen once released.** They are written into replay URLs; renaming one breaks every
  * link ever shared.
@@ -61,6 +64,7 @@ public object ShippedBots : BotRegistry {
         register("space", "Space Filler", ::SpaceBot)
         register("pressure", "Pressure", ::PressureBot, PressureBot.KNOBS)
         register("chase", "Chaser", ::ChaseBot, ChaseBot.KNOBS)
+
         register("flat-monte-carlo", "Flat Monte Carlo", ::FlatMonteCarloBot, FlatMonteCarloBot.KNOBS)
         register("uct", "UCT", ::UctBot, UctBot.KNOBS)
 
@@ -86,6 +90,25 @@ public object ShippedBots : BotRegistry {
         // was made on the other one. At 8x8 this bot loses its head-to-head to `puct` while rating
         // above it. The rung below asserts the 12x12 ordering, which is the board it is measured on.
         register("alphabeta", "Alpha-Beta", ::AlphaBetaBot, AlphaBetaBot.KNOBS)
+
+        // P2's free wall-aware map specialist. Six no-tree policies were measured separately on
+        // five maps; this full owned-ground variant qualified on all five and led its siblings on
+        // arena, rooms and double-spiral. It beat Chase 106-91 in a broader empty-12 field but split
+        // the exact 20-game BotLadderTest pairing 10-10, so seating it as an empty-board rung would
+        // be a false ordering claim. Its rule has no public knobs: the five alternatives remain
+        // research ablations rather than replay formats.
+        register(
+            "cartographer",
+            "Cartographer",
+            BotFactory { setup -> PolicyBot(setup, PolicyVariant.FULL_OWNED) },
+        )
+
+        // P4's fixed mini-search bridge. It keeps Cartographer's ordering and whole-policy fallback,
+        // then exhausts one to three individual turns at caps of 4, 16 and 64 evaluations. Depth 3
+        // beat Cartographer directly on all six research boards and took nontrivial games from both
+        // FMC@400 and UCT@600, but its map-separated profile is not an empty-12 ladder claim. One
+        // slug exposes the measured engine; `depth` selects its shape without freezing three ids.
+        register("lookahead", "Lookahead", ::LookaheadBot, LookaheadBot.KNOBS)
 
         // Contributed to the original project. Not a ladder rung, and kept for a reason that is not
         // strength: with `wallhug` it is one of only two bots here that draw no randomness at all, so

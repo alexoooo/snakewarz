@@ -14,8 +14,8 @@ import kotlin.math.abs
 /**
  * A position, read from one slot's point of view as a fixed-length vector of bounded numbers.
  *
- * This is the input a learned evaluation gets in place of the board, and it is **the only part of
- * `:bots` that is public besides the registry**. That is deliberate and it is the whole design: a
+ * This is the input a learned evaluation gets in place of the board, and it is one of the module's
+ * deliberate public trainer seams, beside the action-policy extractor and model. A
  * trainer lives in `:lab`, Kotlin's `internal` is module-scoped, and `:lab`'s main compilation is not
  * an associated compilation of `:bots` — so a trainer that could not import this would have to
  * reimplement it, and a reimplementation that drifts by one term produces a bot that is merely

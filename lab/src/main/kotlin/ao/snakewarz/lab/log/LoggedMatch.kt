@@ -16,6 +16,8 @@ internal class LoggedMatch(
     val index: Int,
     /** Which matches shared this board — the unit a paired comparison counts in. */
     val pairKey: Int,
+    /** Stable complete-population member, or `null` for legacy and sampled-opening runs. */
+    val openingIdentity: String? = null,
     val seed: Long,
     /** Seats in the order they acted, which is the confound a mirrored pair exists to cancel. */
     val turnOrder: List<Int>,
@@ -45,6 +47,7 @@ internal class LoggedMatch(
                 run = run,
                 index = report.index,
                 pairKey = report.pairKey,
+                openingIdentity = report.openingIdentity,
                 seed = report.seed,
                 turnOrder = stats.setup.turnOrder().toList(),
                 end = stats.outcome?.end?.name.orEmpty(),

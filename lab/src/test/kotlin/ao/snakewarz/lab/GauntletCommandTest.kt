@@ -1,15 +1,22 @@
 package ao.snakewarz.lab
 
 import ao.snakewarz.bots.ShippedBots
+import ao.snakewarz.lab.gauntlet.GauntletCandidate
+import ao.snakewarz.lab.gauntlet.GauntletTrialLevel
 import ao.snakewarz.match.gauntlet.Gauntlet
+import ao.snakewarz.match.map.MapShape
+import ao.snakewarz.match.map.generateMap
+import ao.snakewarz.match.tournament.Contestant
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * That the eleven levels name bots that exist, configured in ways those bots accept.
+ * That the seven levels name bots that exist, configured in ways those bots accept.
  *
  * **This lives here rather than beside `Gauntlet` because `:match` may not see `:bots`**, and that edge
  * is not negotiable to make a test compile — SW-04. `:lab` is one of the two modules that legitimately
@@ -18,10 +25,95 @@ import kotlin.test.assertTrue
  * blank screen on the level-select page.
  *
  * How well each level plays is not here either. That is `GauntletCommand`, it takes several hundred
- * complete matches on eleven boards, and it is run from the command line rather than from a suite that
+ * complete matches on seven boards, and it is run from the command line rather than from a suite that
  * has to finish while somebody watches.
  */
 class GauntletCommandTest {
+    @Test
+    fun `the research candidate is the frozen seven-level measurement table`() {
+        val actual = GauntletCandidate.levels.map { level ->
+            val settings = level.opponent.params.names.joinToString(",") {
+                "$it=${level.opponent.params.string(it, "")}"
+            }
+            listOf(
+                "${level.index}",
+                level.opponent.bot.slug,
+                "${level.opponent.budgetPerTurn}",
+                settings,
+                "${level.rows}x${level.cols}",
+                level.shape.slug,
+                "${level.mapSeed}",
+            ).joinToString("|")
+        }
+
+        assertEquals(
+            listOf(
+                "1|chase|0||12x12|pillars|0",
+                "2|cartographer|0||16x16|rooms|0",
+                "3|lookahead|4|depth=1|12x12|arena|0",
+                "4|flat-monte-carlo|400||12x12|scatter|0",
+                "5|uct|600||12x12|islands|0",
+                "6|puct|600|eval=territory|12x12|pinwheel|0",
+                "7|alphabeta|1700|eval=territory|8x8|empty|0",
+            ),
+            actual,
+        )
+    }
+
+    @Test
+    fun `every research candidate spec is accepted by the shipped registry`() {
+        for (level in GauntletCandidate.levels) {
+            val entry = ShippedBots.entryOf(level.opponent.bot)
+            if (level.opponent.budgetPerTurn == 0) {
+                assertNull(entry.search, "candidate level ${level.index} grants zero to a search bot")
+            } else {
+                assertNotNull(entry.search, "candidate level ${level.index} grants an allowance to a free bot")
+            }
+
+            for (name in level.opponent.params.names) {
+                val knob = entry.params.firstOrNull { it.name == name }
+                assertNotNull(knob, "candidate level ${level.index} sets unknown knob '$name'")
+                assertNull(
+                    knob.reject(level.opponent.params.string(name, "")),
+                    "candidate level ${level.index} sets an invalid '$name'",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `the shipped campaign is the frozen research candidate`() {
+        val shipped = Gauntlet.levels.map(GauntletTrialLevel::shipped)
+
+        for ((expected, actual) in GauntletCandidate.levels.zip(shipped)) {
+            assertEquals(expected.index, actual.index)
+            assertEquals(expected.opponent, actual.opponent)
+            assertEquals(expected.rows, actual.rows)
+            assertEquals(expected.cols, actual.cols)
+            assertEquals(expected.shape, actual.shape)
+            assertEquals(expected.mapSeed, actual.mapSeed)
+            assertContentEquals(expected.walls(), actual.walls())
+        }
+    }
+
+    @Test
+    fun `trial walls read the pinned map seed and not a match seed`() {
+        val level = GauntletTrialLevel(
+            index = 1,
+            opponent = Contestant(ShippedBots.entries.first().id, 0),
+            rows = 16,
+            cols = 16,
+            shape = MapShape.ISLANDS,
+            mapSeed = 7L,
+        )
+        val pinned = level.walls()
+        val expected = generateMap(16, 16, MapShape.ISLANDS, seed = 7L).walls()
+        val anotherMatchSeed = generateMap(16, 16, MapShape.ISLANDS, seed = 8L).walls()
+
+        assertContentEquals(expected, pinned)
+        assertFalse(pinned.contentEquals(anotherMatchSeed), "fixture seeds drew the same islands")
+    }
+
     @Test
     fun `every level names a bot the shipped registry has`() {
         for (level in Gauntlet.levels) {
@@ -74,9 +166,8 @@ class GauntletCommandTest {
         val reference = LabCommand.contestantOf(GauntletCommand.DEFAULT_REFERENCE, ShippedBots)
         val entry = ShippedBots.entryOf(reference.bot)
 
-        // The ten shipped slugs are exactly the ten opponents the eleven levels draw on, so a
-        // reference is necessarily one of them at a different allowance -- which only distinguishes
-        // it if the bot declares one at all.
+        // The default reference also appears as a level, so its different allowance only
+        // distinguishes it if the bot declares one at all.
         assertNotNull(entry.search, "${entry.id.slug} spends nothing, so no allowance tells it from a level")
 
         val collisions = Gauntlet.levels.filter {

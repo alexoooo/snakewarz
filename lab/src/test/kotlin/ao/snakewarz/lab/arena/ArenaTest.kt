@@ -41,6 +41,50 @@ class ArenaTest {
     }
 
     @Test
+    fun `complete covers every opening in both seatings independently of threading`() {
+        val config = TournamentConfig(
+            contestants = listOf("space", "wallhug").map { Contestant(BotId(it)) },
+            rows = Openings.COMPLETE_ROWS,
+            cols = Openings.COMPLETE_COLS,
+            rounds = Openings.COMPLETE_ROUNDS_PER_REPLICATION,
+            budgetPerTurn = 0,
+        )
+
+        val alone = Arena(config, ShippedBots, Openings.COMPLETE, threads = 1).run()
+        val crowded = Arena(config, ShippedBots, Openings.COMPLETE, threads = 8).run()
+
+        assertEquals(
+            alone.reports.map { it.openingIdentity to it.moveStreamHash },
+            crowded.reports.map { it.openingIdentity to it.moveStreamHash },
+        )
+        assertEquals(Openings.COMPLETE_POPULATION, alone.leastOpeningCoverage?.covered)
+        assertEquals(0, alone.forfeits, "a forfeit is a defect, not complete-opening evidence")
+        for (opening in alone.reports.groupBy { it.openingIdentity }.values) {
+            assertEquals(2, opening.size)
+            assertEquals(listOf(0, 1), opening.map { it.seating[0] }.sorted())
+            assertEquals(1, opening.map { it.seed }.toSet().size, "both seatings share the match seed")
+        }
+    }
+
+    @Test
+    fun `complete repeats opening identities without coupling them to later match seeds`() {
+        val config = TournamentConfig(
+            contestants = listOf("space", "wallhug").map { Contestant(BotId(it)) },
+            rows = Openings.COMPLETE_ROWS,
+            cols = Openings.COMPLETE_COLS,
+            rounds = Openings.COMPLETE_ROUNDS_PER_REPLICATION * 2,
+            seed = 70,
+            budgetPerTurn = 0,
+        )
+
+        val reports = Arena(config, ShippedBots, Openings.COMPLETE, threads = 2).run().reports
+        for (opening in reports.groupBy { it.openingIdentity }.values) {
+            assertEquals(4, opening.size)
+            assertEquals(2, opening.map { it.seed }.toSet().size)
+        }
+    }
+
+    @Test
     fun `a mirrored opening buys the sample size a fixed one does not`() {
         // The measurement this whole package exists for. `wallhug` draws no randomness at all, so
         // with the snakes always in the same corners its pairing is a handful of games however many

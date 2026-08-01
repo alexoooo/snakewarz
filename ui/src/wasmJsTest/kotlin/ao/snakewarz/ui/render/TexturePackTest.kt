@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
 class TexturePackTest {
     @Test
     fun `every shape has a feeling, and every feeling has a shape`() {
-        // Totality is the compiler's job -- the `when` has no `else`, so a twelfth shape does not
+        // Totality is the compiler's job -- the `when` has no `else`, so an eighth shape does not
         // build. What no compiler can say is the other direction: a pack no shape is ever drawn
         // with is a treatment nobody will see, and a pack is only worth having if a board wears it.
         val drawn = MapShape.entries.map { TexturePack.of(it) }.toSet()
@@ -29,10 +29,9 @@ class TexturePackTest {
 
     @Test
     fun `the shapes that scatter their walls read differently from the shapes that lay them`() {
-        // Not eleven feelings: a pack groups the shapes whose *character* is the same, and these
+        // Not seven feelings: a pack groups the shapes whose *character* is the same, and these
         // three groups are the ones a player could name from the board alone.
         assertEquals(TexturePack.MASONRY, TexturePack.of(MapShape.ROOMS))
-        assertEquals(TexturePack.MASONRY, TexturePack.of(MapShape.DOUBLE_SPIRAL))
         assertEquals(TexturePack.LATTICE, TexturePack.of(MapShape.PILLARS))
         assertEquals(TexturePack.RUBBLE, TexturePack.of(MapShape.SCATTER))
         assertEquals(TexturePack.RUBBLE, TexturePack.of(MapShape.ISLANDS))

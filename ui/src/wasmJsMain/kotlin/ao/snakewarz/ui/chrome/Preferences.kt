@@ -78,26 +78,19 @@ internal object Preferences {
 
     private const val THEME_KEY = "snakewarz.theme.v1"
 
-    /**
-     * The constant and the string it holds deliberately disagree.
-     *
-     * The campaign was called the Ladder when this key shipped, and the key is somebody's saved
-     * place: renaming the *string* would hand every existing player a browser that has never heard
-     * of them and open them back at level 1. SW-05 freezes what was released, so the word survives
-     * where only the storage can see it and nowhere a player can.
-     */
-    private const val GAUNTLET_KEY = "snakewarz.ladder.v1"
+    /** The seven-level campaign; the retired development table remains unread under its old key. */
+    private const val GAUNTLET_KEY = "snakewarz.gauntlet.v2"
 
     /**
-     * One key per rung — `snakewarz.gauntlet.replay.<n>.v1` — rather than one key holding them all.
+     * One key per rung — `snakewarz.gauntlet.replay.<n>.v2` — rather than one key holding them all.
      *
      * Writing one level then rewrites nothing else, a value that arrives corrupt costs that one rung
      * rather than the lot, and there is no concatenation format for anybody to parse. A record is on
-     * the order of a kilobyte at the turn limit, so eleven of them sit far inside any quota.
+     * the order of a kilobyte at the turn limit, so seven of them sit far inside any quota.
      *
      * The version belongs to the *board* as much as to the layout: a rung whose map or opponent
      * changed would otherwise hand somebody a game on a board that no longer exists, and bumping to
      * `.v2` leaves the old value unread rather than played.
      */
-    private fun levelReplayKey(level: Int): String = "snakewarz.gauntlet.replay.$level.v1"
+    private fun levelReplayKey(level: Int): String = "snakewarz.gauntlet.replay.$level.v2"
 }

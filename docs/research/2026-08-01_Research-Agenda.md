@@ -35,13 +35,13 @@ different fixed limits; none may move effort from an easy turn to a later one.
 
 | Phase | Workstream | State |
 |---|---|---|
-| P1 | The wall-aware baseline and complete 8x8 openings | planned |
-| P2 | The strongest hand-written policy without a tree | planned |
-| P3 | A learned policy without a tree | planned |
-| P4 | The fixed mini-search bridge | planned |
-| P5 | The empty-8x8 championship | planned |
-| P6 | Solve what can be solved on empty 8x8 | planned |
-| P7 | Rebuild and measure the Gauntlet | planned |
+| P1 | The wall-aware baseline and complete 8x8 openings | complete |
+| P2 | The strongest hand-written policy without a tree | complete |
+| P3 | A learned policy without a tree | complete |
+| P4 | The fixed mini-search bridge | complete |
+| P5 | The empty-8x8 championship | complete |
+| P6 | Solve what can be solved on empty 8x8 | complete |
+| P7 | Rebuild and measure the Gauntlet | in progress: shipped and machine-qualified; human play gate open |
 
 The coordinator owns this table and the "What P*n* actually found" sections. Agents report; they do
 not edit either.
@@ -284,10 +284,10 @@ search without pretending allowance and clock are interchangeable.
 
 #### Enumerate 8x8 openings
 
-Add a `:lab` schedule that enumerates every legal two-seat opening accepted by `MatchSetup`, pairs it
-with its half-turn mirror, and reports coverage as `N of N`, not "distinct games" inferred after the
-run. The schedule must preserve the normal spawn rule; hand-placing friendlier starts would define a
-different boss.
+Add a `:lab` schedule that enumerates every oriented start in the normal mirrored opening rule, pairs
+it with its half-turn mirror, and reports coverage as `N of N`, not "distinct games" inferred after
+the run. The schedule must preserve the normal spawn rule; hand-placing arbitrary starts merely
+accepted by the low-level `MatchSetup` constructor would define a different boss.
 
 For a deterministic pairing, one pass of both seatings is the population. For a stochastic pairing,
 repeat the population under declared bot-RNG seeds and bootstrap whole openings. Verify that the old
@@ -303,6 +303,69 @@ Every later phase uses a lane unchanged for the whole match.
 **Deliverable.** Six separate baseline tables, complete-opening support for `empty` 8x8, and a cost
 table from which P2-P7 can choose fixed limits. Do not run the current `gauntlet` table merely to
 confirm that the first five rows are easy.
+
+#### What P1 actually found
+
+**The measurement defects are closed.** `--openings complete` now covers the empty-8x8 mirrored
+population directly: 40 oriented starts, both contestant seatings, 80 matches per pairing and
+optional whole-population replications. It rejects walls, another geometry, FFA and an explicit
+round count. Opening identity is logged in `matches-v2.tsv`, old logs remain readable, and rating
+intervals resample an opening with all pairings, seatings and replications attached. Coverage and
+forfeits print before the strength matrix.
+
+The planned phrase "every legal opening accepted by `MatchSetup`" was falsified. That constructor can
+represent 4,032 ordered pairs of distinct squares on empty 8x8, including placements the game never
+spawns. The shipped mirrored rule plus its separation predicate has 40 oriented starts, or 20 pairs
+under the half turn. The old seeded sampler was proved to be a subset of exactly that population.
+
+The baseline ran on six separately fitted boards with no forfeits. Empty 8x8 used seed 11,001 and
+three complete bot-RNG replications; each entrant played 1,440 games. The five wall boards used 200
+mirrored rounds per pairing and 1,000 games per entrant. Ratings and 95% opening/seed-blocked
+intervals were:
+
+| Entrant | empty 8x8 | arena 12 | cross 12 | rooms 16 | double spiral 16 | islands 16, seed 61,001 |
+|---|---:|---:|---:|---:|---:|---:|
+| `chase` | -403 [-437,-373] | -358 [-396,-330] | -330 [-365,-301] | -383 [-421,-356] | -384 [-420,-349] | -445 [-483,-409] |
+| `flat-monte-carlo@400` | -250 [-272,-231] | -146 [-170,-124] | +29 [+10,+49] | -167 [-189,-145] | -311 [-342,-284] | -141 [-165,-120] |
+| `uct@600` | +7 [-14,+30] | +86 [+66,+107] | +132 [+113,+152] | +48 [+27,+69] | -162 [-193,-137] | +42 [+17,+61] |
+| `uct@1000` | +81 [+66,+97] | +111 [+90,+132] | +164 [+145,+184] | +105 [+84,+126] | -102 [-131,-78] | +97 [+74,+121] |
+| `puct@1000` | +142 [+125,+160] | +136 [+116,+157] | -50 [-71,-30] | +190 [+169,+213] | +569 [+520,+625] | +223 [+199,+246] |
+| `alphabeta:eval=territory@1000` | +143 [+120,+166] | +171 [+148,+192] | +55 [+38,+73] | +207 [+183,+233] | +391 [+355,+431] | +222 [+199,+244] |
+| `alphabeta:eval=chamber@1000` | +278 [+256,+301] | — | — | — | — | — |
+
+Integrity preceded those fits: empty covered 40/40 openings in every pairing and produced
+4,133/5,040 distinct matches; `arena`, `cross`, `rooms`, `double-spiral` and `islands` produced
+2,734, 2,810, 2,862, 2,775 and 2,858 distinct matches out of 3,000. All replays were retained as the
+P3 position stream. The result strongly falsifies a single map-general ordering: UCT@1000 leads on
+`cross`, territory alpha-beta leads `arena` and `rooms`, PUCT dominates `double-spiral`, and PUCT and
+territory alpha-beta are tied on the seeded `islands` board.
+
+Chrome 151 priced the exact configurations on a fixed Space-v-Space position tape, with 24 or more
+positions per board and five passes bracketed by fresh `uct@600` controls. A cell required at least
+four before/after controls within 15% of their pair mean. Values below are median mean / largest raw
+turn in milliseconds; two `rooms` cells come from a declared retry. The `arena` PUCT cell stayed
+control-unstable through two retries and is not treated as precise.
+
+| Entrant | empty 8x8 | arena 12 | cross 12 | rooms 16 | double spiral 16 | islands 16 |
+|---|---:|---:|---:|---:|---:|---:|
+| `chase` | 0.008 / 0.1 | 0.010 / 0.1 | 0.016 / 0.1 | 0.026 / 0.2 | 0.017 / 0.1 | 0.032 / 0.2 |
+| `flat-monte-carlo@400` | 0.708 / 1.9 | 0.941 / 2.3 | 0.700 / 1.8 | 0.776 / 3.4 | 0.661 / 2.5 | 1.000 / 2.6 |
+| `uct@600` | 1.583 / 3.8 | 1.993 / 4.1 | 1.608 / 3.4 | 1.869 / 3.5 | 1.564 / 4.8 | 2.307 / 5.4 |
+| `uct@1000` | 2.735 / 6.0 | 3.282 / 6.7 | 2.825 / 6.5 | 3.223 / 5.6 | 2.558 / 7.0 | 3.867 / 23.1 |
+| `puct@1000` | 2.210 / 4.5 | unstable | 2.712 / 5.5 | 4.034 / 6.2 | 3.267 / 9.2 | 4.200 / 7.7 |
+| `alphabeta:eval=territory@1000` | 2.283 / 4.0 | 2.820 / 6.6 | 2.862 / 6.2 | 4.200 / 7.9 | 3.420 / 9.2 | 4.328 / 8.6 |
+| `alphabeta:eval=chamber@1000` | 5.775 / 10.3 | — | — | — | — | — |
+
+Those clusters fix four player-facing envelopes for the rest of the agenda: **free** means zero
+charged evaluations and at most 0.25 ms observed; **tiny** is 3.5 ms; **standard** is 5.5 ms; and
+**boss** is 10.5 ms on empty 8x8 only. They classify a configuration after measurement; they never
+change its allowance during a match. UCT@1000 is outside every map-general envelope because of the
+23.1 ms islands turn, although it fits the empty-only boss envelope.
+
+Shipped in P1: the complete-opening CLI/log/bootstrap instrument, its JVM tests, the six-board Chrome
+cost harness and the workflow documentation. No bot, default, Gauntlet level or gameplay rule changed.
+The full build and the Chrome browser suite passed after the harness was split into per-board tests;
+the first one-test attempt was voided when Karma received no completion heartbeat for ten minutes.
 
 ### P2 — The strongest hand-written policy without a tree
 
@@ -321,7 +384,8 @@ Start with four readings already in the tree rather than a new bag of heuristics
 Test a small ablation family behind an internal experiment seam. Do **not** register one bot per weight
 vector. First measure:
 
-1. tie rate and top-1 agreement with P1's deepest deployable search, split by map and game phase;
+1. tie rate and top-1 agreement with P1's strongest map-local tested fixed-budget search, split by
+   map and game phase (the teacher's cost does not constrain the free-lane student);
 2. cost per turn, including the worst wall layout; and
 3. a field with stock `chase`, every ablation and P1's cheapest search anchor.
 
@@ -335,6 +399,89 @@ keep the best diagnostic internally and freeze no slug.
 
 **Deliverable.** One hand-written no-tree candidate worth presenting as a Gauntlet opponent, or a
 measured ceiling on this class of bot.
+
+#### What P2 actually found
+
+**A free wall-aware policy qualified, but it is a map specialist rather than an empty-board ladder
+rung.** One preallocated scorer tested six rules: guarded path; local liberty/pinch/tail; local plus
+the half-room guard; full path/local/room; full plus the unresolved wall bonus; and full plus
+mover-owned component area. It never applied a transition, asked for scratch, consumed an evaluation
+or allocated per choice. A length-one mover's retracting head is correctly free; every other old head
+remains the neck. Exact raw ties use board, turn, seat and destination hashes.
+
+The agreement instrument read one dedicated P1 run per map, verified every replay's seed, turn order
+and move-stream hash, and sampled 1,000 choice positions in each completed-game third. Replay
+selection and within-replay turn selection use independent hashes, so a longer match gets no extra
+chance to enter the cap. The expert was persistent per seat and called on every recorded turn. Every
+rate below resampled the same complete-opening or mirrored-pair blocks as P1.
+
+| Map and fixed teacher | full-owned unique top-1, early / middle / late | guarded-path late ceiling |
+|---|---:|---:|
+| empty 8x8, chamber alpha-beta@1000 | 43.9% / 55.0% / 55.6% | 87.9% |
+| arena 12, territory alpha-beta@1000 | 46.6% / 56.6% / 56.8% | 85.4% |
+| cross 12, UCT@1000 | 40.2% / 41.3% / 40.5% | 91.6% |
+| rooms 16, territory alpha-beta@1000 | 57.6% / 54.5% / 53.8% | 84.9% |
+| double spiral 16, PUCT@1000 | 46.3% / 59.5% / 57.1% | 88.5% |
+| islands 16 seed 61,001, PUCT@1000 | 47.6% / 53.4% / 51.8% | 80.8% |
+| same islands positions, territory alpha-beta@1000 | 50.7% / 60.2% / 55.5% | 85.5% |
+
+That last pair falsifies teacher-independent “accuracy”: changing only the teacher moves full-owned
+agreement by 3–7 points. Guarded path's very high ceiling on `cross` also mostly describes ties—its
+middle tie rate is 83.1%—not a selected action. Most importantly, owned area barely changes top-1
+agreement yet materially changes corridor strength below. Agreement saw visibility, not value, just
+as the phase brief warned.
+
+The first Chrome cost pass was void because single-call Chase controls were below the 100 µs clock
+tick. Two calibration passes then exposed integer truncation in the repaired control mean; their
+classifications were void too. The final predeclared harness retained one raw call at each of the
+same 24–37 positions, timed 100 extra calls as a batch, and compared full batch rates by integer
+cross-multiplication. All 36 cells had at least four of five stable control pairs and zero consumed
+evaluations:
+
+| Rule | median mean range over six maps | largest raw turn |
+|---|---:|---:|
+| guarded path | 7–28 µs | 0.20 ms |
+| local | <1 µs | 0.10 ms |
+| local plus room | 3–11 µs | 0.20 ms |
+| full | 7–29 µs | 0.20 ms |
+| full plus wall | 7–30 µs | 0.20 ms |
+| full plus owned | 9–37 µs | 0.20 ms |
+
+Every rule therefore fit P1's fixed 0.25 ms free lane and entered strength. Five fresh-seed fields
+used 200 mirrored rounds, Chase, all six rules and UCT@600; no temporary id retained a replay. There
+were no forfeits. Each entrant played 1,400 games per map, and the fields produced 2,836, 3,399,
+3,494, 3,126 and 3,496 distinct games out of 5,600:
+
+| Entrant | arena 12 | cross 12 | rooms 16 | double spiral 16 | islands 16, seed 62,001 |
+|---|---:|---:|---:|---:|---:|
+| Chase | -55 [-73,-37] | -96 [-114,-81] | -8 [-27,+13] | +16 [-3,+37] | +22 [+4,+40] |
+| guarded path | -63 [-79,-50] | +24 [+6,+40] | +21 [+2,+38] | +40 [+23,+58] | +67 [+51,+86] |
+| local | -261 [-282,-243] | -270 [-292,-251] | -520 [-568,-483] | -370 [-404,-344] | -479 [-519,-449] |
+| local plus room | -34 [-50,-18] | +21 [+2,+39] | -166 [-184,-148] | +17 [+1,+34] | -93 [-112,-73] |
+| full | -26 [-39,-13] | -84 [-99,-68] | +82 [+67,+99] | +40 [+22,+55] | -1 [-18,+16] |
+| full plus wall | +3 [-11,+17] | -33 [-51,-16] | +50 [+33,+68] | +26 [+8,+41] | +6 [-13,+23] |
+| **full plus owned** | **+27 [+10,+41]** | **-21 [-38,-4]** | **+111 [+96,+127]** | **+90 [+73,+107]** | **+53 [+35,+70]** |
+| UCT@600 | +409 [+378,+441] | +459 [+427,+495] | +429 [+402,+460] | +140 [+124,+159] | +424 [+395,+463] |
+
+Guarded path, full, full-wall and full-owned clear the predeclared qualification rule. Local alone is
+decisively harmful. Local-plus-room clears the point thresholds but is wholly below Chase on `rooms`
+and `islands`, so it fails the remaining-board safeguard. The wall bonus never wins a field and is
+not adopted. Full-owned leads its siblings on `arena`, `rooms` and `double-spiral`; guarded path leads
+on `cross` and `islands`, but loses their direct pairing badly on the other three. Full-owned is the
+robust winner.
+
+The separate empty-12 adoption field was deliberately not pooled with those wall maps. Full-owned
+beat Chase directly 106-91 and lost to FMC@400 27-171, but common-opponent rating put it below Chase;
+the exact twenty-game `BotLadderTest` tape split 10-10. That falsifies a monotone empty-board rung.
+The scoring rule nevertheless ships under the frozen slug **`cartographer`**, in the registry's
+explicit map-specialist section rather than its empty-12 ladder. The other five `p2-` labels remain
+JVM-lab-only ablations and cannot enter replay payloads. P2 shipped the bot, portrait, golden canary,
+contract coverage, Chrome timing harness, agreement command and workflow documentation; it changed
+no default, allowance, rule or Gauntlet level.
+
+The permanent surface then passed the complete `:bots` and `:app` Chrome targets and the repository's
+full `build` gate. The roster, portrait table and public documentation now distinguish nine empty-12
+ladder bots, Cartographer as a wall-map specialist, and the one contributed bot.
 
 ### P3 — A learned policy without a tree
 
@@ -370,6 +517,37 @@ two useful rungs; if the learned one merely replaces the hand-written one, ship 
 **Deliverable.** A portable, deterministic no-tree policy with a held-out-map result, or a direct
 measurement that learning does not buy enough beyond P2 to justify a permanent bot.
 
+#### What P3 actually found
+
+**The learned linear action policy did not transfer beyond Cartographer, so P3 stopped before Chrome
+cost and strength.** The new shared `action-policy-v1` extractor exposes ten bounded, action-varying
+wall-aware readings. A grouped JVM trainer calls each fixed 1,000-evaluation teacher on every replay
+turn, fits a shared multiclass linear score on Q8 inputs, selects L2 on disjoint experimental blocks,
+then encodes and decodes the exact portable integer model before any holdout directory is opened.
+The instrument is deterministic across one and four labeling workers and retains no released bot id.
+
+The development corpus retained 11,242 unique training inputs and 2,922 validation inputs. Exact Q8
+deduplication reported 608 repeated training inputs with 203 conflicting expert labels; validation
+dropped 197 inputs already seen in training. L2 selected zero, with train/validation log loss
+0.831527/0.834765. Validation unique top-1 agreement was 1,490/2,922 (50.99%) for the learned model
+and 1,549/2,922 (53.01%) for Cartographer. Empty 8x8 improved by 2.82 points and cross by 2.26, but
+arena lost 5.11, rooms 6.44 and the two unseen development islands 3.80 and 0.82 points.
+
+The primary holdout retained 5,833 inputs after 151 duplicate inputs, 21 conflicting labels and 16
+development overlaps were removed. Learned unique top-1 agreement was **2,884/5,833 (49.44%)** against
+Cartographer's **3,100/5,833 (53.15%)**, a loss of 3.70 percentage points. On `double-spiral` alone it
+was 1,372/2,894 (47.41%) against 1,603/2,894 (55.39%), **-7.98 points** in every progress third. Across
+eight disjoint islands layouts it was 1,512/2,939 (51.45%) against 1,497/2,939 (50.94%), +0.51 points
+overall but ranging from -4.11 to +7.80 by layout. The aggregate failed the required win and the fixed
+topology exceeded the two-point family safeguard. A hidden model was therefore not tried, no browser
+cost was claimed, no strength field ran and no weights, slug, portrait or replay identity shipped.
+
+The negative is narrower than "learning cannot help": one linear combination of ten local/spatial
+facts cannot replace Cartographer's lexicographic safeguards across maps. The reusable result is the
+wall-safe action corpus/trainer and a measured boundary saying the next useful middle must add search,
+not merely another no-tree combination of the same facts. The complete retained output is
+`.lab/p3-policy-train.log`.
+
 ### P4 — The fixed mini-search bridge
 
 Build the missing search depths explicitly instead of approximating them with a tiny allowance on
@@ -399,6 +577,28 @@ as one.
 **Deliverable.** One or more fixed-cost configurations that fill the measured interval, plus the
 smallest depth at which the gain appears. Register a new algorithm only after that result; depth is a
 configuration, not a reason for three slugs.
+
+#### Result
+
+The bridge qualified at every depth. Exact fixtures pin complete 4/16/64-leaf searches and exact
+Cartographer fallback at 3/15/63; all six P1 tapes then completed every searchable root with zero
+fallback. Paired Chrome pricing put every depth in the 3.5 ms tiny lane. The largest accepted raw
+turn was 1.4 ms, depth 3 on `rooms`; one unstable `arena` depth-2 control bracket was replaced by the
+single declared full-target repeat, while valid first-pass rows were retained.
+
+The seven-entrant field used 80 matches per pairing on each map, complete openings on empty 8x8 and
+fresh mirrored wall runs elsewhere. Depth 1 was the smallest useful search: it beat Cartographer on
+all six boards, narrowly on `cross` (41 wins, 38 losses, one draw) and decisively on the other five.
+Depth 2 also cleared the parent everywhere. Depth 3 was the stable winner of the family, scoring
+100%, 90%, 61%, 98%, 86% and 98% directly against Cartographer on empty, arena, cross, rooms,
+double-spiral and islands respectively.
+
+Depth 3 was not a disguised full search. Against FMC@400 it won five boards but scored only 27% on
+`cross`; against UCT@600 it scored 24%, 33%, 16%, 38%, 90% and 48%. That is the desired middle: much
+stronger than the no-tree parent, normally below UCT, and a real corridor specialist rather than a
+monotone allowance ladder. It ships once as `lookahead`; depths 1, 2 and 3 remain configurations of
+that algorithm. The smallest gain is depth 1 and the empty-8 P5 qualifier is depth 3. Retained field,
+rating and browser artifacts are under `.lab/p4-*`.
 
 ### P5 — The empty-8x8 championship
 
@@ -435,6 +635,26 @@ It may not say "optimal" or "unbeatable". That word belongs to P6.
 **Deliverable.** The empirical boss, runner-up, full opening-by-finalist matrix, allowance curve and
 Chrome cost. It must directly clear the current `alphabeta:eval=chamber@1000` boss or the current boss
 stays until P6 changes the answer.
+
+#### What P5 actually found
+
+Complete-opening strength was strongly non-monotone in allowance, so the largest frame-safe integer
+was not the champion. Seven frozen family curves selected a common deployable field. In its 8,400
+games, five complete-opening replications and zero forfeits, `alphabeta:eval=territory@1700` ranked
+first at 45.6% maximin (37.5-52.5%). `alphabeta:eval=chamber@800` ranked second at 41.1%
+(36.1-45.8%); territory@1700 won their direct pairing 195-124 with 81 draws, 58.9% and a
+53.1-63.9% shared-opening interval. It also cleared the old chamber@1000 boss in its disjoint curve,
+68.3% with a 58.1-77.9% interval.
+
+The winner's accepted Chrome worst turn was 8.4 ms in the championship grid and 9.3 ms in P7's exact
+level check, both inside the frozen 10.5 ms boss lane. Chamber@1000 won the original unrestricted
+finalist field but its authoritative 10.8 ms reading missed that lane. P5 therefore names territory
+alpha-beta@1700 the **strongest measured deployable empty-8x8 boss** under the declared field,
+complete-opening population, fixed allowance and browser envelope. It does not call it optimal.
+
+Retained evidence is under `.lab/p5-primary-field`, `.lab/p5-finalists`, the seven
+`.lab/p5-curve-*` directories and `.lab/p5-deployable-finalists`. The `championship`, `allowance`
+and read-only `allowance-report` commands reproduce the paired-bootstrap reports.
 
 ### P6 — Solve what can be solved on empty 8x8
 
@@ -484,6 +704,25 @@ and must compete with P5 under the same boss envelope.
 strongest possible boss under the rules. **Deliverable B:** a measured exact-endgame hybrid and an
 explicit unsolved region, in which case P5's wording remains "strongest measured".
 
+#### What P6 actually found
+
+The exact JVM verifier structurally keys every ordered body and turn field, exhaustively solves by
+paranoid minimax and independently replays each proof. Under the frozen 1,024 MiB, 5,000,000 nodes
+per position and 200,000,000 total-visit caps, it solved all eight sampled positions through 24
+remaining open cells. At threshold 28 it solved six positions and two reached the per-position cap,
+so the declared extension stopped before 32. It used 12,377,986 exact visits and 728.31 MiB of
+declared arrays.
+
+There were no usable transposition hits at any threshold. Full-key checks rejected the observed
+structural-hash collisions, confirming why `BoardView.hash` alone could not support a proof. The P5
+champion's recorded move remained in the exact tied-optimal set on every verified position through
+the largest complete tier, so an endgame hybrid had zero observed corrections and was not promoted.
+
+P6 closes at the feasibility gate: a complete opening proof is not supported by the measured growth
+or memory behaviour, and no browser table or dynamic effort policy ships. The strongest possible AI
+on empty 8x8 remains unknown; the honest final-boss claim remains P5's strongest measured result.
+The `solve-endgame` command and retained solver summaries make that negative bound reproducible.
+
 ### P7 — Rebuild and measure the Gauntlet
 
 Only winners enter this phase. The intended eleven-level shape is a candidate pool, not a promise that
@@ -517,37 +756,66 @@ distinct-games line first, especially for deterministic policies on fixed maps.
 Machine ordering is necessary and not sufficient for human difficulty. The user plays at least the
 first level, one middle hybrid and the boss before the table is called done. The checks are simple:
 level 1 is interesting but beatable, the middle introduces recognisably stronger replies rather than
-only longer pauses, and the boss feels qualitatively harder than level 10.
+only longer pauses, and the boss feels qualitatively harder than the preceding full-search level.
 
 **Deliverable.** A rebuilt level table, its two-reference score profile, per-level browser cost and a
 manual play note. Update `Gauntlet`'s KDoc and [`../Bots.md`](../Bots.md) with the new measurements;
 remove their stale notices only after the exact shipped configurations have been run.
 
+#### What P7 has actually found so far
+
+The shipped campaign is seven levels, not eleven. After the machine-qualified opponent curve was
+selected, the release owner retired the four enclosed shapes `cross`, `ring`, `diagonals` and
+`double-spiral`. The seven surviving shapes now appear exactly once:
+
+| # | Opponent | Board | Fixed allowance | Accepted Chrome worst |
+|---:|---|---|---:|---:|
+| 1 | `chase` | `pillars` 12x12 | 0 | 0.1 ms |
+| 2 | `cartographer` | `rooms` 16x16 | 0 | 0.2 ms |
+| 3 | `lookahead:depth=1` | `arena` 12x12 | 4 | 0.2 ms |
+| 4 | `flat-monte-carlo` | `scatter@0` 12x12 | 400 | 2.8 ms |
+| 5 | `uct` | `islands@0` 12x12 | 600 | 4.9 ms |
+| 6 | `puct:eval=territory` | `pinwheel` 12x12 | 600 | 3.3 ms |
+| 7 | `alphabeta:eval=territory` | `empty` 8x8 | 1,700 | 7.2 ms |
+
+P3 produced no learned rung, P4 depth 3 could not hold a consistent adjacent band under both P7
+references, and P6 produced no exact hybrid. A provisional territory alpha-beta@900 rooms rung fit
+the strength curve but its stable 6.0 ms worst turn failed the 5.5 ms standard lane. Those rows were
+removed instead of preserving labels or changing their rules after measurement.
+
+The exact **shipped** seven-map reruns each completed 1,400 games with no forfeit. UCT@100 scored
+69/66/61/63/25/25/11%; PUCT@250 scored 98/99/95/82/55/45/17%. Every adjacent rise is inside the
+five-point practical band. UCT produced 200/200 distinct games at every level; PUCT produced
+107, 161, 121, 200, 200, 100 and 74 distinct games. Machine qualification is retained in
+`.lab/p7-seven-map-final-uct100` and `.lab/p7-seven-map-final-puct250`; exact Chrome evidence is
+`.lab/p7-exact-seven-map-app-browser-cost.{log,xml}`.
+
+Persistent `Gauntlet`, UI and progress code now use this exact table. Each level pins `mapSeed=0`
+separately from the fresh match seed, so a retry changes turn order and bot randomness without
+redrawing `scatter` or `islands`. The rebuilt campaign starts fresh under
+`snakewarz.gauntlet.v2`; old development progress and per-level runs remain unread under their old
+keys, while ordinary replay links remain compatible because they carry wall squares rather than a
+shape name. Only the required human play pass at the first, one middle and boss levels remains.
+
 ---
 
-## Decisions left for the close
-
-These do not block research; P1-P6 can proceed under the assumptions stated here.
+## Decisions resolved during the program
 
 ### What happens to existing Gauntlet progress
 
-Indices are persistent saved-progress keys. If most configurations change, preserving every cleared
-bit means some players inherit credit for levels they never played; clearing progress discards a real
-achievement. P7 presents the final scope and the release owner chooses preservation, a versioned
-migration or a new campaign identity. Replays are unaffected because they carry their complete setup.
+The seven-level table is a new `snakewarz.gauntlet.v2` campaign identity with no migration from the
+retired development table. This was the release owner's choice while the game remains in testing.
+Ordinary replays are unaffected because they carry their complete setup.
 
 ### Whether both policy winners deserve public bot identities
 
-The Gauntlet resolves opponents through `BotRegistry`, so a genuinely new algorithm needs a public,
-frozen slug. Registration also exposes it in Custom and adds it to permanent contract coverage. If
-the learned and hand-written policies play the same role, ship one. If their map-local profiles create
-two measured rungs, name both only then.
+P2's hand-written `cartographer` qualified and ships. P3's learned no-tree policy did not clear the
+agreement and cost gate, so it received no public identifier and no campaign rung.
 
 ### How large the boss's browser envelope is
 
-P1 reports fixed cost lanes and P5 gives an allowance curve. The release owner chooses the final
-pause/frame tradeoff after seeing those numbers. Until then the research winner is reported at each
-lane; no phase silently grants the boss a larger time budget because it is the boss.
+The boss lane remains P1's 10.5 ms worst-turn limit. Territory alpha-beta@1700 is the common-field
+winner and its exact shipped-board check was 7.2 ms, so no larger envelope or exception was needed.
 
 ---
 

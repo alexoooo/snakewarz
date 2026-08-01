@@ -32,7 +32,7 @@ import kotlin.test.assertTrue
  *
  * Driven against a cut-down skeleton for [ShellTest]'s reason — what is under test is the rule, not
  * which ids the page happens to use — but the tiles are generated from [Gauntlet] rather than written
- * out, because a test that hard-codes ten of them would stop covering an eleventh.
+ * out, because the test should follow the measured table when its size changes.
  */
 class GauntletScreenTest {
     private val skeleton: HTMLElement = (document.createElement("div") as HTMLElement).also {
@@ -198,7 +198,7 @@ class GauntletScreenTest {
         val THEME: Theme = Theme.of(Theme.DEFAULT_ID, dark = false)
 
         /** `Preferences`' per-rung key, written out here for the reason `PreferencesTest` writes it out. */
-        fun replayKey(level: Int): String = "snakewarz.gauntlet.replay.$level.v1"
+        fun replayKey(level: Int): String = "snakewarz.gauntlet.replay.$level.v2"
 
         const val OPPONENT_NAME = "The First One"
 
@@ -219,7 +219,7 @@ class GauntletScreenTest {
             MatchSetup.create(rows = 8, cols = 8, slots = listOf(Gauntlet.levels.first().opponent), seed = 1)
 
         /**
-         * One tile per rung, generated so that an eleventh level would still be covered.
+         * One tile per rung, generated so the test follows the table rather than a written count.
          *
          * The ▷ is a **sibling** of the tile here for the reason it is one in `index.html`: a tile is
          * a `<button>`, so a nested one would be invalid markup and would never receive its click.

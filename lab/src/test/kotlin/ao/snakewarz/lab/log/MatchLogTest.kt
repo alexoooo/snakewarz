@@ -146,10 +146,50 @@ class MatchLogTest {
         val log = MatchLog(directory)
         recordBatch(log, Arena(config, ShippedBots, threads = 1).run(), ShippedBots, "MIRRORED", 1, Replays.NONE)
 
-        val matches = directory.resolve("matches.tsv")
+        val matches = directory.resolve("matches-v2.tsv")
         Files.writeString(matches, matches.readLines().dropLast(1).joinToString("\n", postfix = "\n7\t3\tt"))
 
         assertEquals(1, log.matches().size, "the intact match survives its neighbour being torn")
+    }
+
+    @Test
+    fun `the match schema before opening identity remains readable`() {
+        val directory = Files.createTempDirectory("snakewarz-log")
+        val config = configOf(listOf(Contestant(BotId("space")), Contestant(BotId("wallhug"))), rounds = 2)
+        val log = MatchLog(directory)
+        recordBatch(log, Arena(config, ShippedBots, threads = 1).run(), ShippedBots, "MIRRORED", 1, Replays.NONE)
+
+        val current = directory.resolve("matches-v2.tsv")
+        val legacy = current.readLines().joinToString("\n", postfix = "\n") { line ->
+            line.split('\t').dropLast(1).joinToString("\t")
+        }
+        Files.writeString(directory.resolve("matches.tsv"), legacy)
+        Files.delete(current)
+
+        val read = log.matches()
+        assertEquals(2, read.size)
+        assertTrue(read.all { it.openingIdentity == null })
+    }
+
+    @Test
+    fun `complete opening identity survives the match log`() {
+        val directory = Files.createTempDirectory("snakewarz-log")
+        val config = TournamentConfig(
+            contestants = listOf(Contestant(BotId("space")), Contestant(BotId("wallhug"))),
+            rows = Openings.COMPLETE_ROWS,
+            cols = Openings.COMPLETE_COLS,
+            rounds = Openings.COMPLETE_ROUNDS_PER_REPLICATION,
+            budgetPerTurn = 0,
+        )
+        val batch = Arena(config, ShippedBots, Openings.COMPLETE, threads = 2).run()
+        val log = MatchLog(directory)
+
+        recordBatch(log, batch, ShippedBots, "COMPLETE", 2, Replays.NONE)
+
+        assertEquals(
+            batch.reports.map { it.openingIdentity },
+            log.matches().map { it.openingIdentity },
+        )
     }
 
     @Test

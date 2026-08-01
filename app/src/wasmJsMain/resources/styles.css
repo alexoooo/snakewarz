@@ -380,7 +380,7 @@ body.failed #loading {
 /* Gauntlet ----------------------------------------------------------------- */
 
 /*
- * Eleven tiles that reflow from one column on a phone to three on a desktop. `auto-fill` rather than a
+ * Seven tiles that reflow from one column on a phone to three on a desktop. `auto-fill` rather than a
  * fixed count, so the number of columns is the width's business and not a set of breakpoints to keep
  * in step with the rest of the page.
  */
@@ -503,7 +503,7 @@ body.failed #loading {
  * of the tile's grid with nothing in it -- the number is in column 2 and the badge is a row below --
  * so the control needs no room made for it and every tile keeps the height it had.
  *
- * Slightly transparent until it is pointed at, so eleven cleared tiles read as a column of levels
+ * Slightly transparent until it is pointed at, so seven cleared tiles read as a column of levels
  * with a control on each rather than as a column of controls.
  */
 .level-replay {

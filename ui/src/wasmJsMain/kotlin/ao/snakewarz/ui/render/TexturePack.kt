@@ -35,12 +35,13 @@ import ao.snakewarz.match.map.MapShape
  * `MatchOptions.shape`, and a `#r=` link or a map that came out of a replay has no shape at all and
  * gets `null` — which is [PLAIN], the board this game always drew.
  *
- * ### Four packs across eleven shapes
+ * ### Four packs across seven shapes
  *
- * A pack is a *feeling*, and eleven feelings is eleven times the drawing for a difference nobody
- * could name. So `empty` and `arena` share one, everything built out of straight runs shares
- * another, and the two shapes that scatter their walls share a third. [of] is a `when` with **no
- * `else`**, so a twelfth shape is a compile error rather than a board that quietly comes out plain.
+ * A pack is a *feeling*, and seven feelings is seven times the drawing for a difference nobody
+ * could name. So `empty` and `arena` share one, `rooms` gets a built-wall treatment, the two regular
+ * obstacle maps share a lattice, and the two shapes that scatter their walls share rubble. [of] is
+ * a `when` with **no `else`**, so an eighth shape is a compile error rather than a board that quietly
+ * comes out plain.
  */
 internal enum class TexturePack(
     /**
@@ -58,7 +59,7 @@ internal enum class TexturePack(
     PLAIN(blockInset = 0.0, studded = false),
 
     /**
-     * Walls somebody laid: the long straight runs of `ring`, `cross`, `rooms` and `double-spiral`.
+     * Walls somebody laid: the long straight runs of `rooms`.
      *
      * A groove and nothing else. These are the shapes whose whole character is a wall you follow, and
      * the one thing worth saying about a wall you follow is where each block of it ends.
@@ -66,7 +67,7 @@ internal enum class TexturePack(
     MASONRY(blockInset = 0.09, studded = false),
 
     /**
-     * A regular pattern of small obstacles: `pillars`, `pinwheel`, `diagonals`.
+     * A regular pattern of small obstacles: `pillars` and `pinwheel`.
      *
      * Blocks stand well clear of their squares and carry a stud, so a lone one reads as something
      * placed rather than as a chip out of a wall, and the bare board is stippled on the same period —
@@ -120,8 +121,8 @@ internal enum class TexturePack(
          */
         fun of(shape: MapShape?): TexturePack = when (shape) {
             null, MapShape.EMPTY, MapShape.ARENA -> PLAIN
-            MapShape.RING, MapShape.CROSS, MapShape.ROOMS, MapShape.DOUBLE_SPIRAL -> MASONRY
-            MapShape.PILLARS, MapShape.PINWHEEL, MapShape.DIAGONALS -> LATTICE
+            MapShape.ROOMS -> MASONRY
+            MapShape.PILLARS, MapShape.PINWHEEL -> LATTICE
             MapShape.SCATTER, MapShape.ISLANDS -> RUBBLE
         }
 

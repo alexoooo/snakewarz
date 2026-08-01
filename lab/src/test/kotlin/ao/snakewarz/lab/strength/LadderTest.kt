@@ -5,6 +5,7 @@ import ao.snakewarz.bots.ShippedBots
 import ao.snakewarz.lab.arena.Arena
 import ao.snakewarz.lab.arena.Openings
 import ao.snakewarz.lab.log.LoggedMatch
+import ao.snakewarz.lab.log.LoggedSlot
 import ao.snakewarz.match.tournament.Contestant
 import ao.snakewarz.match.tournament.TournamentConfig
 import ao.snakewarz.match.tournament.TournamentFormat
@@ -111,6 +112,28 @@ class LadderTest {
     }
 
     @Test
+    fun `complete bootstrap keeps every matchup seating and replication of an opening together`() {
+        val matches = buildList {
+            for (opening in 0 until 3) {
+                for (pairing in 0 until 3) {
+                    for (replication in 0 until 2) {
+                        for (seating in 0 until 2) {
+                            add(loggedForBootstrap(opening, pairing, replication, seating))
+                        }
+                    }
+                }
+            }
+        }
+
+        val groups = bootstrapGroups(matches)
+
+        assertEquals(3, groups.size)
+        assertTrue(groups.all { it.size == 12 }, groups.map { it.size }.toString())
+        assertTrue(groups.all { group -> group.map { it.openingIdentity }.toSet().size == 1 })
+        assertTrue(groups.all { group -> group.map { it.pairKey }.toSet().size == 6 })
+    }
+
+    @Test
     fun `at three seats the rating's own scoring rule is not the win rate beside it`() {
         // The reason `rate` prints both columns for a free-for-all. `pairwiseOutcomes` scores three
         // seats by *outlasting*, so a matrix score is a survival order; `winShare` counts the snake
@@ -213,6 +236,24 @@ class LadderTest {
 
     private fun ladderOf(matches: List<LoggedMatch>): Ladder =
         Ladder.of(matches, ShippedBots, TournamentFormat.HEAD_TO_HEAD)
+
+    private fun loggedForBootstrap(opening: Int, pairing: Int, replication: Int, seating: Int): LoggedMatch =
+        LoggedMatch(
+            run = "complete-run",
+            index = (((opening * 3 + pairing) * 2 + replication) * 2 + seating),
+            pairKey = pairing * 2 + replication,
+            openingIdentity = "empty8-rho-${opening.toString().padStart(2, '0')}",
+            seed = replication.toLong(),
+            turnOrder = listOf(0, 1),
+            end = "LAST_SNAKE",
+            turnsPlayed = 2,
+            elapsedMicros = 1,
+            moveStreamHash = opening.toLong(),
+            slots = listOf(
+                LoggedSlot(0, 0, "space:budget=0", 0, 1, 1, true, "", true),
+                LoggedSlot(1, 1, "wallhug:budget=0", 0, 1, 1, false, "TRAPPED", false),
+            ),
+        )
 
     private class Batch(val result: ao.snakewarz.lab.arena.BatchResult, val matches: List<LoggedMatch>)
 

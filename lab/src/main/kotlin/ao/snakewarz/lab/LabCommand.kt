@@ -5,15 +5,31 @@ import ao.snakewarz.botapi.knob.BotParams
 import ao.snakewarz.botapi.registry.BotEntry
 import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.botapi.registry.BotRegistry
+import ao.snakewarz.lab.allowance.AllowanceCurveCommand
+import ao.snakewarz.lab.allowance.AllowanceCurvePlan
+import ao.snakewarz.lab.allowance.AllowanceCurveReadCommand
 import ao.snakewarz.lab.arena.Arena
+import ao.snakewarz.lab.arena.Openings
+import ao.snakewarz.lab.championship.ChampionshipCommand
+import ao.snakewarz.lab.endgame.EndgameCommand
+import ao.snakewarz.lab.gauntlet.GauntletCandidate
+import ao.snakewarz.lab.gauntlet.GauntletTrialLevel
 import ao.snakewarz.lab.log.MatchLog
+import ao.snakewarz.lab.log.Replays
+import ao.snakewarz.lab.policy.PolicyCommand
+import ao.snakewarz.lab.policy.PolicyLabRegistry
+import ao.snakewarz.lab.policytrain.ActionDatasetSpec
+import ao.snakewarz.lab.policytrain.PolicyTrainCommand
+import ao.snakewarz.lab.policytrain.PolicyTrainDataset
 import ao.snakewarz.lab.strength.Sprt
 import ao.snakewarz.lab.tune.KnobSpace
 import ao.snakewarz.match.MatchSetup
+import ao.snakewarz.match.gauntlet.Gauntlet
 import ao.snakewarz.match.map.MapShape
 import ao.snakewarz.match.map.generateMap
 import ao.snakewarz.match.tournament.Contestant
 import ao.snakewarz.match.tournament.TournamentConfig
+import ao.snakewarz.match.tournament.TournamentFormat
 import java.nio.file.Path
 
 /**
@@ -54,21 +70,26 @@ internal interface LabCommand {
 
         private const val DEFAULT_SEED = 1L
 
+        private const val DEFAULT_POLICY_POSITIONS = 1_000
+        private const val DEFAULT_POLICY_SEED = 72_001L
+        private const val DEFAULT_ALLOWANCE_REPLICATIONS = 3
+        private const val DEFAULT_ALLOWANCE_SEED = 91_001L
+
         /** What `--density` means when nobody said: whatever the shape ships with. */
         private const val SHIPPED_DENSITY = 0.0
 
         private val PLAY_FLAGS = setOf(
             "rows", "cols", "rounds", "seed", "budget", "format", "openings", "threads",
-            "replays", "log", "map", "density",
+            "replications", "replays", "log", "map", "density",
         )
         private val TIME_FLAGS = setOf("rows", "cols", "seed", "budget", "passes", "map", "density")
 
         /**
          * No geometry here, and that is the point: every board a `gauntlet` run plays comes off the
-         * level rather than off the command line. A `--rows` accepted here would measure eleven levels
+         * level rather than off the command line. A `--rows` accepted here would measure seven levels
          * on a board none of them is played on.
          */
-        private val GAUNTLET_FLAGS = setOf("against", "rounds", "seed", "openings", "threads", "log")
+        private val GAUNTLET_FLAGS = setOf("table", "against", "rounds", "seed", "openings", "threads", "log")
 
         private val RATE_FLAGS = setOf(
             "log", "board", "budget", "format", "build", "openings", "since", "pool", "map",
@@ -80,6 +101,20 @@ internal interface LabCommand {
         private val REPORT_FLAGS = setOf("log", "against", "worst")
 
         private val PHASES_FLAGS = setOf("log", "against")
+
+        private val POLICY_FLAGS = setOf("log", "expert", "positions", "seed")
+
+        private val POLICY_TRAIN_FLAGS =
+            setOf("train", "validation", "holdout", "epochs", "rate", "l2", "seed", "threads")
+
+        private val CHAMPIONSHIP_FLAGS = setOf("log", "incumbent", "costs")
+
+        private val ALLOWANCE_FLAGS = setOf("panel", "replications", "seed", "threads", "log")
+
+        private val SOLVE_ENDGAME_FLAGS = setOf(
+            "log", "champion", "thresholds", "positions-per-threshold", "seed",
+            "max-nodes-per-position", "max-total-nodes", "memory-mib", "max-seconds",
+        )
 
         private val TUNE_FLAGS = setOf(
             "knobs", "rows", "cols", "seed", "budget", "openings", "threads", "map", "density",
@@ -182,7 +217,8 @@ internal interface LabCommand {
             Usage:
               play <entrant> <entrant> [...] [--rows N] [--cols N] [--rounds N] [--seed N]
                                             [--budget N] [--format head|ffa]
-                                            [--openings mirrored|fixed] [--threads N]
+                                            [--openings mirrored|fixed|complete] [--replications N]
+                                            [--threads N]
                                             [--map SHAPE] [--density F]
                                             [--replays decisive|none|all] [--log DIR|none]
               time <entrant> [--rows N] [--cols N] [--seed N] [--budget N] [--passes N]
@@ -195,6 +231,7 @@ internal interface LabCommand {
                                         [--map SHAPE] [--density F]
               report <entrant> [--against <entrant>] [--worst N] [--log DIR]
               phases <entrant> [--against <entrant>] [--log DIR]
+              policy --log DIR --expert <entrant> [--positions N] [--seed N]
               tune <entrant> [--knobs a,b,c] [--passes N] [--block N] [--max-pairs N]
                              [--rows N] [--cols N] [--seed N] [--budget N] [--openings ...]
                              [--threads N] [--map SHAPE] [--density F] [--journal FILE]
@@ -205,7 +242,20 @@ internal interface LabCommand {
               train [--log DIR] [--rows N] [--cols N] [--stride N] [--positions N] [--hidden N]
                     [--epochs N] [--rate N] [--decay N] [--batch N] [--seed N] [--out FILE]
                     [--model FILE]
-              gauntlet [--against <entrant>] [--rounds N] [--seed N] [--openings ...] [--threads N]
+              policy-train --train DATASETS --validation DATASETS --holdout DATASETS
+                           [--epochs N] [--rate N] [--l2 F,F,...] [--seed N] [--threads N]
+              championship <finalist> <finalist> [...] --incumbent <entrant> --costs F,F,...
+                           [--log DIR]
+              allowance <variant> <variant> [...] --panel <entrant;entrant;...>
+                        [--replications N] [--seed N] [--threads N] [--log DIR]
+              allowance-report <variant> <variant> [...] --panel <entrant;entrant;...>
+                               [--replications N] [--seed N] [--threads N] [--log DIR]
+              solve-endgame --log DIR --champion <entrant> [--thresholds N,N,...]
+                            [--positions-per-threshold N] [--seed N]
+                            [--max-nodes-per-position N] [--max-total-nodes N]
+                            [--memory-mib N] [--max-seconds N]
+              gauntlet [--table shipped|p7-candidate] [--against <entrant>] [--rounds N] [--seed N]
+                       [--openings ...] [--threads N]
                        [--log DIR|none]
 
             An entrant is <slug>[:name=value,...], where `budget` is that entrant's own allowance
@@ -219,12 +269,27 @@ internal interface LabCommand {
               ab uct uct:exploration=2.5
               report puct:eval=horizon --against puct --worst 5
               phases puct:eval=learned --log .lab/rave-field
+              policy --log .lab/p1-arena12 --expert alphabeta:budget=1000,eval=territory
+              policy-train --train "empty8|.lab/p1-empty8-complete|alphabeta:budget=1000,eval=chamber|800" \
+                --validation "empty8|.lab/p1-empty8-complete|alphabeta:budget=1000,eval=chamber|200" \
+                --holdout "spiral|.lab/p1-double-spiral16|puct:budget=1000,eval=territory|1000"
+              championship lookahead:depth=3 uct:budget=1600 puct:eval=territory \
+                alphabeta:eval=chamber --incumbent alphabeta:eval=chamber --costs 0.4,9.2,9.2,10.8 \
+                --log .lab/p5-finalists
+              allowance uct:budget=800 uct:budget=1200 uct:budget=1600 \
+                --panel "puct:budget=2000,eval=territory;alphabeta:budget=1000,eval=chamber" \
+                --replications 3 --seed 91001 --log .lab/p5-curve-uct
+              allowance-report uct:budget=800 uct:budget=1200 uct:budget=1600 \
+                --panel "puct:budget=2000,eval=territory;alphabeta:budget=1000,eval=chamber" \
+                --replications 3 --seed 91001 --log .lab/p5-curve-uct
+              solve-endgame --log .lab/p5-finalists --champion alphabeta:budget=1000,eval=chamber
               tune puct --knobs cpuct,territoryWeight
               spsa puct:eval=chamber --knobs parityWeight,sealPenalty --budget 1000
               train --rows 12 --cols 12 --hidden 8 --epochs 40
               train --log .lab/p2b-field-20 --rows 20 --cols 20 --model .lab/shipped-model.txt
               gauntlet --rounds 40
               gauntlet --rounds 40 --against uct:budget=100
+              gauntlet --table p7-candidate --rounds 200 --against puct:budget=250
 
             `tune` and `spsa` both search a bot's declared knobs and recommend; neither ever edits a
             default. Adopting one moves every golden move-stream hash, and that is a question for a
@@ -251,6 +316,22 @@ internal interface LabCommand {
             line. It answers the question a rating cannot: whether the points are going missing
             while the snakes still share ground, or in the filling race afterwards.
 
+            `policy` also plays nothing: it samples choice positions from one retained P1 board and
+            compares every unreleased P2 policy with the fixed-budget expert named by --expert. Its
+            early, middle and late thirds are hindsight diagnostics, and its intervals resample the
+            same complete-opening or mirrored-pair blocks as `rate`.
+
+            P2 policy and P4 fixed-depth ids exist only in the JVM lab. They can label a local
+            `play` field so `rate` can fit it, but the app cannot resolve them; every such field must
+            say --replays none.
+
+            `policy-train` fits a shared linear action scorer. Each role is a semicolon-separated
+            list of `label|directory|expert|positions-per-third`; quote the whole list so the shell
+            does not interpret its separators. When one source directory appears in train and
+            validation, complete-opening or mirrored-pair blocks are assigned to disjoint five-way
+            folds. Holdout logs are not opened until regularisation is selected and the quantised
+            model literal is frozen.
+
             `rate` reads the log rather than playing anything, and refuses to average across runs
             that are not comparable -- a different board, allowance or build is a different
             measurement. Narrow it, or pass --pool true and read the number for less than it says.
@@ -263,6 +344,10 @@ internal interface LabCommand {
             image through the centre of the board. `fixed` puts them in opposite corners every
             match, which is what the engine does and what the shipped ladder was measured under --
             and which gives bots that draw no randomness the same few games over and over.
+
+            `play --openings complete` enumerates the mirrored rule's forty oriented starts on an
+            empty 8x8 and plays each from both seatings. It is head-to-head only, takes no --rounds,
+            and repeats the complete population with `--replications N` (one by default).
 
             `--map` draws interior walls, one map for the whole run, at its --rows/--cols and --seed:
             ${MapShape.entries.joinToString { it.slug }}. `empty` is the default and is a bare
@@ -307,6 +392,13 @@ internal interface LabCommand {
                 "ab" -> abOf(entrants, Flags(options, AB_FLAGS), registry)
                 "report" -> reportOf(entrants, Flags(options, REPORT_FLAGS))
                 "phases" -> phasesOf(entrants, Flags(options, PHASES_FLAGS))
+                "policy" -> policyOf(entrants, Flags(options, POLICY_FLAGS), registry)
+                "policy-train" -> policyTrainOf(entrants, Flags(options, POLICY_TRAIN_FLAGS), registry)
+                "championship" -> championshipOf(entrants, Flags(options, CHAMPIONSHIP_FLAGS))
+                "allowance" -> allowanceOf(entrants, Flags(options, ALLOWANCE_FLAGS), registry, readOnly = false)
+                "allowance-report" ->
+                    allowanceOf(entrants, Flags(options, ALLOWANCE_FLAGS), registry, readOnly = true)
+                "solve-endgame" -> solveEndgameOf(entrants, Flags(options, SOLVE_ENDGAME_FLAGS), registry)
                 "tune" -> tuneOf(entrants, Flags(options, TUNE_FLAGS), registry)
                 "spsa" -> spsaOf(entrants, Flags(options, SPSA_FLAGS), registry)
                 "train" -> trainOf(entrants, Flags(options, TRAIN_FLAGS))
@@ -357,7 +449,34 @@ internal interface LabCommand {
         private fun playOf(entrants: List<String>, flags: Flags, registry: BotRegistry): PlayCommand {
             require(entrants.size >= 2) { "play needs at least two entrants, was ${entrants.size}.\n\n$USAGE" }
 
-            val rounds = flags.int("rounds", TournamentConfig.DEFAULT_ROUNDS)
+            val openings = flags.openings("openings")
+            val rows = flags.int("rows", LADDER_BOARD)
+            val cols = flags.int("cols", LADDER_BOARD)
+            val seed = flags.long("seed", DEFAULT_SEED)
+            val format = flags.format("format")
+            val walls = flags.walls(rows, cols, seed)
+            val rounds = if (openings == Openings.COMPLETE) {
+                require(flags.text("rounds") == null) {
+                    "--openings complete covers its population, so it does not take --rounds"
+                }
+                val replications = flags.int("replications", 1)
+                require(replications > 0) { "--replications must be positive, was $replications" }
+                require(replications <= Int.MAX_VALUE / Openings.COMPLETE_ROUNDS_PER_REPLICATION) {
+                    "--replications is too large, was $replications"
+                }
+                require(rows == Openings.COMPLETE_ROWS && cols == Openings.COMPLETE_COLS && walls.isEmpty()) {
+                    "--openings complete needs an empty 8x8"
+                }
+                require(format == TournamentFormat.HEAD_TO_HEAD) {
+                    "--openings complete needs --format head"
+                }
+                Openings.COMPLETE_ROUNDS_PER_REPLICATION * replications
+            } else {
+                require(flags.text("replications") == null) {
+                    "--replications is only for --openings complete"
+                }
+                flags.int("rounds", TournamentConfig.DEFAULT_ROUNDS)
+            }
             require(rounds > 0) { "--rounds must be positive, was $rounds" }
             require(rounds % 2 == 0) {
                 "--rounds must be even so each seed is played from both seats, was $rounds"
@@ -376,9 +495,11 @@ internal interface LabCommand {
                 }
             }
 
-            val rows = flags.int("rows", LADDER_BOARD)
-            val cols = flags.int("cols", LADDER_BOARD)
-            val seed = flags.long("seed", DEFAULT_SEED)
+            val replays = flags.replays("replays")
+            require(contestants.none { PolicyLabRegistry.holds(it.bot) } || replays == Replays.NONE) {
+                "research ids exist only in :lab and cannot be replayed by the app; " +
+                    "a research field must say --replays none"
+            }
 
             return PlayCommand(
                 config = TournamentConfig(
@@ -386,14 +507,14 @@ internal interface LabCommand {
                     rows = rows,
                     cols = cols,
                     rounds = rounds,
-                    format = flags.format("format"),
+                    format = format,
                     seed = seed,
                     budgetPerTurn = flags.int("budget", MatchSetup.DEFAULT_BUDGET_PER_TURN),
-                    walls = flags.walls(rows, cols, seed),
+                    walls = walls,
                 ),
-                openings = flags.openings("openings"),
+                openings = openings,
                 threads = threads,
-                replays = flags.replays("replays"),
+                replays = replays,
                 logDirectory = flags.logDirectory("log"),
             )
         }
@@ -706,19 +827,35 @@ internal interface LabCommand {
             val threads = flags.int("threads", Arena.defaultThreads())
             require(threads > 0) { "--threads must be positive, was $threads" }
 
+            val seed = flags.long("seed", DEFAULT_SEED)
+            val table = flags.text("table") ?: GauntletCommand.SHIPPED_TABLE
+            val levels = when (table) {
+                GauntletCommand.SHIPPED_TABLE -> Gauntlet.levels.map(GauntletTrialLevel::shipped)
+                GauntletCandidate.TABLE -> GauntletCandidate.levels
+                else -> error(
+                    "--table wants ${GauntletCommand.SHIPPED_TABLE} or ${GauntletCandidate.TABLE}, was '$table'",
+                )
+            }
+
             val named = contestantOf(flags.text("against") ?: GauntletCommand.DEFAULT_REFERENCE, registry)
+            val logDirectory = flags.logDirectory("log")
+            require(!PolicyLabRegistry.holds(named.bot) || logDirectory == null) {
+                "research ids exist only in :lab and cannot be retained by gauntlet; use --log none"
+            }
 
             return GauntletCommand(
+                table = table,
+                levels = levels,
                 reference = Contestant(
                     bot = named.bot,
                     budgetPerTurn = named.budgetPerTurn ?: GauntletCommand.REFERENCE_BUDGET,
                     params = named.params,
                 ),
                 rounds = rounds,
-                seed = flags.long("seed", DEFAULT_SEED),
+                seed = seed,
                 openings = flags.openings("openings"),
                 threads = threads,
-                logDirectory = flags.logDirectory("log"),
+                logDirectory = logDirectory,
             )
         }
 
@@ -756,6 +893,187 @@ internal interface LabCommand {
             )
         }
 
+        private fun policyOf(entrants: List<String>, flags: Flags, registry: BotRegistry): PolicyCommand {
+            require(entrants.isEmpty()) {
+                "policy reads retained positions rather than playing entrants; name the teacher with --expert"
+            }
+
+            val directory = flags.text("log")
+                ?: error("policy needs --log DIR naming one retained P1 board")
+            require(directory != "none") { "policy reads retained positions, so --log none leaves it nothing to read" }
+
+            val expertSpec = flags.text("expert")
+                ?: error("policy needs --expert <entrant> with an explicit fixed budget")
+            val expert = contestantOf(expertSpec, registry)
+            require(expert.budgetPerTurn != null) {
+                "policy's expert allowance must be fixed in --expert as budget=N"
+            }
+
+            val positions = flags.int("positions", DEFAULT_POLICY_POSITIONS)
+            require(positions > 0) { "--positions must be positive, was $positions" }
+
+            return PolicyCommand(
+                logDirectory = Path.of(directory),
+                expert = expert,
+                positionsPerPhase = positions,
+                seed = flags.long("seed", DEFAULT_POLICY_SEED),
+            )
+        }
+
+        private fun policyTrainOf(
+            entrants: List<String>,
+            flags: Flags,
+            registry: BotRegistry,
+        ): PolicyTrainCommand {
+            require(entrants.isEmpty()) {
+                "policy-train reads retained positions; every teacher belongs inside its dataset spec"
+            }
+
+            fun datasets(option: String): List<PolicyTrainDataset> {
+                val encoded = flags.text(option)
+                    ?: error("policy-train needs --$option label|directory|expert|positions")
+                return ActionDatasetSpec.parseList(encoded, option).map { spec ->
+                    val expert = contestantOf(spec.expertSpec, registry)
+                    require(expert.budgetPerTurn != null) {
+                        "--$option dataset '${spec.label}' expert needs an explicit budget=N"
+                    }
+                    PolicyTrainDataset(spec, expert)
+                }
+            }
+
+            val epochs = flags.int("epochs", PolicyTrainCommand.DEFAULT_EPOCHS)
+            require(epochs > 0) { "--epochs must be positive, was $epochs" }
+            val rate = flags.decimal("rate", PolicyTrainCommand.DEFAULT_RATE)
+            require(rate > 0.0 && rate.isFinite()) { "--rate must be finite and positive, was $rate" }
+            val l2 = (flags.text("l2") ?: PolicyTrainCommand.DEFAULT_L2).split(',').map { value ->
+                value.toDoubleOrNull() ?: error("--l2 wants comma-separated numbers, found '$value'")
+            }
+            require(l2.isNotEmpty() && l2.all { it >= 0.0 && it.isFinite() }) {
+                "--l2 values must be finite and non-negative"
+            }
+            val threads = flags.int("threads", Arena.defaultThreads())
+            require(threads > 0) { "--threads must be positive, was $threads" }
+
+            return PolicyTrainCommand(
+                training = datasets("train"),
+                validation = datasets("validation"),
+                holdout = datasets("holdout"),
+                epochs = epochs,
+                learningRate = rate,
+                l2Candidates = l2,
+                seed = flags.long("seed", PolicyTrainCommand.DEFAULT_SEED),
+                threads = threads,
+            )
+        }
+
+        private fun championshipOf(entrants: List<String>, flags: Flags): ChampionshipCommand {
+            require(entrants.size >= 2) {
+                "championship needs at least two finalists, was ${entrants.size}.\n\n$USAGE"
+            }
+            val incumbent = flags.text("incumbent")
+                ?: error("championship needs --incumbent <entrant>")
+            val costs = (flags.text("costs") ?: error("championship needs --costs F,F,..."))
+                .split(',')
+                .map { value ->
+                    value.toDoubleOrNull()
+                        ?: error("--costs wants comma-separated milliseconds, found '$value'")
+                }
+            require(costs.size == entrants.size) {
+                "--costs needs one value per finalist, was ${costs.size} for ${entrants.size}"
+            }
+            require(costs.all { it.isFinite() && it >= 0.0 }) {
+                "--costs values must be finite and non-negative"
+            }
+            val directory = flags.logDirectory("log")
+                ?: error("championship reads one retained run, so --log none leaves it nothing")
+
+            return ChampionshipCommand(
+                logDirectory = directory,
+                finalists = entrants,
+                incumbent = incumbent,
+                chromeWorstTurnMillis = costs,
+            )
+        }
+
+        private fun allowanceOf(
+            entrants: List<String>,
+            flags: Flags,
+            registry: BotRegistry,
+            readOnly: Boolean,
+        ): LabCommand {
+            val panel = (flags.text("panel") ?: error("allowance needs --panel <entrant;entrant;...>"))
+                .split(';')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            require(panel.isNotEmpty()) { "--panel names no opponents" }
+
+            val replications = flags.int("replications", DEFAULT_ALLOWANCE_REPLICATIONS)
+            val threads = flags.int("threads", Arena.defaultThreads())
+            val directory = flags.logDirectory("log")
+                ?: error("allowance retains its pair runs, so --log none is not supported")
+            val plan = AllowanceCurvePlan(
+                variants = entrants.map { contestantOf(it, registry) },
+                panel = panel.map { contestantOf(it, registry) },
+                replications = replications,
+                seed = flags.long("seed", DEFAULT_ALLOWANCE_SEED),
+                threads = threads,
+            )
+            return if (readOnly) {
+                AllowanceCurveReadCommand(plan, directory)
+            } else {
+                AllowanceCurveCommand(plan, directory)
+            }
+        }
+
+        private fun solveEndgameOf(
+            entrants: List<String>,
+            flags: Flags,
+            registry: BotRegistry,
+        ): EndgameCommand {
+            require(entrants.isEmpty()) {
+                "solve-endgame reads P5 replays; name the measured player with --champion"
+            }
+            val directory = flags.text("log")
+                ?: error("solve-endgame needs --log DIR naming one retained P5 finalist run")
+            require(directory != "none") { "solve-endgame reads retained replays, so --log none leaves nothing" }
+            val champion = flags.text("champion")
+                ?: error("solve-endgame needs --champion <entrant>")
+
+            val thresholds = (flags.text("thresholds") ?: EndgameCommand.DEFAULT_THRESHOLDS)
+                .split(',')
+                .map { value ->
+                    value.toIntOrNull() ?: error("--thresholds wants comma-separated whole numbers, found '$value'")
+                }
+                .toIntArray()
+            require(thresholds.isNotEmpty() && thresholds.all { it in 0..EndgameCommand.MAX_THRESHOLD }) {
+                "--thresholds must contain whole numbers in 0..${EndgameCommand.MAX_THRESHOLD}"
+            }
+            require(thresholds.toSet().size == thresholds.size) { "--thresholds must not repeat" }
+
+            val positions = flags.int("positions-per-threshold", EndgameCommand.DEFAULT_POSITIONS_PER_THRESHOLD)
+            require(positions > 0) { "--positions-per-threshold must be positive, was $positions" }
+            val maxNodes = flags.int("max-nodes-per-position", EndgameCommand.DEFAULT_MAX_NODES_PER_POSITION)
+            require(maxNodes > 0) { "--max-nodes-per-position must be positive, was $maxNodes" }
+            val maxTotal = flags.long("max-total-nodes", EndgameCommand.DEFAULT_MAX_TOTAL_NODES)
+            require(maxTotal > 0) { "--max-total-nodes must be positive, was $maxTotal" }
+            val memory = flags.int("memory-mib", EndgameCommand.DEFAULT_MEMORY_MIB)
+            require(memory > 0) { "--memory-mib must be positive, was $memory" }
+            val maxSeconds = flags.long("max-seconds", EndgameCommand.DEFAULT_MAX_SECONDS)
+            require(maxSeconds > 0) { "--max-seconds must be positive, was $maxSeconds" }
+
+            return EndgameCommand(
+                logDirectory = Path.of(directory),
+                champion = contestantOf(champion, registry),
+                thresholds = thresholds,
+                positionsPerThreshold = positions,
+                seed = flags.long("seed", EndgameCommand.DEFAULT_SEED),
+                maxNodesPerPosition = maxNodes,
+                maxTotalNodes = maxTotal,
+                memoryMiB = memory,
+                maxSeconds = maxSeconds,
+            )
+        }
+
         private fun abOf(entrants: List<String>, flags: Flags, registry: BotRegistry): AbCommand {
             require(entrants.size == 2) {
                 "ab compares a candidate with a baseline, so it takes two entrants, " +
@@ -783,6 +1101,13 @@ internal interface LabCommand {
             val rows = flags.int("rows", LADDER_BOARD)
             val cols = flags.int("cols", LADDER_BOARD)
             val seed = flags.long("seed", DEFAULT_SEED)
+            val logDirectory = flags.logDirectory("log")
+            require(
+                (PolicyLabRegistry.holds(baseline.bot) || PolicyLabRegistry.holds(candidate.bot)).not() ||
+                    logDirectory == null,
+            ) {
+                "research ids exist only in :lab and cannot be retained by ab; use --log none"
+            }
 
             return AbCommand(
                 baseline = baseline,
@@ -802,7 +1127,7 @@ internal interface LabCommand {
                 ),
                 blockPairs = block,
                 maxPairs = maxPairs,
-                logDirectory = flags.logDirectory("log"),
+                logDirectory = logDirectory,
             )
         }
 
