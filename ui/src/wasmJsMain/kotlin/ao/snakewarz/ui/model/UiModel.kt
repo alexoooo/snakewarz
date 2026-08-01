@@ -73,6 +73,10 @@ internal class UiModel(
     val resultPortrait: String?,
     /** Watching a recording rather than playing a match. Reveals the scrub bar. */
     val replay: Boolean,
+    /** The recording has a human seat that can be played live. */
+    val canTryAgain: Boolean,
+    /** The rung after a winning level recording, or `null` when moving on is not available. */
+    val replayNextLevel: Int?,
     /**
      * A person is still in this match, so the keyboard is its clock rather than the scheduler.
      * Disables the transport: there is no clock to start, stop or step.

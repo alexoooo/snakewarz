@@ -100,6 +100,9 @@ internal sealed interface UiIntent {
     /** Switch to watching the recording of the match just played, right here on this board. */
     data object WatchReplay : Match
 
+    /** Leave a recording and play its human seat again. A gauntlet attempt draws a fresh seed. */
+    data object TryAgain : Match
+
     class StartMatch(val options: MatchOptions) : Match
 
     /**

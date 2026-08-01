@@ -205,6 +205,41 @@ class ShellTest {
     }
 
     @Test
+    fun `a level replay offers another attempt and the rung after a winning run`() {
+        shell.render(
+            model(
+                screen = Screen.GAME,
+                level = 3,
+                replay = true,
+                canTryAgain = true,
+                replayNextLevel = 4,
+            ),
+        )
+
+        assertTrue(!element("replay-actions").hidden)
+        assertTrue(!element("replay-again").hidden)
+        assertTrue(!element("replay-next").hidden)
+
+        (element("replay-again") as HTMLButtonElement).click()
+        (element("replay-next") as HTMLButtonElement).click()
+
+        assertEquals(UiIntent.TryAgain, intents[0])
+        assertEquals(4, (intents[1] as UiIntent.StartLevel).index)
+    }
+
+    @Test
+    fun `a playable loss offers another attempt without suggesting the next level`() {
+        shell.render(model(screen = Screen.GAME, level = 3, replay = true, canTryAgain = true))
+
+        assertTrue(!element("replay-actions").hidden)
+        assertTrue(!element("replay-again").hidden)
+        assertTrue(element("replay-next").hidden)
+
+        shell.render(model(screen = Screen.GAME, replay = true))
+        assertTrue(element("replay-actions").hidden, "a bot-only recording has no live action")
+    }
+
+    @Test
     fun `on a level the way out is the level select, and off one it is the menu`() {
         shell.render(model(screen = Screen.GAME, level = 7))
         assertEquals("← Gauntlet", element("game-back").textContent)
@@ -320,6 +355,9 @@ class ShellTest {
         openPanel: Panel? = null,
         result: String? = null,
         canWatchReplay: Boolean = false,
+        replay: Boolean = false,
+        canTryAgain: Boolean = false,
+        replayNextLevel: Int? = null,
     ): UiModel = UiModel(
         screen = screen,
         level = level,
@@ -329,7 +367,9 @@ class ShellTest {
         theme = Theme.of(Theme.DEFAULT_ID, dark = false),
         result = result,
         resultPortrait = null,
-        replay = false,
+        replay = replay,
+        canTryAgain = canTryAgain,
+        replayNextLevel = replayNextLevel,
         interactive = false,
         steering = false,
         running = false,
@@ -380,6 +420,10 @@ class ShellTest {
                 <button id="open-tournament"></button>
                 <button id="open-share"></button>
                 <button id="open-settings"></button>
+                <div id="replay-actions" hidden>
+                  <button id="replay-again">Try again</button>
+                  <button id="replay-next" hidden>Next level</button>
+                </div>
               </section>
             </main>
             <div id="panel-scrim" hidden></div>

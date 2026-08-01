@@ -413,6 +413,8 @@ public class GameSession(
 
             UiIntent.WatchReplay -> watchReplay()
 
+            UiIntent.TryAgain -> tryAgain()
+
             is UiIntent.WatchLevelReplay -> watchLevelReplay(intent.index)
 
             is UiIntent.StartMatch -> newMatch(intent.options)
@@ -1097,6 +1099,21 @@ public class GameSession(
         begin()
     }
 
+    /** Leaves playback and gives the recording's human seat another live attempt. */
+    private fun tryAgain() {
+        val record = replay ?: return
+        if (record.setup.slots.indexOf(PlayableRegistry.HUMAN_ID) < 0) {
+            return
+        }
+
+        val again = level
+        if (again != null) {
+            startLevel(again)
+        } else {
+            playFresh(record.setup)
+        }
+    }
+
     private fun play() {
         // A finished match has nothing left to play, so Play means "again" — and so does the end of
         // a partial recording, which has no outcome but is just as over. Without the second half,
@@ -1483,6 +1500,8 @@ public class GameSession(
                 result = verdict,
                 resultPortrait = if (verdict == null) null else winnerFace(faces),
                 replay = replay != null,
+                canTryAgain = replayHumanSeat() != null,
+                replayNextLevel = replayNextLevel(),
                 interactive = match.interactive,
                 steering = canSteer(),
                 running = scheduler.running,
@@ -1499,6 +1518,20 @@ public class GameSession(
                 tournament = batchStatus(),
             ),
         )
+    }
+
+    /** The human seat in the recording on screen, if it has one. */
+    private fun replayHumanSeat(): Int? {
+        val record = replay ?: return null
+        return record.setup.slots.indexOf(PlayableRegistry.HUMAN_ID).takeIf { it >= 0 }
+    }
+
+    /** The next rung offered by a completed winning recording. */
+    private fun replayNextLevel(): Int? {
+        val current = level?.takeIf { it < Gauntlet.size } ?: return null
+        val human = replayHumanSeat() ?: return null
+        val winner = replay?.outcome?.winner?.index ?: return null
+        return (current + 1).takeIf { winner == human }
     }
 
     /** What [shown]'s seats are called, rebuilt only when the match on screen is a different one. */

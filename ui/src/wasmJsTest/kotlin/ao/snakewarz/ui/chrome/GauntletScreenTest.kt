@@ -178,6 +178,8 @@ class GauntletScreenTest {
         result = null,
         resultPortrait = null,
         replay = false,
+        canTryAgain = false,
+        replayNextLevel = null,
         interactive = false,
         steering = false,
         running = false,

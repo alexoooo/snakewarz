@@ -23,9 +23,11 @@ Keep those two cadences apart: `UiModel` is built once per *frame*, not once per
 ### Playing, replaying, and three clocks
 
 **Playing and replaying are one code path.** A replay is a match whose slots already know what they
-are going to do, so play, pause, step, restart and the scoreboard work on both without a branch. Only
+are going to do, so run, pause, step, restart and the scoreboard work on both without a branch. Only
 seeking is replay-specific, and it is implemented by rebuilding the playback match and stepping to the
-target — microseconds, and nothing to keep consistent.
+target — microseconds, and nothing to keep consistent. The replay transport says *Run replay* and
+*Restart replay*, because *Play* and *Restart* beside a human recording sound like ways back into the
+game rather than ways through the recording.
 
 What *does* branch is which clock runs, and it branches on `Match.interactive` rather than on a mode
 flag: `TurnScheduler` paces bots and replays, while a match with a live player is stepped by
@@ -112,8 +114,8 @@ recording is terminal, not a pause.** A scripted slot with no move left answers 
 a live player would mean "waiting for a key" — but there is no key that could resume a recording, so
 `GameSession.advance` reports `FINISHED` when `replay != null` and the scheduler parks. Without that
 it re-arms `requestAnimationFrame` forever, stepping once a frame to be told the same thing, while
-the Play button reads "Pause" and says nothing is stopped. `Play` on a parked recording therefore
-means "again", exactly as it does on a finished match.
+the Run replay button reads "Pause" and says nothing is stopped. Running a parked recording therefore
+rewinds it first, exactly as running a finished replay does.
 
 While a batch runs it **owns the arena**: `GameSession` paints its current match and builds the whole
 `UiModel` from that match, so the board, the scoreboard and the status line cannot disagree. The transport
@@ -304,6 +306,12 @@ the rung; the verdict card's Replay button and the ▷ on a tile both pass the r
 on, so the bar still names the level, Setup and Tournament stay off the offer, and the way out is
 still the level select. The parameter is `keepLevel` and it defaults to none, because the route that
 has to be right by default is the one a stranger's URL takes.
+
+**A replay keeps the live decisions beside its transport.** *Try again* starts the same rung with a
+fresh seed, or the recorded setup and seed for a custom match, and is absent where the recording has
+no human seat. A completed level recording won by that human also offers *Next level* unless it is the
+last rung. Those actions precede Run, Step and Restart so a replay opened by mistake on a phone does
+not hide the way forward.
 
 **Every cleared level also keeps the run that cleared it, one `localStorage` key per rung** —
 `snakewarz.gauntlet.replay.<n>.v1`, written by `GameSession.recordLevelWin` beside the progress write

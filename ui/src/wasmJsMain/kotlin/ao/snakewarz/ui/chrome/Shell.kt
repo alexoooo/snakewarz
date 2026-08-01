@@ -69,11 +69,18 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
     private val dialogNext: HTMLButtonElement = elementById("result-next")
     private val dialogReplay: HTMLButtonElement = elementById("result-replay")
 
+    private val replayActions: HTMLElement = elementById("replay-actions")
+    private val replayAgain: HTMLButtonElement = elementById("replay-again")
+    private val replayNext: HTMLButtonElement = elementById("replay-next")
+
     /** The way off the board, which is the level select while a rung of the gauntlet is on it. */
     private val backButton: HTMLButtonElement = elementById("game-back")
 
     /** The rung Next level starts, read at the press for the reason `HomeScreen.resume` is. */
     private var nextLevel: Int? = null
+
+    /** The rung offered beside the replay transport, read when the button is pressed. */
+    private var replayNextLevel: Int? = null
 
     /**
      * The rung on the board, or `null` for a match somebody configured.
@@ -135,6 +142,8 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
         dialogAgain.addEventListener("click") { dispatch(UiIntent.Restart) }
         dialogNext.addEventListener("click") { nextLevel?.let { dispatch(UiIntent.StartLevel(it)) } }
         dialogReplay.addEventListener("click") { dispatch(UiIntent.WatchReplay) }
+        replayAgain.addEventListener("click") { dispatch(UiIntent.TryAgain) }
+        replayNext.addEventListener("click") { replayNextLevel?.let { dispatch(UiIntent.StartLevel(it)) } }
         // The same call as the bar's own way out, so the card cannot offer a different destination
         // from the button behind it.
         elementById<HTMLButtonElement>("result-home").addEventListener("click") { back() }
@@ -168,6 +177,7 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
         for ((which, opener) in openers) {
             opener.hidden = !model.mode.offers(which)
         }
+        renderReplayActions(model)
 
         val result = model.result
         dialog.hidden = result == null
@@ -228,6 +238,14 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
         // A second way to the recording of the match just finished, off the same flag `#panel-share`
         // reads: winning a level and then hunting through a panel for the run is what this is for.
         dialogReplay.hidden = !model.canWatchReplay
+    }
+
+    /** Keeps the ways out of playback ahead of the controls that only move through it. */
+    private fun renderReplayActions(model: UiModel) {
+        replayNextLevel = model.replayNextLevel
+        replayAgain.hidden = !model.canTryAgain
+        replayNext.hidden = model.replayNextLevel == null
+        replayActions.hidden = !model.replay || (!model.canTryAgain && model.replayNextLevel == null)
     }
 
     /**

@@ -167,7 +167,12 @@ internal class Chrome(
             repeat.cancel()
         }
 
-        playButton.textContent = if (model.running) "Pause" else "Play"
+        playButton.textContent = when {
+            model.running -> "Pause"
+            model.replay -> "Run replay"
+            else -> "Play"
+        }
+        restartButton.textContent = if (model.replay) "Restart replay" else "Restart"
 
         // A level says which one it is, because the board and the seat cards cannot: every rung is
         // two snakes on a rectangle, and the title is the only thing that tells them apart. A custom

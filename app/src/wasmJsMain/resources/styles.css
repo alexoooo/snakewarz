@@ -838,6 +838,14 @@ body.failed #loading {
     flex-wrap: wrap;
 }
 
+.replay-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-right: 0.1rem;
+    padding-right: 0.5rem;
+    border-right: 1px solid var(--line);
+}
+
 .transport label {
     margin-left: 0.35rem;
     color: var(--ink-dim);
@@ -857,9 +865,14 @@ body.failed #loading {
     font-variant-numeric: tabular-nums;
 }
 
-/* Play and Pause are different widths, and a button that resized would move the two beside it. */
+/* Run replay is the longest state, and changing state must not reflow the bar around the board. */
 #play {
-    min-width: 4.2rem;
+    min-width: 6.2rem;
+}
+
+/* Live and replay wording occupy the same box, so entering replay is the only layout change. */
+#restart {
+    min-width: 7.4rem;
 }
 
 /* Replay only, and wide: a seek bar you cannot land a finger accurately on is not a seek bar. */

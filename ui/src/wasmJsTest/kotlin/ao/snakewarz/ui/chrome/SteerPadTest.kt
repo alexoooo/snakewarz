@@ -200,6 +200,8 @@ class SteerPadTest {
         result = null,
         resultPortrait = null,
         replay = false,
+        canTryAgain = false,
+        replayNextLevel = null,
         interactive = steering,
         steering = steering,
         running = false,
