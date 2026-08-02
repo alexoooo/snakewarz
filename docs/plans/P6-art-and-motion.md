@@ -30,7 +30,7 @@ An art pass is judged by eye, so this plan fixes the **constraints** and not the
 - portraits stay **SVG**, flat-shaded, with a per-file ceiling (§6.4);
 - **every colour on the canvas still comes out of `Theme`** — `docs/UI.md`'s "the one place a colour
   is written" does not get an exception for prettier snakes;
-- the **tail fade survives** — it is a rule being drawn, not decoration (§6.1);
+- the **tail-phase cue survives** — it is a rule being drawn, not decoration (§6.1);
 - motion is **guarded by `prefers-reduced-motion` in the same change that introduces it** (§6.5).
 
 ---
@@ -128,18 +128,17 @@ what sits on the ends — not new machinery.
 - **The head:** `Theme.head(slot)`, and **facing**. `SnakeView.lastDirection` is already on the view.
   Two eye dots offset perpendicular to it is the single highest-value change on this list — a snake
   with eyes reads as an animal at any size.
-- **The tail:** tapers to a point and **keeps its fade**.
+- **The tail:** tapers to a broad tip and keeps the body's full colour.
 - **A corpse:** `Theme.CORPSE_ALPHA`, no spine highlight, no eyes. A snake that is out is scenery, which
   is the argument `paintSnake` and `drawThread` already make in two places.
 
 ### Three constraints, each of which an art pass could quietly break
 
-1. **The tail fade is the rules being drawn, not decoration.** `tailAlpha`
-   (`BoardRenderer.kt:373-380`) fades the oldest square through `AGING_ALPHA` then `DYING_ALPHA`
-   because `growEveryNthMove = 2` makes the square a snake is about to give back knowable a move
-   ahead — non-obvious fact #1. Losing it in a repaint is a **gameplay** regression that no test will
-   catch. It also has two carve-outs that must survive: a corpse never fades, and
-   `growEveryNthMove < 2` has nothing to fade because nothing ever retracts.
+1. **The moving tail tip is the rules being drawn, not decoration.** `growEveryNthMove = 2` makes the
+   square a snake is about to give back knowable a move ahead — non-obvious fact #1 — so the broad tip
+   advances within that square before it clears. Losing that change of length in a repaint is a
+   **gameplay** regression that no test will catch. A corpse and a trail with
+   `growEveryNthMove < 2` stay in the body's single path because neither will retract.
 2. **No new colour enters `BoardRenderer`.** `docs/UI.md` §*Themes* is explicit that every colour comes
    from `Theme` and that `styles.css` holds none of a theme's numbers. A highlight is
    `Theme.head(slot)` drawn over `Theme.body(slot)` — the pair the theme already provides for exactly

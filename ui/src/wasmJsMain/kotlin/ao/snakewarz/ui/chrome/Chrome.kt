@@ -68,6 +68,7 @@ internal class Chrome(
     private val tipDetail: HTMLElement = tip.child(".tip-detail")
 
     private val playButton: HTMLButtonElement = elementById("play")
+    private val stepBackButton: HTMLButtonElement = elementById("step-back")
     private val stepButton: HTMLButtonElement = elementById("step")
     private val restartButton: HTMLButtonElement = elementById("restart")
 
@@ -89,8 +90,17 @@ internal class Chrome(
     private var tipX: Double = 0.0
     private var tipY: Double = 0.0
 
+    /** The replay position used by controls that move relative to the current turn. */
+    private var replayTurn: Int = 0
+
+    /** Whether lateral movement keys belong to replay navigation rather than steering. */
+    private var replaying: Boolean = false
+
     init {
         playButton.addEventListener("click") { dispatch(UiIntent.TogglePlay) }
+        stepBackButton.addEventListener("click") {
+            dispatch(UiIntent.SeekTo((replayTurn - 1).coerceAtLeast(0)))
+        }
         stepButton.addEventListener("click") { dispatch(UiIntent.StepOnce) }
         restartButton.addEventListener("click") { dispatch(UiIntent.Restart) }
 
@@ -149,6 +159,9 @@ internal class Chrome(
     }
 
     fun render(model: UiModel) {
+        replaying = model.replay
+        replayTurn = model.turnIndex
+
         // Ahead of the shell, and that ordering is load-bearing: the level select marks the tile it
         // would open `[data-focus]`, and the shell takes the focus to it on the very frame the
         // screen arrives. Render them the other way round and arriving on the gauntlet by keyboard
@@ -197,6 +210,8 @@ internal class Chrome(
         // in both cases -- the buttons come back, and a control that moves is worse than one that dims.
         val noTransport = model.interactive || model.batchRunning
         playButton.disabled = noTransport
+        stepBackButton.hidden = !model.replay
+        stepBackButton.disabled = noTransport || model.turnIndex == 0
         stepButton.disabled = noTransport
         restartButton.disabled = model.batchRunning
 
@@ -284,6 +299,19 @@ internal class Chrome(
         // this the page steers on select-all and swallows Back — and now that a steer key is
         // cancelled on every event rather than only the first, it would swallow them for good.
         if (event.ctrlKey || event.altKey || event.metaKey) {
+            return
+        }
+
+        val replayStep = replayStepFor(event.key)
+        if (replaying && replayStep != null) {
+            event.preventDefault()
+            if (!event.repeat) {
+                if (replayStep < 0) {
+                    dispatch(UiIntent.SeekTo((replayTurn - 1).coerceAtLeast(0)))
+                } else {
+                    dispatch(UiIntent.StepOnce)
+                }
+            }
             return
         }
 
@@ -380,6 +408,13 @@ internal class Chrome(
         /** How far the hover label sits from the pointer, so the pointer never covers it. */
         const val TIP_GAP = 14.0
     }
+}
+
+/** A lateral key's replay direction, kept separate from the four-way steering map. */
+internal fun replayStepFor(key: String): Int? = when (key) {
+    "ArrowLeft", "a", "A" -> -1
+    "ArrowRight", "d", "D" -> 1
+    else -> null
 }
 
 /** The one opponent surface in a Gauntlet match, and the scoreboard it replaces there. */

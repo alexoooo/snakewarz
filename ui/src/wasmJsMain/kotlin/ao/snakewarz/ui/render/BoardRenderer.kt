@@ -53,12 +53,11 @@ import kotlin.math.sqrt
  * would be, and it is bounded above it by [TurnScheduler], which spends eight milliseconds of a frame
  * on turns and then stops whether or not the match is keeping up.
  *
- * ### Age is read off the position, not remembered
+ * ### Tail phase is read off the position, not remembered
  *
- * A snake's oldest square fades in two steps before it clears — see [tailAlpha]. That is derived from
- * the board every time it is painted rather than kept in a counter here, so seeking a replay, resizing
- * the window and painting a tournament's current match all land on the same colours as playing the
- * match forwards would have.
+ * A snake's oldest square shortens before it clears. That is derived from the board every time it is
+ * painted rather than kept in a counter here, so seeking a replay, resizing the window and painting a
+ * tournament's current match all land on the same shape as playing the match forwards would have.
  *
  * The renderer knows nothing about matches, bots or time. It is handed a read-only projection of the
  * position, and that projection carries neither a pixel nor a colour.
@@ -504,11 +503,9 @@ internal class BoardRenderer(
      * translucent, and a segment drawn over its neighbour's round cap would deepen at every joint,
      * where a single stroke composites once however often it crosses itself.
      *
-     * **The oldest square is lifted out of that path exactly when it is fading**, which is also the
-     * only case in which two alphas meet on one body. [tailAlpha]'s two carve-outs mean a corpse and
-     * a never-retracting trail both give the tail the body's own alpha, so the seam exists only on a
-     * *living* snake — whose ribbon is opaque, and therefore cannot deepen where the taper runs under
-     * its cap.
+     * **The oldest square is lifted out of that path exactly when it retracts**, so its taper can
+     * change position without a round cap showing through it. A corpse and a never-retracting trail
+     * stay in the body's single path, while a living retracting snake gets the explicit taper.
      *
      * A corpse loses the spine as well: a snake that is out is scenery, and scenery is one flat
      * obstacle rather than something with a highlight down its back.
@@ -523,13 +520,12 @@ internal class BoardRenderer(
         val colour = theme.body(id.index)
         val corpse = corpseAlpha(id.index)
         val alpha = if (snake.alive) 1.0 else corpse
-        val tail = tailAlpha(view, snake, corpse)
-        val fading = tail != alpha
-        if (fading) {
-            drawTaper(view, id.index, snake, colour, tail)
+        val tapering = snake.alive && view.rules.growEveryNthMove >= 2
+        if (tapering) {
+            drawTaper(view, id.index, snake, colour, alpha)
         }
 
-        val first = if (fading) 1 else 0
+        val first = if (tapering) 1 else 0
         if (snake.length - first >= 2) {
             overlayContext.lineCap = CanvasLineCap.ROUND
             overlayContext.lineJoin = CanvasLineJoin.ROUND
@@ -1013,31 +1009,6 @@ internal class BoardRenderer(
 
     // -- internals
 
-    /**
-     * How much colour a snake's oldest square keeps: full, then [Theme.AGING_ALPHA], then
-     * [Theme.DYING_ALPHA], and then the square is empty board.
-     *
-     * The board already knows this and nothing has to be remembered between turns to read it:
-     * `growsOnNextMove` is false exactly when the next move drags the body instead of extending it,
-     * which is the move that gives this square back. So a snake's tail spends one of its own moves
-     * aging and the next one dying, and a player can see where space is about to open up instead of
-     * counting growth turns.
-     *
-     * Two rules out. A dead snake is a permanent obstacle, so a corpse keeps [corpse] — whatever the
-     * flash has it at this frame — all the way to its tail, which is also what keeps the body one
-     * alpha and therefore one path. And a trail that never retracts — `growEveryNthMove = 1`,
-     * classic Tron — has no square about to clear, so fading one would be a lie about the rules in
-     * play.
-     */
-    private fun tailAlpha(view: BoardView, snake: SnakeView, corpse: Double): Double = when {
-        !snake.alive -> corpse
-        tailClearsNext(view, snake) -> Theme.DYING_ALPHA
-        // A trail that never retracts has no square about to open, and a one-square snake is all
-        // head — which is drawn over this anyway.
-        view.rules.growEveryNthMove < 2 || snake.length < 2 -> 1.0
-        else -> Theme.AGING_ALPHA
-    }
-
     /** [i] of [count] steps from the tail, as a value from [tail] at the oldest square to [head]. */
     private fun ramp(i: Int, count: Int, tail: Double, head: Double): Double =
         if (count < 2) head else tail + (head - tail) * i / (count - 1)
@@ -1145,7 +1116,7 @@ internal class BoardRenderer(
          * into a whisker on a small board. Not a point, either: the oldest square is still a square a
          * snake dies in, and it has to look like one.
          */
-        const val TAIL_TIP_SHARE = 0.30
+        const val TAIL_TIP_SHARE = 0.48
 
         /** The tail tip moves from the cell centre to the front third over its two-move lifetime. */
         const val TAIL_STAY_OFFSET = 0.0

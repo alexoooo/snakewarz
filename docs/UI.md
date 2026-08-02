@@ -349,8 +349,9 @@ has to be right by default is the one a stranger's URL takes.
 **A replay keeps the live decisions beside its transport.** *Try again* starts the same rung with a
 fresh seed, or the recorded setup and seed for a custom match, and is absent where the recording has
 no human seat. A completed level recording won by that human also offers *Next level* unless it is the
-last rung. Those actions precede Run, Step and Restart so a replay opened by mistake on a phone does
-not hide the way forward.
+last rung. Those actions precede Run, Step back, Step and Restart so a replay opened by mistake on a
+phone does not hide the way forward. Left/right arrows and A/D mirror Step back and Step while the
+recording is on screen.
 
 **Every cleared level also keeps the run that cleared it, one `localStorage` key per rung** —
 `snakewarz.gauntlet.replay.<n>.v2`, written by `GameSession.recordLevelWin` beside the progress write
@@ -389,7 +390,7 @@ stopped matching what the keys do is worse than no list at all.
 
 | Key | Does | Where |
 |---|---|---|
-| Arrows / WASD | steer | the game screen, unless a `<select>` or a slider has the focus |
+| Arrows / WASD | steer; left/right or A/D step backward/forward in a replay | game screen, outside a select or slider |
 | Space | play / pause | the game screen; a match with a person in it has no clock to toggle |
 | `.` | step one turn | the game screen |
 | Enter | presses the control the focus is on | everywhere |
@@ -652,17 +653,15 @@ every joint. Over it runs the **spine**, the same line at `SPINE_WIDTH` in `Them
 in both alpha and width along the body so a coil reads from tail to head. The **head** is a marker in
 the same head colour with two eyes offset perpendicular to `SnakeView.lastDirection`, and the
 **tail** tapers, in a filled quadrilateral rather than a stroke, because a stroke has one width. Its
-tip advances from the centre to the front third of the oldest square across that square's two
-growth phases, making the next square to clear visible in both position and colour.
+broad tip advances from the centre to the front third of the oldest square across that square's two
+growth phases. Both positions stay within the body's footprint, and the tail keeps the body's full
+colour, so it reads as a solid obstacle while its length still shows which square clears next.
 
-**The tail fade is a rule being drawn, not decoration**, and it survives all of that:
-`BoardRenderer.tailAlpha` fades the oldest square through `Theme.AGING_ALPHA` and then
-`Theme.DYING_ALPHA`, because `growEveryNthMove = 2` makes the square a snake is about to give back
-knowable a move ahead. Its two carve-outs are what decide the drawing's one seam: a corpse never
-fades, and a trail that never retracts has nothing to fade, so the fading square is lifted out of the
-body's own path *exactly* when its alpha differs from the body's — which is only ever on a **living**
-snake, whose ribbon is opaque and therefore cannot deepen where the taper runs under it. A corpse
-keeps `Theme.CORPSE_ALPHA`, loses its spine and loses its eyes: a snake that is out is scenery.
+**The moving tail tip is a rule being drawn, not decoration.** `growEveryNthMove = 2` makes the square
+a snake is about to give back knowable a move ahead, so `BoardRenderer` advances the tip on that
+phase. A corpse and a trail that never retracts stay in the body's single path; only a living,
+retracting snake lifts its oldest square into the explicit taper. A corpse keeps
+`Theme.CORPSE_ALPHA`, loses its spine and loses its eyes: a snake that is out is scenery.
 
 **No new colour enters `BoardRenderer` for any of it.** A highlight is `Theme.head(slot)` over
 `Theme.body(slot)` — the pair the theme already keeps for "this snake, but readable against itself" —

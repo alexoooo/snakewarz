@@ -142,21 +142,6 @@ internal class Theme private constructor(
          */
         const val CORPSE_ALPHA: Double = 0.28
 
-        /**
-         * How much of its colour a living snake's oldest square keeps, with two of its own moves
-         * left and then with one.
-         *
-         * The trail retracts on alternating turns — `RulesConfig.growEveryNthMove` — so the square a
-         * snake is about to give back is knowable a move ahead of it going, and fading it in two
-         * steps says so. Both stay well clear of [CORPSE_ALPHA]: a fading square is one that is
-         * about to open, and a corpse is one that never will.
-         *
-         * All three are rules about the *game* rather than about a theme — a corpse must be visible
-         * and must not compete, whatever the board is coloured — so they sit here and do not vary.
-         */
-        const val AGING_ALPHA: Double = 0.70
-        const val DYING_ALPHA: Double = 0.42
-
         /** What a page with nothing stored opens on, and what an id nothing offers falls back to. */
         const val DEFAULT_ID: String = "classic"
 

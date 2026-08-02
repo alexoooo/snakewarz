@@ -108,15 +108,6 @@ class ThemeTest {
         assertEquals(Theme.DEFAULT_ID, Theme.ALL.first(), "and the default is the option the page opens on")
     }
 
-    @Test
-    fun `a fading square stays clear of a corpse`() {
-        // A fading square is one that is about to open; a corpse is one that never will. If the two
-        // alphas ever met, the board would stop saying which is which. Rules about the game rather
-        // than about a theme, which is why there is one set of them and not one per theme.
-        assertTrue(Theme.AGING_ALPHA > Theme.DYING_ALPHA)
-        assertTrue(Theme.DYING_ALPHA > Theme.CORPSE_ALPHA)
-    }
-
     // -- internals
 
     /** Every shipped theme under both schemes, with a name for whichever one fails. */
