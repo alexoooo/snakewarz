@@ -142,6 +142,9 @@ internal class BoardRenderer(
     private var moving: Boolean = false
     private var aliveWhenLastDrawn: BooleanArray = BooleanArray(0)
     private var diedAt: DoubleArray = DoubleArray(0)
+    private var cellsWhenLastDrawn: Array<IntArray> = emptyArray()
+    private var transitions: Array<MoveTransition?> = emptyArray()
+    private val reducedMotion: Boolean = window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
     /**
      * The dash pattern the marching route is stroked with, and the empty one that puts it back.
@@ -217,6 +220,7 @@ internal class BoardRenderer(
         // one is not dying on this one. A resize pays the same price, which is a death flash cut
         // short by the one gesture nobody makes mid-death.
         aliveWhenLastDrawn = BooleanArray(0)
+        rememberPosition(view)
 
         repaint(view)
         drawOverlay(view)
@@ -452,6 +456,7 @@ internal class BoardRenderer(
      */
     private fun drawOverlay(view: BoardView) {
         trackDeaths(view)
+        trackMoves(view)
         moving = stillMoving(view)
         overlayContext.clearRect(0.0, 0.0, overlay.width.toDouble(), overlay.height.toDouble())
 
@@ -507,7 +512,7 @@ internal class BoardRenderer(
         val tail = tailAlpha(view, snake, corpse)
         val fading = tail != alpha
         if (fading) {
-            drawTaper(snake, colour, tail)
+            drawTaper(id.index, snake, colour, tail)
         }
 
         val first = if (fading) 1 else 0
@@ -518,9 +523,9 @@ internal class BoardRenderer(
             overlayContext.globalAlpha = alpha
             overlayContext.lineWidth = bodyWidth()
             overlayContext.beginPath()
-            overlayContext.moveTo(centreX(snake.cellAt(first)), centreY(snake.cellAt(first)))
-            for (i in first + 1 until snake.length) {
-                overlayContext.lineTo(centreX(snake.cellAt(i)), centreY(snake.cellAt(i)))
+            overlayContext.moveTo(bodyX(id.index, snake, first), bodyY(id.index, snake, first))
+            for (i in first + 1 until bodyPointCount(id.index, snake)) {
+                overlayContext.lineTo(bodyX(id.index, snake, i), bodyY(id.index, snake, i))
             }
             overlayContext.stroke()
         }
@@ -530,7 +535,7 @@ internal class BoardRenderer(
         // dropping it on the turn of the death is the snake becoming scenery between two frames.
         val spine = if (snake.alive) 1.0 else deathFlash(id.index)
         if (spine > 0.0) {
-            drawSpine(snake, theme.head(id.index), spine)
+            drawSpine(id.index, snake, theme.head(id.index), spine)
         }
     }
 
@@ -544,11 +549,11 @@ internal class BoardRenderer(
      * Adjacent squares are exactly one cell apart on one axis, so the perpendicular is that step
      * turned a quarter turn and divided by the cell — no length to measure and no zero to guard.
      */
-    private fun drawTaper(snake: SnakeView, colour: String, alpha: Double) {
-        val x0 = centreX(snake.cellAt(0))
-        val y0 = centreY(snake.cellAt(0))
-        val x1 = centreX(snake.cellAt(1))
-        val y1 = centreY(snake.cellAt(1))
+    private fun drawTaper(slot: Int, snake: SnakeView, colour: String, alpha: Double) {
+        val x0 = bodyX(slot, snake, 0)
+        val y0 = bodyY(slot, snake, 0)
+        val x1 = bodyX(slot, snake, 1)
+        val y1 = bodyY(slot, snake, 1)
         val acrossX = (y0 - y1) / cellSize
         val acrossY = (x1 - x0) / cellSize
 
@@ -581,20 +586,21 @@ internal class BoardRenderer(
      * [weight] is the whole line's share of itself, which is one for a living snake and a share
      * running to nothing across a death — see [drawBody].
      */
-    private fun drawSpine(snake: SnakeView, colour: String, weight: Double) {
+    private fun drawSpine(slot: Int, snake: SnakeView, colour: String, weight: Double) {
         val width = (cellSize * SPINE_WIDTH).coerceAtLeast(MIN_MARK)
+        val points = bodyPointCount(slot, snake)
 
         overlayContext.lineCap = CanvasLineCap.ROUND
         overlayContext.lineJoin = CanvasLineJoin.ROUND
         overlayContext.strokeStyle = colour.toJsString()
 
         // cellAt(0) is the tail, so `i` runs the body in the order it was laid down.
-        for (i in 0 until snake.length - 1) {
-            overlayContext.globalAlpha = weight * ramp(i, snake.length - 1, SPINE_TAIL_ALPHA, SPINE_HEAD_ALPHA)
-            overlayContext.lineWidth = ramp(i, snake.length - 1, MIN_MARK, width)
+        for (i in 0 until points - 1) {
+            overlayContext.globalAlpha = weight * ramp(i, points - 1, SPINE_TAIL_ALPHA, SPINE_HEAD_ALPHA)
+            overlayContext.lineWidth = ramp(i, points - 1, MIN_MARK, width)
             overlayContext.beginPath()
-            overlayContext.moveTo(centreX(snake.cellAt(i)), centreY(snake.cellAt(i)))
-            overlayContext.lineTo(centreX(snake.cellAt(i + 1)), centreY(snake.cellAt(i + 1)))
+            overlayContext.moveTo(bodyX(slot, snake, i), bodyY(slot, snake, i))
+            overlayContext.lineTo(bodyX(slot, snake, i + 1), bodyY(slot, snake, i + 1))
             overlayContext.stroke()
         }
     }
@@ -621,8 +627,8 @@ internal class BoardRenderer(
             return
         }
 
-        val x = centreX(snake.head)
-        val y = centreY(snake.head)
+        val x = headX(id.index, snake)
+        val y = headY(id.index, snake)
 
         overlayContext.globalAlpha = 1.0
         overlayContext.fillStyle = theme.head(id.index).toJsString()
@@ -781,6 +787,65 @@ internal class BoardRenderer(
         }
     }
 
+    /** Recovers a visible one-cell move from consecutive paints without retaining engine state. */
+    private fun trackMoves(view: BoardView) {
+        if (cellsWhenLastDrawn.size != view.snakeCount) {
+            rememberPosition(view)
+            return
+        }
+
+        for (slot in 0 until view.snakeCount) {
+            val snake = view.snake(SnakeId(slot))
+            val current = IntArray(snake.length) { snake.cellAt(it).index }
+            val previous = cellsWhenLastDrawn[slot]
+            val existing = transitions[slot]
+            if (existing != null && transitionProgress(existing) >= 1.0) {
+                transitions[slot] = null
+            }
+            if (!current.contentEquals(previous)) {
+                transitions[slot] = when {
+                    reducedMotion || !snake.alive -> null
+                    existing != null && transitionProgress(existing) < 1.0 -> null
+                    isVisibleMove(previous, current) -> MoveTransition(previous, current.size == previous.size, motion)
+                    else -> null
+                }
+                cellsWhenLastDrawn[slot] = current
+            }
+        }
+    }
+
+    private fun rememberPosition(view: BoardView) {
+        cellsWhenLastDrawn = Array(view.snakeCount) { slot ->
+            val snake = view.snake(SnakeId(slot))
+            IntArray(snake.length) { snake.cellAt(it).index }
+        }
+        transitions = arrayOfNulls(view.snakeCount)
+    }
+
+    private fun isVisibleMove(previous: IntArray, current: IntArray): Boolean {
+        if (previous.isEmpty() || current.isEmpty() || current.size !in previous.size..previous.size + 1) {
+            return false
+        }
+        val oldHead = Cell(previous.last())
+        val newHead = Cell(current.last())
+        val adjacent = kotlin.math.abs(grid.rowOf(oldHead) - grid.rowOf(newHead)) +
+            kotlin.math.abs(grid.colOf(oldHead) - grid.colOf(newHead)) == 1
+        if (!adjacent) {
+            return false
+        }
+        return if (current.size == previous.size + 1) {
+            previous.indices.all { current[it] == previous[it] }
+        } else {
+            (0 until current.lastIndex).all { current[it] == previous[it + 1] }
+        }
+    }
+
+    private fun transitionProgress(transition: MoveTransition): Double {
+        val linear = ((motion - transition.startedAt) / MOVE_MILLIS).coerceIn(0.0, 1.0)
+        val remaining = 1.0 - linear
+        return 1.0 - remaining * remaining * remaining
+    }
+
     /**
      * Whether anything on this bitmap still has frames to run, which is what keeps [Ticker] going.
      *
@@ -794,6 +859,9 @@ internal class BoardRenderer(
             return true
         }
         for (slot in 0 until view.snakeCount) {
+            if (transitions.getOrNull(slot) != null) {
+                return true
+            }
             if (deathFlash(slot) > 0.0) {
                 return true
             }
@@ -847,6 +915,47 @@ internal class BoardRenderer(
         return if (!anchored) 1.0 else 1.0 + HEAD_PULSE * sin(2 * PI * motion / HEAD_PULSE_MILLIS)
     }
 
+    private fun bodyPointCount(slot: Int, snake: SnakeView): Int =
+        snake.length + if (transitions.getOrNull(slot)?.retracts == true) 1 else 0
+
+    private fun bodyX(slot: Int, snake: SnakeView, point: Int): Double = bodyCoordinate(slot, snake, point, true)
+
+    private fun bodyY(slot: Int, snake: SnakeView, point: Int): Double = bodyCoordinate(slot, snake, point, false)
+
+    private fun bodyCoordinate(slot: Int, snake: SnakeView, point: Int, horizontal: Boolean): Double {
+        val transition = transitions.getOrNull(slot) ?: return centre(snake.cellAt(point), horizontal)
+        val progress = transitionProgress(transition)
+        val old = transition.oldCells
+        if (transition.retracts) {
+            return when (point) {
+                0 -> interpolate(Cell(old[0]), Cell(old[1]), progress, horizontal)
+                old.size -> interpolate(Cell(old.last()), snake.head, progress, horizontal)
+                else -> centre(Cell(old[point]), horizontal)
+            }
+        }
+        return if (point == snake.length - 1) {
+            interpolate(Cell(old.last()), snake.head, progress, horizontal)
+        } else {
+            centre(Cell(old[point]), horizontal)
+        }
+    }
+
+    private fun headX(slot: Int, snake: SnakeView): Double = headCoordinate(slot, snake, true)
+
+    private fun headY(slot: Int, snake: SnakeView): Double = headCoordinate(slot, snake, false)
+
+    private fun headCoordinate(slot: Int, snake: SnakeView, horizontal: Boolean): Double {
+        val transition = transitions.getOrNull(slot) ?: return centre(snake.head, horizontal)
+        return interpolate(Cell(transition.oldCells.last()), snake.head, transitionProgress(transition), horizontal)
+    }
+
+    private fun interpolate(from: Cell, to: Cell, progress: Double, horizontal: Boolean): Double {
+        val start = centre(from, horizontal)
+        return start + (centre(to, horizontal) - start) * progress
+    }
+
+    private fun centre(cell: Cell, horizontal: Boolean): Double = if (horizontal) centreX(cell) else centreY(cell)
+
     // -- internals
 
     /**
@@ -890,6 +999,12 @@ internal class BoardRenderer(
     private fun centreX(cell: Cell): Double = grid.colOf(cell) * cellSize + 1 + (cellSize - 1) / 2.0
 
     private fun centreY(cell: Cell): Double = grid.rowOf(cell) * cellSize + 1 + (cellSize - 1) / 2.0
+
+    private class MoveTransition(
+        val oldCells: IntArray,
+        val retracts: Boolean,
+        val startedAt: Double,
+    )
 
     /** Guarded, because a ratio of zero would divide the CSS size by nothing. */
     private fun ratioNow(): Double = window.devicePixelRatio.takeIf { it > 0.0 } ?: 1.0
@@ -1066,6 +1181,9 @@ internal class BoardRenderer(
          * survivors have moved twice would read as lag rather than as a death.
          */
         const val DEATH_MILLIS = 300.0
+
+        /** A visible turn's ease-out glide; engine state has already reached the destination. */
+        const val MOVE_MILLIS = 120.0
 
         /** A stamp no reading of a clock that starts at zero and only grows can ever be inside. */
         const val NEVER = -DEATH_MILLIS

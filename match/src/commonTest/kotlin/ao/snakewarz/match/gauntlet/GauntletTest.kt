@@ -28,6 +28,10 @@ class GauntletTest {
         assertEquals((1..EXPECTED_LEVELS).toList(), Gauntlet.levels.map { it.index })
         assertEquals(Gauntlet.levels.first(), Gauntlet.levelAt(1))
         assertEquals(Gauntlet.levels.last(), Gauntlet.levelAt(EXPECTED_LEVELS))
+        assertEquals(
+            listOf("Hunter", "Cartographer", "Lookout", "Gambler", "Student", "Planner", "Final Boss"),
+            Gauntlet.levels.map { it.title },
+        )
     }
 
     @Test

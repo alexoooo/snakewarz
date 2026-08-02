@@ -34,6 +34,7 @@ import ao.snakewarz.ui.model.UiModel
 import ao.snakewarz.ui.model.gauntlet.GauntletProgress
 import ao.snakewarz.ui.model.hoverInfo
 import ao.snakewarz.ui.render.BoardRenderer
+import ao.snakewarz.ui.render.GauntletVisual
 import ao.snakewarz.ui.render.TexturePack
 import ao.snakewarz.ui.render.Theme
 import ao.snakewarz.ui.render.prefersDark
@@ -242,7 +243,8 @@ public class GameSession(
      */
     private var portraitedSetup: MatchSetup = match.setup
     private var portraitedTheme: String = theme.id
-    private var slotFaces: SlotPortraits = SlotPortraits(match.setup, portraits, theme)
+    private var portraitedLevel: Int? = null
+    private var slotFaces: SlotPortraits = SlotPortraits(match.setup, portraits, theme, level)
 
     /**
      * The square the pointer is over, or [Cell.NONE].
@@ -789,8 +791,14 @@ public class GameSession(
      * chose.
      */
     private fun paintTheme() {
-        theme = Theme.of(themeId, prefersDark())
+        val visual = if (screen == Screen.GAME) GauntletVisual.at(level) else null
+        theme = Theme.of(themeId, prefersDark()).let { base -> visual?.let(base::staged) ?: base }
         theme.applyToPage()
+        if (visual == null) {
+            GauntletVisual.clearPage()
+        } else {
+            visual.applyToPage()
+        }
         renderer.applyTheme(theme)
     }
 
@@ -829,6 +837,7 @@ public class GameSession(
             level = null
         }
         screen = target
+        paintTheme()
         // A panel belongs to the board it covers, so it does not follow you off the screen.
         openPanel = null
 
@@ -974,6 +983,7 @@ public class GameSession(
     // -- match lifecycle
 
     private fun begin() {
+        paintTheme()
         chrome.cancelControls()
         awaitingInput = false
         resultDismissed = false
@@ -1004,7 +1014,7 @@ public class GameSession(
         renderChrome()
         // The arena is the player's own again, so the ground goes back to their match's — a preview
         // or a batch may have left the renderer set to somebody else's board.
-        renderer.applyPack(pack)
+        renderer.applyPack(GauntletVisual.at(level)?.texture ?: pack)
         fitBoard(match)
         refreshOverlay()
 
@@ -1561,10 +1571,11 @@ public class GameSession(
     /** What [shown]'s seats look like, rebuilt when that match changes or the player picks a theme. */
     private fun facesFor(shown: Match): SlotPortraits {
         val setup = shown.setup
-        if (setup !== portraitedSetup || theme.id != portraitedTheme) {
+        if (setup !== portraitedSetup || theme.id != portraitedTheme || level != portraitedLevel) {
             portraitedSetup = setup
             portraitedTheme = theme.id
-            slotFaces = SlotPortraits(setup, portraits, theme)
+            portraitedLevel = level
+            slotFaces = SlotPortraits(setup, portraits, theme, level)
         }
         return slotFaces
     }

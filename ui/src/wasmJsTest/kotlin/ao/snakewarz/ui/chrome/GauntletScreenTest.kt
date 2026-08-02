@@ -104,6 +104,7 @@ class GauntletScreenTest {
             text(level.index, ".level-meta").endsWith(OPPONENT_NAME),
             "the display name comes off the BotRegistry interface, by slug: ${text(level.index, ".level-meta")}",
         )
+        assertEquals("hunter", tile(level.index).getAttribute("data-stage"))
     }
 
     @Test

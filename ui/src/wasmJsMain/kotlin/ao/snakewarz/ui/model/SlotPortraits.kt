@@ -1,6 +1,7 @@
 package ao.snakewarz.ui.model
 
 import ao.snakewarz.match.MatchSetup
+import ao.snakewarz.ui.render.GauntletVisual
 import ao.snakewarz.ui.render.Theme
 import ao.snakewarz.ui.render.identicon
 
@@ -21,14 +22,19 @@ import ao.snakewarz.ui.render.identicon
  * which is the same string under either light or dark scheme and moves only when the player picks a
  * different theme — so the sun going down does not rebuild any of these, and choosing Neon does.
  */
-internal class SlotPortraits(setup: MatchSetup, portraits: Portraits, theme: Theme) {
+internal class SlotPortraits(setup: MatchSetup, portraits: Portraits, theme: Theme, level: Int? = null) {
     private val urls: List<String> = List(setup.slotCount) { slot ->
         val slug = setup.slots[slot].slug
-        portraits.urlFor(slug) ?: identicon(slug, theme.body(slot))
+        val key = if (slot == OPPONENT_SLOT) GauntletVisual.at(level)?.portraitKey ?: slug else slug
+        portraits.urlFor(key) ?: identicon(slug, theme.body(slot))
     }
 
     /** The face of the snake in [slot], or `null` where the match has no such seat. */
     operator fun get(slot: Int): String? = urls.getOrNull(slot)
 
     override fun toString(): String = "SlotPortraits(${urls.size})"
+
+    private companion object {
+        const val OPPONENT_SLOT = 1
+    }
 }

@@ -7,16 +7,16 @@ package ao.snakewarz.app
  * absolute one would resolve against the domain root and 404 there.
  *
  * The list is written out rather than derived from `ShippedBots`, and that is the point of the seam
- * rather than a shortcut: it is a statement about what is in `resources/portrait/`, and a registry
+ * rather than a shortcut: it is a statement about what is in `resources/art/portrait/`, and a registry
  * cannot make it. A bot registered with no art answers `null` and `:ui` draws it an identicon, so
  * the failure mode is a working face rather than a broken image — `PortraitUrlTest` is what still
  * tells somebody the two have drifted.
  */
-internal fun portraitUrl(slug: String): String? =
-    if (slug in SHIPPED_PORTRAITS) "portrait/$slug.svg" else null
+internal fun portraitUrl(key: String): String? =
+    if (key in SHIPPED_PORTRAITS) "art/portrait/$key.webp" else null
 
 /**
- * One file in `resources/portrait/` per slug, in registry order, plus the human seat.
+ * One generic file per registry slug, plus the human seat and seven campaign-character keys.
  *
  * These are **frozen identifiers** — a released slug is what a replay URL carries — so a file named
  * after one keeps pointing at the same bot for as long as the link does.
@@ -39,4 +39,11 @@ internal val SHIPPED_PORTRAITS: Set<String> = setOf(
     "lookahead",
     "burninhell",
     "human",
+    "gauntlet-hunter",
+    "gauntlet-cartographer",
+    "gauntlet-lookout",
+    "gauntlet-gambler",
+    "gauntlet-student",
+    "gauntlet-planner",
+    "gauntlet-final-boss",
 )

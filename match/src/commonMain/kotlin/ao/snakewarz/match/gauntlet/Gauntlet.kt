@@ -26,8 +26,8 @@ public object Gauntlet {
     public val levels: List<GauntletLevel> = listOf(
         GauntletLevel(
             index = 1,
-            title = "The Hunter",
-            blurb = "Tracks your head and tries to close the distance. The first opponent that fights back.",
+            title = "Hunter",
+            blurb = "Tracks your head. Closes the distance. Never stops hunting.",
             opponent = BotId("chase"),
             params = BotParams.EMPTY,
             budgetPerTurn = NO_ALLOWANCE,
@@ -38,8 +38,8 @@ public object Gauntlet {
         ),
         GauntletLevel(
             index = 2,
-            title = "The Cartographer",
-            blurb = "Reads walls, exits and pockets, then claims safe territory without searching ahead.",
+            title = "Cartographer",
+            blurb = "Reads walls and exits. Charts safe pockets. Claims the largest territory.",
             opponent = BotId("cartographer"),
             params = BotParams.EMPTY,
             budgetPerTurn = NO_ALLOWANCE,
@@ -50,8 +50,8 @@ public object Gauntlet {
         ),
         GauntletLevel(
             index = 3,
-            title = "The Lookout",
-            blurb = "Reads five turns into every branch and fights for the arena instead of waiting for a trap.",
+            title = "Lookout",
+            blurb = "Scans five turns ahead. Watches every branch. Fights for the open arena.",
             opponent = BotId("lookahead"),
             params = BotParams(mapOf("depth" to "5")),
             budgetPerTurn = 1_024,
@@ -62,8 +62,8 @@ public object Gauntlet {
         ),
         GauntletLevel(
             index = 4,
-            title = "The Gambler",
-            blurb = "Builds a guided search tree, valuing territory while testing hundreds of futures.",
+            title = "Gambler",
+            blurb = "Bets on a guided search. Tests hundreds of futures. Values territory over safety.",
             opponent = BotId("puct"),
             params = BotParams(mapOf("eval" to "territory")),
             budgetPerTurn = 600,
@@ -74,8 +74,8 @@ public object Gauntlet {
         ),
         GauntletLevel(
             index = 5,
-            title = "The Student",
-            blurb = "Uses the island walls as part of its territorial search instead of treating them as scenery.",
+            title = "Student",
+            blurb = "Studies every island wall. Learns their territorial value. Turns obstacles into lessons.",
             opponent = BotId("puct"),
             params = BotParams(mapOf("eval" to "territory")),
             budgetPerTurn = 600,
@@ -86,8 +86,8 @@ public object Gauntlet {
         ),
         GauntletLevel(
             index = 6,
-            title = "The Planner",
-            blurb = "Reads replies with alpha-beta and turns the pinwheel's narrow exits into commitments.",
+            title = "Planner",
+            blurb = "Reads every reply. Controls the pinwheel exits. Turns each route into a commitment.",
             opponent = BotId("alphabeta"),
             params = BotParams(mapOf("eval" to "territory")),
             budgetPerTurn = 600,

@@ -8,6 +8,7 @@ import ao.snakewarz.ui.model.Portraits
 import ao.snakewarz.ui.model.UiIntent
 import ao.snakewarz.ui.model.UiModel
 import ao.snakewarz.ui.model.gauntlet.GauntletProgress
+import ao.snakewarz.ui.render.GauntletVisual
 import ao.snakewarz.ui.render.Theme
 import ao.snakewarz.ui.render.identicon
 import org.w3c.dom.HTMLButtonElement
@@ -19,7 +20,7 @@ import org.w3c.dom.HTMLImageElement
  *
  * [Gauntlet] is `:match`, which this module already sees, so a tile needs no seam and no injected
  * table — unlike the opponent's *name* and *face*, which are facts about a bot and therefore arrive
- * through the `BotRegistry` interface and [Portraits] by slug. Nothing here can tell a wall hugger
+ * through the `BotRegistry` interface and [Portraits] by artwork key. Nothing here can tell a wall hugger
  * from a human, which is the whole of why the gauntlet table lives a module down.
  *
  * Seven is a fixed number, so the tiles are **static markup** and this only ever writes their text,
@@ -127,7 +128,8 @@ internal class GauntletScreen(
         renderedTheme = theme.id
         faces = Gauntlet.levels.map { level ->
             val slug = level.opponent.slug
-            portraits.urlFor(slug) ?: identicon(slug, theme.body(OPPONENT_SLOT))
+            val key = GauntletVisual.at(level.index)?.portraitKey ?: slug
+            portraits.urlFor(key) ?: identicon(slug, theme.body(OPPONENT_SLOT))
         }
     }
 
@@ -177,6 +179,7 @@ internal class GauntletScreen(
 
         private fun style(className: String, badgeText: String) {
             root.className = className
+            root.setAttribute("data-stage", GauntletVisual.at(level.index)?.stageId ?: "")
             badge.textContent = badgeText
         }
     }

@@ -83,6 +83,30 @@ internal class Theme private constructor(
     /** The trail colour of the snake in [slot], which the scoreboard swatch paints itself with. */
     fun body(slot: Int): String = bodies[slot % bodies.size]
 
+    /** A level palette over the stored preference; the player remains the preference's first hue. */
+    fun staged(visual: GauntletVisual): Theme {
+        val stageHeads = heads.copyOf()
+        val stageBodies = bodies.copyOf()
+        stageHeads[1] = visual.enemyHead
+        stageBodies[1] = visual.enemyBody
+        return Theme(
+            id = id,
+            background = visual.board,
+            gridline = visual.grid,
+            wall = visual.wall,
+            wallEdge = visual.wallEdge,
+            heads = stageHeads,
+            bodies = stageBodies,
+            pageBackground = "#0b0a09",
+            surface = "#181513",
+            ink = "#eee4d4",
+            inkDim = "#b4a796",
+            line = "#493b31",
+            accent = visual.accent,
+            accentInk = "#100c09",
+        )
+    }
+
     /**
      * Writes this theme onto `<html>`, where `styles.css` reads it as custom properties.
      *

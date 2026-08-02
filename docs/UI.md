@@ -497,11 +497,11 @@ keep working without a pack knowing a single hex string.
 ### Faces, and the seam they arrive through
 
 **Every opponent has a picture, and `:ui` still cannot tell a wall hugger from a human.** `Portraits`
-is a `fun interface` taking a **slug** and answering a URL or `null`, `GameSession`'s constructor
-takes one, and `:app` fills it from `portraitUrl` — a set of slugs it ships `resources/portrait/*.svg`
-for. A slug because that is the one part of a bot that is frozen; a seam because a table of thirteen
-slugs in `:ui` would be exactly the coupling the `:bots` edge exists to prevent, and because
-`resources/` is `:app`'s to know about.
+is a `fun interface` taking a stable **artwork key** and answering a URL or `null`, `GameSession`'s
+constructor takes one, and `:app` fills it from `portraitUrl` — an explicit set of keys it ships
+under `resources/art/portrait/`. Generic keys are frozen bot slugs; campaign keys are frozen level
+identities. The seam keeps the resource table in `:app`, where it belongs, rather than introducing a
+forbidden `:ui` to `:bots` dependency.
 
 - **`null` is answered with a drawn mark, not a broken image.** `render/identicon.kt` hashes the slug
   into a mirrored 5×5 block grid and emits an SVG `data:` URI, so a *contributed* bot has a face on
@@ -509,12 +509,12 @@ slugs in `:ui` would be exactly the coupling the `:bots` edge exists to prevent,
   hash is FNV-1a written out in the file rather than `String.hashCode()`, which Kotlin does not
   specify to be identical across targets — the same bot must get the same mark forever, and
   `IdenticonTest` pins one literal to say so.
-- **A mark is tinted with `Theme.body(slot)`, so it is keyed by *slot* and not by slug**, and
-  `GameSession` rebuilds `SlotPortraits` when the match changes **or the theme id does**. Not on a
-  scheme change: a trail is the same string under light and dark, so the sun going down would spend a
-  hash and a base64 encode per seat to produce the marks that are already on the page.
+- **A mark is tinted with `Theme.body(slot)`, so it is keyed by *slot* and not by artwork key**, and
+  `GameSession` rebuilds `SlotPortraits` when the match, level, or theme id changes. Not on a scheme
+  change: a trail is the same string under light and dark, so the sun going down would spend a hash
+  and a base64 encode per seat to produce the marks that are already on the page.
 - **The level tiles resolve their own**, because `SlotPortraits` is keyed by a `MatchSetup`'s slots and
-  a tile has no match. `GauntletScreen` asks the same seam by slug and tints a fallback with
+  a tile has no match. `GauntletScreen` asks the same seam by stable campaign artwork key and tints a fallback with
   `Theme.body(1)` — the seat `GauntletLevel.setup` puts the opponent in — so a tile's face is already
   the colour that snake will be on the board, and it is rebuilt on the same theme-id rule.
 - **A portrait is decoration and never information.** `aria-hidden`, empty `alt`, and always beside
@@ -527,30 +527,17 @@ slugs in `:ui` would be exactly the coupling the `:bots` edge exists to prevent,
   and a bot with no shipped art carries its whole picture in the URL.
 - **The bot pickers in `#panel-setup` get none.** They are `<select>`s; a styled listbox is a custom
   widget, and every custom widget is a keyboard-accessibility bill. The names are enough.
-- **The art follows `favicon.svg`** — a rounded `#16191d` tile, flat tones in the snake ramp, a
-  square `viewBox`, no gradients, no text and no external references. What is *on* the tile is a
-  **character, drawn so that it still gestures at the algorithm**: the Oracle's visor is alpha-beta's
-  two bounds closing on the window between them, the Sweeper's element is the boustrophedon, the
-  Planner's crest is one line climbed hard past two stubs it left as they were. Both halves are
-  load-bearing. "How the bot plays" was the whole of it and produced eight rectangles you could not
-  read at 3rem; "who the bot is" alone would throw away the only thing a portrait can teach a player.
-- **`viewBox` is `0 0 96 96` and the coordinates are integers.** It was 32, and three times the
-  linear budget is the difference between an emblem and a face. The 6/32 corner ratio scaled to
-  18/96, so the frame is unchanged in proportion — which matters because **the tile and the frame are
-  the one thing all thirteen share**. An identicon has to sit beside a hand-drawn face on the same card
-  without reading as a different kind of thing, and `identicon.kt` drawing on the same tile at the
-  same ratio is what keeps that true. Move one and move the other.
-- **SVG only, and about 4 KB raw a file.** Thirteen at that size is noise against
-  [SW-08](Coding-Standards.md#sw-08--the-bundle-is-a-budget)'s budget, which is not the point: the
-  ceiling is what stops the next one being a PNG, and a PNG would not be noise. `PortraitUrlTest`
-  walks `ShippedBots` plus `PlayableRegistry.HUMAN_ID` and fails when the two lists drift; what it
-  cannot reach is the directory itself, so a slug with no file beside the page is a broken image the
-  browser reports and no test does. **A malformed file is the same silence** — and the way to write
-  one is a double hyphen inside a `<!-- -->`, which XML forbids and which the house comment style
-  reaches for every time it wants a dash. Parse all thirteen after editing any of them; the browser's
-  only report is a torn-page icon on a tile.
+- **The shipped art is opaque WebP in one pulp-arcade style.** Generic portraits keep frozen bot slugs
+  as keys; the seven `gauntlet-<stage>` keys are character identities, so two levels backed by the
+  same bot still look like different opponents. They use square head-and-shoulders crops that remain
+  readable in the compact cards. `PortraitUrlTest` walks the generic registry set and separately pins
+  the seven campaign keys, including the unique Final Boss.
+- **Eight wide environments and twenty portraits share one asset budget.** The backgrounds keep their
+  centres subdued because a board is drawn over them; CSS adds the vignette rather than baking a
+  second dark copy of each file. All 28 WebPs total roughly 306 KiB raw, and the production gzip gate
+  still measures every file below `art/`.
 - **The bundle gate measures subdirectories.** CI's size step walks the distribution with `find`
-  rather than a glob, because `portrait/` is a directory and a glob would hand `gzip` one, measure it
+  rather than a glob, because `art/` is a directory and a glob would hand `gzip` one, measure it
   as zero, and leave every asset under it outside the budget. See
   [SW-08](Coding-Standards.md#sw-08--the-bundle-is-a-budget).
 

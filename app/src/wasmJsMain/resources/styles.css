@@ -455,7 +455,7 @@ body.failed #loading {
 }
 
 .level-title {
-    grid-column: 2;
+    grid-column: 2 / 4;
     font-size: 1rem;
     font-weight: 600;
 }
@@ -486,7 +486,7 @@ body.failed #loading {
 /* The badge sits beside the title, which is the row a glance lands on. */
 .level-state {
     grid-column: 3;
-    grid-row: 2;
+    grid-row: 1;
     color: var(--ink-dim);
     font-size: 0.72rem;
     text-transform: uppercase;
@@ -1478,4 +1478,211 @@ button:active {
 
 .level-replay {
     transition: opacity 120ms ease;
+}
+
+/* Pulp arcade treatment ---------------------------------------------------- */
+
+html[data-stage] body::before {
+    content: "";
+    position: fixed;
+    z-index: -1;
+    inset: 0;
+    background:
+        radial-gradient(circle at 50% 42%, transparent 15%, rgb(0 0 0 / 0.72) 100%),
+        linear-gradient(rgb(8 7 6 / 0.38), rgb(8 7 6 / 0.72)),
+        var(--stage-art) center / cover no-repeat;
+    filter: saturate(0.78) contrast(1.08);
+}
+
+html[data-stage] body {
+    background: #090807;
+}
+
+#screen-home {
+    position: relative;
+    isolation: isolate;
+    color: #eee4d4;
+    background:
+        radial-gradient(circle at 50% 42%, transparent 12%, rgb(0 0 0 / 0.74) 100%),
+        linear-gradient(rgb(8 7 6 / 0.38), rgb(8 7 6 / 0.72)),
+        url("art/background/home.webp") center / cover fixed;
+}
+
+#screen-home::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.28;
+    background-image: repeating-linear-gradient(105deg, transparent 0 7px, rgb(255 244 220 / 0.025) 8px 9px);
+}
+
+#screen-home .home,
+#screen-home .controls {
+    padding: clamp(1.25rem, 4vw, 2.4rem);
+    background: linear-gradient(145deg, rgb(25 20 16 / 0.94), rgb(12 11 10 / 0.86));
+    border: 1px solid rgb(205 161 91 / 0.34);
+    border-radius: 4px 18px 4px 12px;
+    box-shadow: 0 18px 55px rgb(0 0 0 / 0.48), inset 0 0 34px rgb(116 72 32 / 0.12);
+}
+
+#screen-home .home {
+    max-width: 29rem;
+}
+
+#screen-home .tagline,
+#screen-home .note,
+#screen-home .controls h2,
+#screen-home .controls dd {
+    color: #bbae9c;
+}
+
+#screen-home .lockup,
+.level-title,
+.bar h1,
+.wordmark {
+    font-family: Georgia, "Times New Roman", serif;
+    text-transform: uppercase;
+    letter-spacing: 0.045em;
+}
+
+#screen-home .home-actions button {
+    min-height: 3.2rem;
+    border-radius: 3px 10px 3px 8px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.levels {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.9rem;
+}
+
+.level {
+    --card-accent: var(--accent);
+    min-height: 12.2rem;
+    align-content: end;
+    padding: 1rem;
+    color: #f2e8d7;
+    border-color: color-mix(in srgb, var(--card-accent) 58%, #241b16);
+    border-radius: 3px 14px 3px 10px;
+    background:
+        linear-gradient(to top, rgb(10 9 8 / 0.98) 0 42%, rgb(10 9 8 / 0.66) 68%, rgb(10 9 8 / 0.24)),
+        var(--card-art) center / cover;
+    box-shadow: 0 10px 26px rgb(0 0 0 / 0.28), inset 0 0 22px rgb(0 0 0 / 0.36);
+    overflow: hidden;
+}
+
+.level[data-stage="hunter"] { --card-art: url("art/background/hunter.webp"); --card-accent: #d49a45; }
+.level[data-stage="cartographer"] { --card-art: url("art/background/cartographer.webp"); --card-accent: #42a89c; }
+.level[data-stage="lookout"] { --card-art: url("art/background/lookout.webp"); --card-accent: #68a9d0; }
+.level[data-stage="gambler"] { --card-art: url("art/background/gambler.webp"); --card-accent: #c79a47; }
+.level[data-stage="student"] { --card-art: url("art/background/student.webp"); --card-accent: #b58d63; }
+.level[data-stage="planner"] { --card-art: url("art/background/planner.webp"); --card-accent: #5d9eb2; }
+.level[data-stage="final-boss"] { --card-art: url("art/background/final-boss.webp"); --card-accent: #c13a3f; }
+
+.level .portrait {
+    width: 5.25rem;
+    height: 5.25rem;
+    border: 2px solid var(--card-accent);
+    border-radius: 2px 12px 2px 8px;
+    box-shadow: 0 5px 18px rgb(0 0 0 / 0.55);
+}
+
+.level-no,
+.level-blurb,
+.level-meta,
+.level-state {
+    color: #c8bcaa;
+    text-shadow: 0 1px 2px #000;
+}
+
+.level-title {
+    color: #fff5df;
+    text-shadow: 0 2px 4px #000;
+}
+
+.level-blurb {
+    -webkit-line-clamp: 3;
+}
+
+.level.open {
+    border-color: var(--card-accent);
+    box-shadow: 0 0 0 1px var(--card-accent), 0 12px 34px rgb(0 0 0 / 0.42);
+}
+
+.level.open .level-state {
+    color: var(--card-accent);
+}
+
+.levels > li:last-child {
+    grid-column: 1 / -1;
+}
+
+.levels > li:last-child .level {
+    min-height: 13.5rem;
+    grid-template-columns: 7.5rem minmax(0, 1fr) auto;
+    border-color: #8e2a31;
+    background-position: center 62%;
+}
+
+.levels > li:last-child .portrait {
+    width: 6.5rem;
+    height: 6.5rem;
+}
+
+html[data-stage] #board {
+    outline: 2px solid color-mix(in srgb, var(--accent) 62%, #1a130f);
+    border-radius: 2px;
+    box-shadow:
+        0 0 0 7px color-mix(in srgb, var(--panel) 86%, #000),
+        0 0 0 9px color-mix(in srgb, var(--accent) 55%, #1b1510),
+        0 18px 48px rgb(0 0 0 / 0.72);
+}
+
+html[data-stage] .bar {
+    text-shadow: 0 1px 2px #000;
+}
+
+@media (min-width: 52rem) and (min-height: 44rem) {
+    #scoreboard {
+        gap: 0.6rem;
+    }
+
+    .slot {
+        align-items: center;
+        min-height: 4.25rem;
+        padding: 0.35rem 0.75rem 0.35rem 0.4rem;
+        border-radius: 5px 13px 5px 10px;
+        box-shadow: 0 5px 18px rgb(0 0 0 / 0.18);
+    }
+
+    .slot .portrait {
+        width: 3.35rem;
+        height: 3.35rem;
+        border-radius: 3px 10px 3px 7px;
+    }
+}
+
+@media (max-width: 56rem) {
+    .levels {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 36rem) {
+    .levels {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .levels > li:last-child .level {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+
+    .levels > li:last-child .portrait {
+        width: 5.25rem;
+        height: 5.25rem;
+    }
 }

@@ -42,8 +42,7 @@ tasks.named<ProcessResources>("wasmJsProcessResources") {
     doLast {
         val index = destinationDir.resolve("index.html")
         val releasedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString()
-        val label = releasedAt.replace('T', ' ').removeSuffix("Z")
-        val releaseElement = """<time id="release-build" datetime="$releasedAt">Release · $label UTC</time>"""
+        val releaseElement = """<time id="release-build" datetime="$releasedAt">Release · $releasedAt</time>"""
         val releaseElementPattern = Regex("""<time id="release-build" datetime="[^"]*">[^<]*</time>""")
         val page = index.readText()
 

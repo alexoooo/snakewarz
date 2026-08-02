@@ -43,7 +43,8 @@ internal class HomeScreen(dispatch: (UiIntent) -> Unit) {
         resume = model.gauntlet.highest
 
         continueButton.hidden = !started
-        continueButton.textContent = "Continue — Level $resume"
+        continueButton.textContent = continueLabel(resume)
+        gauntletButton.textContent = campaignLabel(started)
         gauntletButton.className = if (started) GAUNTLET_CLASS else "$GAUNTLET_CLASS primary"
 
         replayButton.hidden = !model.replay
@@ -58,3 +59,7 @@ internal class HomeScreen(dispatch: (UiIntent) -> Unit) {
         const val GAUNTLET_CLASS = "wide"
     }
 }
+
+internal fun campaignLabel(started: Boolean): String = if (started) "Gauntlet" else "New Game"
+
+internal fun continueLabel(level: Int): String = "Continue — Level $level"

@@ -6,6 +6,7 @@ import ao.snakewarz.match.human.PlayableRegistry
 import ao.snakewarz.ui.GameSession
 import kotlinx.browser.document
 import kotlinx.browser.window
+import org.w3c.dom.HTMLTimeElement
 
 /**
  * The entry point, and the one place in the program that sees the whole module graph.
@@ -20,6 +21,7 @@ import kotlinx.browser.window
  * neither is a thing `:ui` could answer without learning what is in the registry.
  */
 public fun main() {
+    localizeBuildTime()
     val input = InputBuffer(InputBuffer.PATH_CAPACITY)
     val session = GameSession(
         registry = PlayableRegistry(ShippedBots, input),
@@ -45,3 +47,22 @@ public fun main() {
         readReplay()?.let(session::load)
     }
 }
+
+/** Keeps the machine-readable instant and lets the browser choose the viewer's zone and language. */
+private fun localizeBuildTime() {
+    val element = document.getElementById("release-build") as? HTMLTimeElement ?: return
+    val instant = element.dateTime.takeIf { it.isNotBlank() } ?: return
+    element.textContent = formatBuildTime(instant)
+}
+
+private fun formatBuildTime(instant: String): String = js(
+    """"Release · " + new Intl.DateTimeFormat(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        second: "2-digit",
+        timeZoneName: "short"
+    }).format(new Date(instant))""",
+)
