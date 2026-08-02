@@ -759,6 +759,9 @@ body.failed #loading {
     grid-template-rows: repeat(2, 1fr);
     gap: 0.35rem;
     touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
 }
 
 #steer-north {
@@ -827,7 +830,7 @@ body.failed #loading {
 #rival-card {
     display: grid;
     grid-template-columns: clamp(4.5rem, 13vmin, 7rem) minmax(0, 1fr);
-    grid-template-rows: auto auto;
+    grid-template-rows: repeat(4, auto);
     align-items: center;
     gap: 0 0.65rem;
     width: min(15rem, 100%);
@@ -854,11 +857,19 @@ body.failed #loading {
 }
 
 #rival-name {
-    align-self: start;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+}
+
+#rival-length,
+#rival-status {
+    color: var(--ink-dim);
+    font-size: 0.78rem;
+}
+
+#rival-status {
+    color: var(--accent);
 }
 
 /* Transport ---------------------------------------------------------------- */
@@ -1079,9 +1090,9 @@ body.failed #loading {
 }
 
 /*
- * The winner's face, above the verdict rather than beside it: the card is centred text, and a
- * draw has nobody to show -- so the portrait is a block that is simply absent when there is none,
- * and nothing has to hold a space open for it.
+ * The rival's face, above the verdict rather than beside it: a Gauntlet win shows the defeated
+ * character, a loss shows the regular one, and a draw or custom human win has nobody to show -- so
+ * the portrait is a block that is simply absent when there is none.
  *
  * The largest a portrait is drawn anywhere, because this is the moment somebody just beat them and
  * there is nothing on the card competing for the room.

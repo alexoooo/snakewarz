@@ -3,6 +3,7 @@ package ao.snakewarz.ui
 import ao.snakewarz.botapi.registry.BotRegistry
 import ao.snakewarz.core.grid.Cell
 import ao.snakewarz.core.grid.Direction
+import ao.snakewarz.core.rules.EliminationReason
 import ao.snakewarz.core.rules.MatchEnd
 import ao.snakewarz.core.rules.MatchOutcome
 import ao.snakewarz.core.snake.SnakeId
@@ -15,6 +16,7 @@ import ao.snakewarz.match.human.PathPlanner
 import ao.snakewarz.match.human.PlayableRegistry
 import ao.snakewarz.match.replay.MatchRecord
 import ao.snakewarz.match.replay.ReplayCodec
+import ao.snakewarz.match.stats.SlotStats
 import ao.snakewarz.match.tournament.Tournament
 import ao.snakewarz.match.tournament.TournamentConfig
 import ao.snakewarz.ui.chrome.Chrome
@@ -1001,17 +1003,10 @@ public class GameSession(
         Preferences.setLevelReplay(beaten, ReplayCodec.encode(match.record()))
     }
 
-    /**
-     * The face that goes beside that verdict: whoever won.
-     *
-     * Which is your own on a win and your opponent's on a loss, so the dialog shows who the game was
-     * against rather than repeating a word. A draw has nobody to show and gets nothing — the seat
-     * cards behind the dialog carry every face either way.
-     */
-    private fun winnerFace(faces: SlotPortraits): String? {
-        val winner = match.outcome?.winner ?: return null
-        return if (winner.isNone) null else faces[winner.index]
-    }
+    /** The rival face that goes beside a loss, or its defeated variant beside a Gauntlet win. */
+    private fun resultFace(
+        faces: SlotPortraits,
+    ): String? = resultPortrait(match.outcome?.winner, level, faces, portraits)
 
     // -- match lifecycle
 
@@ -1596,8 +1591,8 @@ public class GameSession(
         val shown = batchBoard ?: match
         val faces = facesFor(shown)
         val verdict = resultText()
-        val rival = rivalCard(faces)
         val stats = shown.stats()
+        val rival = rivalCard(faces, stats.slots.getOrNull(OPPONENT_SLOT))
 
         chrome.render(
             UiModel(
@@ -1610,7 +1605,7 @@ public class GameSession(
                 openPanel = openPanel,
                 theme = theme,
                 result = verdict,
-                resultPortrait = if (verdict == null) null else winnerFace(faces),
+                resultPortrait = if (verdict == null) null else resultFace(faces),
                 replay = replay != null,
                 canTryAgain = replayHumanSeat() != null,
                 replayNextLevel = replayNextLevel(),
@@ -1633,13 +1628,30 @@ public class GameSession(
         )
     }
 
-    private fun rivalCard(faces: SlotPortraits): RivalCard? {
+    private fun rivalCard(faces: SlotPortraits, opponent: SlotStats?): RivalCard? {
         val current = level ?: return null
         if (screen != Screen.GAME || batchBoard != null || previewBoard != null) {
             return null
         }
         val rung = Gauntlet.levelAt(current)
-        return RivalCard(labelsFor(match)[OPPONENT_SLOT], rung.title, faces[OPPONENT_SLOT])
+        return RivalCard(
+            labelsFor(match)[OPPONENT_SLOT],
+            rung.title,
+            faces[OPPONENT_SLOT],
+            opponent?.length ?: 0,
+            rivalStatus(opponent),
+        )
+    }
+
+    private fun rivalStatus(opponent: SlotStats?): String = when {
+        opponent == null -> "Waiting"
+        opponent.winner -> "Winner"
+        opponent.alive -> "In play"
+        opponent.fate == EliminationReason.TRAPPED -> "Trapped"
+        opponent.fate == EliminationReason.SUICIDE -> "Crashed"
+        opponent.fate == EliminationReason.RESIGNED -> "Resigned"
+        opponent.fate == EliminationReason.FORFEIT -> "Forfeited"
+        else -> "Defeated"
     }
 
     /** The human seat in the recording on screen, if it has one. */
@@ -1720,3 +1732,19 @@ public class GameSession(
         const val GAUNTLET_GROUND_ALPHA = 0.88
     }
 }
+
+/** Which decorative face belongs beside a human match verdict. */
+internal fun resultPortrait(
+    winner: SnakeId?,
+    level: Int?,
+    faces: SlotPortraits,
+    portraits: Portraits,
+): String? {
+    if (winner == null || winner.isNone) {
+        return null
+    }
+    val defeated = GauntletVisual.at(level)?.defeatedPortraitKey
+    return if (winner.index == HUMAN_SLOT && defeated != null) portraits.urlFor(defeated) else faces[winner.index]
+}
+
+private const val HUMAN_SLOT = 0

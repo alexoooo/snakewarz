@@ -11,12 +11,14 @@ class GauntletVisualTest {
         assertEquals((1..Gauntlet.size).toList(), GauntletVisual.ALL.map { it.index })
         assertEquals(Gauntlet.size, GauntletVisual.ALL.map { it.stageId }.toSet().size)
         assertEquals(Gauntlet.size, GauntletVisual.ALL.map { it.portraitKey }.toSet().size)
+        assertEquals(Gauntlet.size, GauntletVisual.ALL.map { it.defeatedPortraitKey }.toSet().size)
     }
 
     @Test
     fun `the boss is not alpha beta in disguise`() {
         val boss = GauntletVisual.at(Gauntlet.size) ?: error("the final level has no visual")
         assertEquals("gauntlet-final-boss", boss.portraitKey)
+        assertEquals("gauntlet-final-boss-defeated", boss.defeatedPortraitKey)
         assertNotEquals("alphabeta", boss.portraitKey)
     }
 }

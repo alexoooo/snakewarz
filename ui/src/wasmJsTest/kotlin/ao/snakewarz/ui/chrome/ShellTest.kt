@@ -193,7 +193,7 @@ class ShellTest {
 
     @Test
     fun `a first level entry blocks the board and every result control`() {
-        val rival = RivalCard("The Hunter", "Hunter", null)
+        val rival = RivalCard("The Hunter", "Hunter", null, 4, "In play")
         shell.render(model(screen = Screen.GAME, result = "You lose", intro = rival))
 
         assertEquals("", element("app").getAttribute("inert"))

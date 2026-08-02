@@ -1,7 +1,6 @@
 package ao.snakewarz.app
 
 import ao.snakewarz.bots.ShippedBots
-import ao.snakewarz.match.human.PlayableRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -21,18 +20,20 @@ import kotlin.test.assertNull
  */
 class PortraitUrlTest {
     @Test
-    fun `every shipped bot has one, and so does the human seat`() {
-        for (slug in seats()) {
+    fun `every shipped bot has one and the human seat does not`() {
+        for (slug in botSlugs()) {
             assertNotNull(portraitUrl(slug), "no portrait is shipped for '$slug'")
         }
+        assertNull(portraitUrl("human"))
     }
 
     @Test
     fun `and nothing is shipped for a bot no registry offers`() {
         // The other direction of the same drift: a slug retired from the registry leaves a file
         // behind, and an entry that points at nothing is what somebody will find in the network tab.
-        assertEquals(seats(), SHIPPED_PORTRAITS.filterNotTo(LinkedHashSet()) { it.startsWith("gauntlet-") })
-        assertEquals(7, SHIPPED_PORTRAITS.count { it.startsWith("gauntlet-") })
+        assertEquals(botSlugs(), SHIPPED_PORTRAITS.filterNotTo(LinkedHashSet()) { it.startsWith("gauntlet-") })
+        assertEquals(7, SHIPPED_PORTRAITS.count { it.startsWith("gauntlet-") && !it.endsWith("-defeated") })
+        assertEquals(7, SHIPPED_PORTRAITS.count { it.startsWith("gauntlet-") && it.endsWith("-defeated") })
     }
 
     @Test
@@ -49,6 +50,5 @@ class PortraitUrlTest {
         assertEquals("art/portrait/gauntlet-final-boss.webp", portraitUrl("gauntlet-final-boss"))
     }
 
-    private fun seats(): Set<String> =
-        ShippedBots.entries.mapTo(LinkedHashSet()) { it.id.slug }.apply { add(PlayableRegistry.HUMAN_ID.slug) }
+    private fun botSlugs(): Set<String> = ShippedBots.entries.mapTo(LinkedHashSet()) { it.id.slug }
 }

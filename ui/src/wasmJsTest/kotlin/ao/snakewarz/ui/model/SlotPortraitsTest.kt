@@ -2,6 +2,7 @@ package ao.snakewarz.ui.model
 
 import ao.snakewarz.botapi.registry.BotId
 import ao.snakewarz.match.MatchSetup
+import ao.snakewarz.match.human.PlayableRegistry
 import ao.snakewarz.ui.render.Theme
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -22,6 +23,14 @@ class SlotPortraitsTest {
         val faces = SlotPortraits(setupFor("random", "uct"), SHIPPED, THEME)
 
         assertEquals("portrait/random.svg", faces[0])
+        assertEquals("portrait/uct.svg", faces[1])
+    }
+
+    @Test
+    fun `a human seat has no portrait or generated mark`() {
+        val faces = SlotPortraits(setupFor(PlayableRegistry.HUMAN_ID.slug, "uct"), SHIPPED, THEME)
+
+        assertNull(faces[0])
         assertEquals("portrait/uct.svg", faces[1])
     }
 

@@ -23,11 +23,12 @@ Keep those two cadences apart: `UiModel` is built once per *frame*, not once per
 ### Playing, replaying, and five clocks
 
 **Playing and replaying are one code path.** A replay is a match whose slots already know what they
-are going to do, so run, pause, step, restart and the scoreboard work on both without a branch. Only
-seeking is replay-specific, and it is implemented by rebuilding the playback match and stepping to the
-target — microseconds, and nothing to keep consistent. The replay transport says *Run replay* and
-*Restart replay*, because *Play* and *Restart* beside a human recording sound like ways back into the
-game rather than ways through the recording.
+are going to do, so run, pause, step and restart work on both without a branch. Only seeking is
+replay-specific, and it is implemented by rebuilding the playback match and stepping to the target —
+microseconds, and nothing to keep consistent. Presentation still follows the retained mode: a
+Gauntlet replay keeps its rival card and hidden scoreboard, while a custom replay keeps its seat
+cards. The replay transport says *Run replay* and *Restart replay*, because *Play* and *Restart*
+beside a human recording sound like ways back into the game rather than ways through the recording.
 
 What *does* branch is which match clock runs, and it branches on `Match.interactive` rather than on a
 mode flag: `TurnScheduler` paces bots and replays, while a match with a live player is stepped by
@@ -39,7 +40,7 @@ instead. The paint-only `Ticker` is the fourth and is detailed with the overlay 
 
 `AnimatedSteering` is the fifth: rapid arrow, WASD, or D-pad directions are still intentions, but a
 second one cannot advance while the renderer is gliding the first move. It keeps up to three direct
-directions in order and releases one on the first animation frame after the preceding 120ms move
+directions in order and releases one on the first animation frame after the preceding 50ms move
 transition finishes. The first direction remains synchronous when no move is animating, reduced
 motion adds no delay, and match replacement, navigation, a route taking over, or another overlay
 cancels the anticipated directions with the other controls.
@@ -303,11 +304,14 @@ rung number, `null` for a custom match:
    `levelCleared` so the card cannot offer a rung that does not exist.
 3. **What the top bar names** — the level, where a custom match is named by its seat cards. It is the
    same single line either way, because the bar's height is what the board's track is measured
-   against. On a phone the wordmark is hidden by the `max-width: 30rem` rule, and the opponent's name and face on
-   the scoreboard are what identify the level there.
-4. **The rival presentation.** A prominent card uses the campaign portrait and existing configured
-   opponent label outside the board. On the first live entry to each level, a full-viewport version
-   holds and fades for about 1.5 seconds while pointer, keyboard, and pad input remain blocked.
+   against. On a phone the wordmark is hidden by the `max-width: 30rem` rule, and the rival card is
+   what identifies the level there.
+4. **The rival presentation.** The scoreboard is absent from both live levels and retained level
+   replays. Its sole replacement is a prominent card outside the board with the campaign title,
+   configured bot label — including any applicable allowance and mode — portrait, live length, and
+   outcome state. Custom matches and tournaments retain the ordinary scoreboard unchanged. On the
+   first live entry to each level, a full-viewport version holds and fades for about 1.5 seconds while
+   pointer, keyboard, and pad input remain blocked.
 
 First-entry memory is independent of unlock progress. `snakewarz.gauntlet.intros.v1` is a decimal
 bitmask keyed by frozen level index; missing or malformed storage means none seen. The bit is written
@@ -516,12 +520,12 @@ keep working without a pack knowing a single hex string.
 
 ### Faces, and the seam they arrive through
 
-**Every opponent has a picture, and `:ui` still cannot tell a wall hugger from a human.** `Portraits`
-is a `fun interface` taking a stable **artwork key** and answering a URL or `null`, `GameSession`'s
+**Every bot opponent has a picture; the human seat deliberately does not.** `Portraits` is a
+`fun interface` taking a stable **artwork key** and answering a URL or `null`, `GameSession`'s
 constructor takes one, and `:app` fills it from `portraitUrl` — an explicit set of keys it ships
 under `resources/art/portrait/`. Generic keys are frozen bot slugs; campaign keys are frozen level
-identities. The seam keeps the resource table in `:app`, where it belongs, rather than introducing a
-forbidden `:ui` to `:bots` dependency.
+identities with regular and `-defeated` variants. The seam keeps the resource table in `:app`, where
+it belongs, rather than introducing a forbidden `:ui` to `:bots` dependency.
 
 - **`null` is answered with a drawn mark, not a broken image.** `render/identicon.kt` hashes the slug
   into a mirrored 5×5 block grid and emits an SVG `data:` URI, so a *contributed* bot has a face on
@@ -533,6 +537,9 @@ forbidden `:ui` to `:bots` dependency.
   `GameSession` rebuilds `SlotPortraits` when the match, level, or theme id changes. Not on a scheme
   change: a trail is the same string under light and dark, so the sun going down would spend a hash
   and a base64 encode per seat to produce the marks that are already on the page.
+- **The human key is the exception to that fallback.** `SlotPortraits` answers `null` before asking
+  for shipped art or drawing a mark. A human row in a custom match or tournament still says *You*
+  and keeps its trail swatch, length, and status; only the decorative portrait is absent.
 - **The level tiles resolve their own**, because `SlotPortraits` is keyed by a `MatchSetup`'s slots and
   a tile has no match. `GauntletScreen` asks the same seam by stable campaign artwork key and tints a fallback with
   `Theme.body(1)` — the seat `GauntletLevel.setup` puts the opponent in — so a tile's face is already
@@ -545,16 +552,21 @@ forbidden `:ui` to `:bots` dependency.
 - **It is written through `showPortrait`, which compares the attribute first.** The seat cards and the
   result dialog are both rendered once a *frame* while a portrait changes only when the match does,
   and a bot with no shipped art carries its whole picture in the URL.
+- **The result portrait describes the rival, not the winner.** A Gauntlet win shows that stage's
+  non-graphic defeated rival, and a loss shows the regular rival. Draws and custom-match human wins
+  are portrait-free; they do not bring human artwork back through another surface.
 - **The bot pickers in `#panel-setup` get none.** They are `<select>`s; a styled listbox is a custom
   widget, and every custom widget is a keyboard-accessibility bill. The names are enough.
 - **The shipped art is opaque WebP in one pulp-arcade style.** Generic portraits keep frozen bot slugs
-  as keys; the seven `gauntlet-<stage>` keys are character identities, so two levels backed by the
-  same bot still look like different opponents. They use square head-and-shoulders crops that remain
-  readable in the compact cards. `PortraitUrlTest` walks the generic registry set and separately pins
-  the seven campaign keys, including the unique Final Boss.
-- **Eight wide environments and twenty portraits share one asset budget.** The backgrounds keep their
+  as keys; each of the seven `gauntlet-<stage>` character identities has a regular and a non-gory
+  defeated portrait, so two levels backed by the same bot still look like different opponents and a
+  victory keeps that identity intact. All portrait sources are cropped edge-to-edge without the pale
+  generation perimeter, and their square head-and-shoulders crops remain readable in compact cards.
+  `PortraitUrlTest` walks the generic registry set, excludes the human key, and separately pins all
+  seven regular and seven defeated campaign keys, including the unique Final Boss pair.
+- **Eight wide environments and twenty-six portraits share one asset budget.** The backgrounds keep their
   centres subdued because a board is drawn over them; CSS adds the vignette rather than baking a
-  second dark copy of each file. All 28 WebPs total roughly 306 KiB raw, and the production gzip gate
+  second dark copy of each file. All 34 WebPs total roughly 401 KiB raw, and the production gzip gate
   still measures every file below `art/`.
 - **The bundle gate measures subdirectories.** CI's size step walks the distribution with `find`
   rather than a glob, because `art/` is a directory and a glob would hand `gzip` one, measure it

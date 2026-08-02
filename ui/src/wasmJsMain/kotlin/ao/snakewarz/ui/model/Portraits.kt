@@ -7,8 +7,9 @@ package ao.snakewarz.ui.model
  * so a registry it has never heard of still gets faces, and a bot contributed tomorrow still gets
  * one. The fallback for `null` is drawn here and needs no assets at all — see [SlotPortraits].
  *
- * Generic keys are frozen bot slugs. Campaign keys are the `gauntlet-<stage>` names owned by the
- * visual catalogue, allowing repeated bot implementations to appear as different characters.
+ * Generic keys are frozen bot slugs. Campaign keys are the `gauntlet-<stage>` and
+ * `gauntlet-<stage>-defeated` names owned by the visual catalogue, allowing repeated bot
+ * implementations to appear as different characters and each victory to show its defeated rival.
  */
 public fun interface Portraits {
     /** The address of [key]'s picture, or `null` where nothing was shipped for it. */

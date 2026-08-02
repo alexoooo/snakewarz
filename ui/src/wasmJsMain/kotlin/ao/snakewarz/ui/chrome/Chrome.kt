@@ -12,6 +12,7 @@ import ao.snakewarz.ui.chrome.panel.SharePanel
 import ao.snakewarz.ui.chrome.panel.TournamentPanel
 import ao.snakewarz.ui.model.MatchOptions
 import ao.snakewarz.ui.model.Portraits
+import ao.snakewarz.ui.model.RivalCard
 import ao.snakewarz.ui.model.TournamentOptions
 import ao.snakewarz.ui.model.UiIntent
 import ao.snakewarz.ui.model.UiModel
@@ -76,10 +77,7 @@ internal class Chrome(
 
     private val status: HTMLElement = elementById("status")
     private val round: HTMLElement = elementById("round")
-    private val rival: HTMLElement = elementById("rival-card")
-    private val rivalPortrait: HTMLImageElement = elementById("rival-portrait")
-    private val rivalName: HTMLElement = elementById("rival-name")
-    private val rivalTitle: HTMLElement = elementById("rival-title")
+    private val rival = RivalChrome()
     private val rows: List<SlotRow> = List(SetupPanel.SEATS) { SlotRow(elementById("slot-$it")) }
 
     private val repeat = SteerRepeat { direction -> dispatch(UiIntent.Steer(direction)) }
@@ -191,13 +189,7 @@ internal class Chrome(
         round.textContent = model.round
         status.textContent = model.status
 
-        val opponent = model.rival
-        rival.hidden = opponent == null
-        if (opponent != null) {
-            rivalPortrait.showPortrait(opponent.portrait)
-            rivalName.textContent = opponent.name
-            rivalTitle.textContent = opponent.title
-        }
+        rival.render(model.level, model.rival)
 
         // A match with a person in it advances on their key and on nothing else, so there is no
         // clock here to start or step. A running batch owns the board for the same reason: there is
@@ -387,5 +379,29 @@ internal class Chrome(
 
         /** How far the hover label sits from the pointer, so the pointer never covers it. */
         const val TIP_GAP = 14.0
+    }
+}
+
+/** The one opponent surface in a Gauntlet match, and the scoreboard it replaces there. */
+internal class RivalChrome {
+    private val scoreboard: HTMLElement = elementById("scoreboard")
+    private val root: HTMLElement = elementById("rival-card")
+    private val portrait: HTMLImageElement = elementById("rival-portrait")
+    private val name: HTMLElement = elementById("rival-name")
+    private val title: HTMLElement = elementById("rival-title")
+    private val length: HTMLElement = elementById("rival-length")
+    private val status: HTMLElement = elementById("rival-status")
+
+    fun render(level: Int?, opponent: RivalCard?) {
+        scoreboard.hidden = level != null
+        root.hidden = opponent == null
+        if (opponent == null) {
+            return
+        }
+        portrait.showPortrait(opponent.portrait)
+        name.textContent = opponent.name
+        title.textContent = opponent.title
+        length.textContent = "Length ${opponent.length}"
+        status.textContent = opponent.status
     }
 }

@@ -1190,7 +1190,7 @@ internal class BoardRenderer(
         const val DEATH_MILLIS = 300.0
 
         /** A visible turn's ease-out glide; engine state has already reached the destination. */
-        const val MOVE_MILLIS = 120.0
+        const val MOVE_MILLIS = 50.0
 
         /** A stamp no reading of a clock that starts at zero and only grows can ever be inside. */
         const val NEVER = -DEATH_MILLIS

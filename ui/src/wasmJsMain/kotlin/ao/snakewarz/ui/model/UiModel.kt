@@ -152,4 +152,6 @@ internal class RivalCard(
     val name: String,
     val title: String,
     val portrait: String?,
+    val length: Int,
+    val status: String,
 )

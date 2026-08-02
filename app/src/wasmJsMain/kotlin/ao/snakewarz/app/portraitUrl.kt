@@ -16,7 +16,7 @@ internal fun portraitUrl(key: String): String? =
     if (key in SHIPPED_PORTRAITS) "art/portrait/$key.webp" else null
 
 /**
- * One generic file per registry slug, plus the human seat and seven campaign-character keys.
+ * One generic file per shipped bot, plus regular and defeated keys for seven campaign characters.
  *
  * These are **frozen identifiers** — a released slug is what a replay URL carries — so a file named
  * after one keeps pointing at the same bot for as long as the link does.
@@ -38,12 +38,18 @@ internal val SHIPPED_PORTRAITS: Set<String> = setOf(
     "cartographer",
     "lookahead",
     "burninhell",
-    "human",
     "gauntlet-hunter",
+    "gauntlet-hunter-defeated",
     "gauntlet-cartographer",
+    "gauntlet-cartographer-defeated",
     "gauntlet-lookout",
+    "gauntlet-lookout-defeated",
     "gauntlet-gambler",
+    "gauntlet-gambler-defeated",
     "gauntlet-student",
+    "gauntlet-student-defeated",
     "gauntlet-planner",
+    "gauntlet-planner-defeated",
     "gauntlet-final-boss",
+    "gauntlet-final-boss-defeated",
 )

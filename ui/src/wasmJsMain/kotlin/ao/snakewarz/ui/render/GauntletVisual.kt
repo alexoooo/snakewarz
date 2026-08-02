@@ -16,6 +16,7 @@ internal data class GauntletVisual(
     val enemyBody: String,
     val enemyHead: String,
     val portraitKey: String,
+    val defeatedPortraitKey: String,
     val texture: TexturePack,
 ) {
     fun applyToPage() {
@@ -95,6 +96,7 @@ internal data class GauntletVisual(
             body,
             head,
             "gauntlet-$id",
+            "gauntlet-$id-defeated",
             texture,
         )
     }
