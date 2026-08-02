@@ -11,6 +11,7 @@ import ao.snakewarz.match.Match
 import ao.snakewarz.match.MatchSetup
 import ao.snakewarz.match.gauntlet.Gauntlet
 import ao.snakewarz.ui.model.Panel
+import ao.snakewarz.ui.model.RivalCard
 import ao.snakewarz.ui.model.Screen
 import ao.snakewarz.ui.model.SlotLabels
 import ao.snakewarz.ui.model.SlotPortraits
@@ -191,6 +192,18 @@ class ShellTest {
     }
 
     @Test
+    fun `a first level entry blocks the board and every result control`() {
+        val rival = RivalCard("The Hunter", "Hunter", null)
+        shell.render(model(screen = Screen.GAME, result = "You lose", intro = rival))
+
+        assertEquals("", element("app").getAttribute("inert"))
+        assertTrue(element("dialog-result").hasAttribute("inert"))
+        assertTrue(!shell.boardHasKeys)
+        assertEquals("Hunter", element("intro-title").textContent)
+        assertEquals("The Hunter", element("intro-name").textContent)
+    }
+
+    @Test
     fun `the verdict offers the run back, under its actions rather than among them`() {
         shell.render(model(screen = Screen.GAME))
         shell.render(model(screen = Screen.GAME, level = 3, result = "You lose", canWatchReplay = true))
@@ -358,11 +371,13 @@ class ShellTest {
         replay: Boolean = false,
         canTryAgain: Boolean = false,
         replayNextLevel: Int? = null,
+        intro: RivalCard? = null,
     ): UiModel = UiModel(
         screen = screen,
         level = level,
         gauntlet = GauntletProgress.NONE,
         levelCleared = levelCleared,
+        intro = intro,
         openPanel = openPanel,
         theme = Theme.of(Theme.DEFAULT_ID, dark = false),
         result = result,
@@ -439,6 +454,11 @@ class ShellTest {
               <button id="result-next" data-focus hidden></button>
               <button id="result-home" data-focus></button>
               <button id="result-replay" data-focus hidden></button>
+            </div>
+            <div id="gauntlet-intro" tabindex="-1" hidden>
+              <img id="intro-portrait" alt="" hidden>
+              <p id="intro-title"></p>
+              <h2 id="intro-name"></h2>
             </div>
         """.trimIndent()
     }

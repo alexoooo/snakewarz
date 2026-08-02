@@ -45,7 +45,7 @@ class SteerPadTest {
 
     private val moves = mutableListOf<Direction>()
     private val repeat = SteerRepeat { moves += it }
-    private val pad = SteerPad(element("board-wrap"), element("board"), repeat)
+    private val pad = SteerPad(repeat)
 
     @AfterTest
     fun detach() {
@@ -55,6 +55,7 @@ class SteerPadTest {
 
     @Test
     fun `a press plays one move, and holding is the keyboard's own clock`() {
+        pad.render(model(steering = true))
         press("steer-north")
 
         assertEquals(listOf(Direction.NORTH), moves, "the press itself is a move")
@@ -71,6 +72,7 @@ class SteerPadTest {
     fun `letting go stops it, however the release arrives`() {
         for (event in listOf("pointerup", "pointercancel")) {
             moves.clear()
+            pad.render(model(steering = true))
             press("steer-east")
             fire(event)
 
@@ -86,6 +88,7 @@ class SteerPadTest {
         // Every pointer on the page reaches the release, because a thumb that leaves the pad before
         // it lifts reports somewhere else entirely. Nearly all of them are somebody pressing
         // something, and the one that follows must still find the pad free to be taken.
+        pad.render(model(steering = true))
         press("steer-west")
         fire("pointerup")
         fire("pointerup")
@@ -98,6 +101,7 @@ class SteerPadTest {
 
     @Test
     fun `a second finger does not take the snake off the first`() {
+        pad.render(model(steering = true))
         press("steer-north")
         moves.clear()
 
@@ -124,54 +128,21 @@ class SteerPadTest {
     }
 
     @Test
-    fun `a board with no pad under it is not moved for one`() {
-        pad.render(model(steering = false))
-        pad.place()
-
-        assertTrue(element("steer-pad").hidden)
-        assertFalse(element("board-wrap").classList.contains("pad-below"), "the board stays centred")
-    }
-
-    @Test
-    fun `a placed pad is square, and only a pad under the board moves it`() {
+    fun `all four desktop controls use the two-row WASD mapping`() {
         pad.render(model(steering = true))
-        pad.place()
 
-        val padded = element("steer-pad").className == "below"
-        assertEquals(padded, element("board-wrap").classList.contains("pad-below"))
-        assertEquals(element("steer-pad").style.width, element("steer-pad").style.height, "square")
-    }
-
-    @Test
-    fun `a tall track puts the pad under the board and a wide one puts it beside`() {
-        // A phone in portrait: the board is as wide as the room and the strip is under it.
-        val portrait = SteerPad.fitInto(wrapWidth = 390.0, wrapHeight = 700.0, boardWidth = 381.0, boardHeight = 381.0)
-        assertFalse(portrait.beside)
-
-        // The same phone turned over. The board is now as tall as the room and the strip is to one
-        // side of it, which is the whole reason the side is measured rather than assumed.
-        val landscape = SteerPad.fitInto(wrapWidth = 800.0, wrapHeight = 260.0, boardWidth = 250.0, boardHeight = 250.0)
-        assertTrue(landscape.beside)
-    }
-
-    @Test
-    fun `the pad fills the strip it is given, between a thumb's floor and a ceiling`() {
-        val roomy = SteerPad.fitInto(wrapWidth = 390.0, wrapHeight = 700.0, boardWidth = 381.0, boardHeight = 381.0)
-        assertEquals(SteerPad.MAX_SIZE, roomy.size, "a strip larger than the pad wants leaves the board dominant")
-
-        val snug = SteerPad.fitInto(wrapWidth = 420.0, wrapHeight = 560.0, boardWidth = 390.0, boardHeight = 390.0)
-        assertEquals(170.0 - 2 * SteerPad.GAP, snug.size, "and a smaller one is filled")
-
-        // Beside the board the pad may have half the strip, because the board stays centred there —
-        // so the same room to one side buys half the pad it would buy underneath.
-        val wide = SteerPad.fitInto(wrapWidth = 700.0, wrapHeight = 400.0, boardWidth = 390.0, boardHeight = 390.0)
-        assertTrue(wide.beside)
-        assertEquals(310.0 / 2 - 2 * SteerPad.GAP, wide.size)
-
-        // A board that nearly fills its track. The pad overlaps the outermost squares rather than
-        // shrinking into arrows nobody could hit -- which is what its translucency is for.
-        val tight = SteerPad.fitInto(wrapWidth = 400.0, wrapHeight = 410.0, boardWidth = 390.0, boardHeight = 390.0)
-        assertEquals(SteerPad.MIN_SIZE, tight.size)
+        for ((id, direction) in listOf(
+            "steer-north" to Direction.NORTH,
+            "steer-west" to Direction.WEST,
+            "steer-south" to Direction.SOUTH,
+            "steer-east" to Direction.EAST,
+        )) {
+            moves.clear()
+            press(id)
+            fire("pointerup")
+            assertEquals(listOf(direction), moves, id)
+        }
+        assertFalse(element("steer-pad").hidden, "the pad is offered without a coarse-pointer query")
     }
 
     // -- internals

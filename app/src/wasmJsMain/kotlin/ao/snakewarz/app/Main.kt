@@ -48,21 +48,19 @@ public fun main() {
     }
 }
 
-/** Keeps the machine-readable instant and lets the browser choose the viewer's zone and language. */
+/** Keeps the machine-readable instant and writes its fixed local, numeric presentation. */
 private fun localizeBuildTime() {
     val element = document.getElementById("release-build") as? HTMLTimeElement ?: return
     val instant = element.dateTime.takeIf { it.isNotBlank() } ?: return
     element.textContent = formatBuildTime(instant)
 }
 
-private fun formatBuildTime(instant: String): String = js(
-    """"Release · " + new Intl.DateTimeFormat(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        second: "2-digit",
-        timeZoneName: "short"
-    }).format(new Date(instant))""",
+internal fun formatBuildTime(instant: String): String = js(
+    """(() => {
+        const date = new Date(instant);
+        const two = value => String(value).padStart(2, "0");
+        return "Release · " + date.getFullYear() + "-" + two(date.getMonth() + 1) + "-" +
+            two(date.getDate()) + " " + two(date.getHours()) + ":" + two(date.getMinutes()) + ":" +
+            two(date.getSeconds());
+    })()""",
 )

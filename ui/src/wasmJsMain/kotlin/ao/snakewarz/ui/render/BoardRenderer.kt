@@ -107,8 +107,9 @@ internal class BoardRenderer(
      * plain pack — which is also the honest answer for every board that arrives out of a replay.
      */
     private var pack: TexturePack = TexturePack.PLAIN
+    private var groundAlpha: Double = 1.0
     private var grid: Grid = Grid(1, 1)
-    private var cellSize: Int = MIN_CELL
+    private var cellSize: Int = 1
 
     /** The square the wash is drawn for, so a turn can redraw it without re-deciding. */
     private var hovered: Cell = Cell.NONE
@@ -165,9 +166,9 @@ internal class BoardRenderer(
      * the input to the size rather than a clamp on it: a phone in portrait and a 4K monitor are the
      * same board at two magnifications, which is the whole of "snakes centre stage".
      *
-     * One clamp survives in each direction and neither is a frame size. [MAX_CELL] stops a small
-     * board turning into a handful of enormous squares in a large window, and [MIN_CELL] keeps a
-     * 28x28 legible on a phone. Both are in CSS pixels at [bootRatio], so zooming the page moves the
+     * [MAX_CELL] stops a small board turning into a handful of enormous squares in a large window.
+     * At the other end a cell may shrink to one device pixel, preserving all four board edges when
+     * controls reserve most of a tight landscape screen. The maximum is in CSS pixels at [bootRatio], so zooming the page moves the
      * text around a board that stays where it is — the room is measured in device pixels too, where
      * zoom cancels out exactly, because the box loses CSS pixels at the same rate a CSS pixel gains
      * device ones.
@@ -198,7 +199,7 @@ internal class BoardRenderer(
         val fits = (room - 1) / span
         cellSize = fits.toInt()
             .coerceAtMost((MAX_CELL * bootRatio).toInt())
-            .coerceAtLeast((MIN_CELL * bootRatio).toInt().coerceAtLeast(1))
+            .coerceAtLeast(1)
 
         val width = cellSize * grid.cols + 1
         val height = cellSize * grid.rows + 1
@@ -242,13 +243,19 @@ internal class BoardRenderer(
         this.pack = pack
     }
 
+    /** Makes only the ground translucent; walls, grid and the overlay remain fully opaque. */
+    fun applyGroundAlpha(alpha: Double) {
+        require(alpha in 0.0..1.0) { "ground alpha must be in [0, 1], was $alpha" }
+        groundAlpha = alpha
+    }
+
     /**
      * The square under a point in client coordinates, or [Cell.NONE] if that is not on the board.
      *
      * Measured rather than read off `offsetX`: the canvas's CSS size is deliberately fractional — a
      * whole number of device pixels divided by the ratio — so the only honest scale from a client
-     * coordinate to a backing-store one is the box the element is actually drawn at. That box is
-     * the *border* box, which is why `#board` carries an outline instead of a border.
+     * coordinate to a backing-store one is the box the element is actually drawn at. The inset
+     * frame changes neither that box nor the backing-store scale.
      */
     fun cellAt(clientX: Double, clientY: Double): Cell {
         val box = canvas.getBoundingClientRect()
@@ -304,6 +311,9 @@ internal class BoardRenderer(
         return moving
     }
 
+    /** Whether advancing another direct player turn would replace a glide that is still visible. */
+    fun moveAnimating(): Boolean = transitions.any { it != null }
+
     // -- the board
 
     /**
@@ -322,6 +332,8 @@ internal class BoardRenderer(
         val width = (cellSize * grid.cols + 1).toDouble()
         val height = (cellSize * grid.rows + 1).toDouble()
 
+        context.clearRect(0.0, 0.0, width, height)
+        context.globalAlpha = groundAlpha
         context.fillStyle = theme.background.toJsString()
         context.fillRect(0.0, 0.0, width, height)
 
@@ -410,7 +422,7 @@ internal class BoardRenderer(
         if (shade <= 0.0) {
             return
         }
-        context.globalAlpha = shade
+        context.globalAlpha = shade * groundAlpha
         context.fillStyle = theme.wall.toJsString()
         centreMark(row, col)
     }
@@ -1021,9 +1033,6 @@ internal class BoardRenderer(
          */
         const val MAX_CELL = 44
 
-        /** Below this a 28x28 board is unreadable. Also at CSS scale, and only a floor. */
-        const val MIN_CELL = 6
-
         /**
          * Reached whenever `.board-wrap` measures zero — before the first layout, and on a screen
          * that is not showing the board. Both are followed by a `fit` that can measure for real.
@@ -1041,8 +1050,7 @@ internal class BoardRenderer(
          * The smallest square that has room for a wall's edge, in device pixels.
          *
          * Below it the one-pixel perimeter is most of the square and the block is legible without
-         * relief anyway — which is the 28x28-on-a-phone end of `MIN_CELL`, where a cell is a
-         * handful of pixels across.
+         * relief anyway — which is the tight-screen end, where a cell is a handful of pixels across.
          */
         const val WALL_EDGE_MIN_CELL = 8
 
@@ -1068,9 +1076,8 @@ internal class BoardRenderer(
         /**
          * The floor under every width and radius drawn on the overlay, in device pixels.
          *
-         * [MIN_CELL] is stated in CSS pixels at the ratio the page opened at, and a display can
-         * report less than one — a browser zoomed out when it loaded — so a share of a cell can round
-         * away to nothing. Two device pixels is the narrowest a mark can be and still be a mark, and
+         * An arena can shrink a cell to one device pixel, so a share can round away to nothing. Two
+         * device pixels is the narrowest a mark can be and still be a mark, and
          * it is also what the spine's tail end ramps *down* to, so nothing on this bitmap is ever
          * drawn thinner than this.
          */

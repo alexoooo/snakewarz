@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Snake Warz</title>
-    <meta name="description" content="Tron-style snakes game as an AI testbed.">
+    <meta name="description" content="Tron-style snake battle.">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css">
 
@@ -84,7 +84,7 @@
                     <span class="lockup-words" aria-hidden="true">Snake<span class="lockup-warz">Warz</span></span>
                     <span class="visually-hidden">Snake Warz</span>
                 </h1>
-                <p class="tagline">Tron-style snakes as an AI testbed</p>
+                <p class="tagline">Tron-style snake battle.</p>
                 <time id="release-build" datetime="">Build timestamp unavailable</time>
 
                 <!--
@@ -125,17 +125,8 @@
                         where something is in the way.
                     </dd>
 
-                    <!--
-                      One of these two, never both: a machine with a keyboard is told about its
-                      arrow keys and a screen with none is told about the pad that stands in for
-                      them. Which is showing is the same media query #steer-pad answers to, and it
-                      says the same sentence either way because it is the same control underneath.
-                    -->
-                    <dt class="keys-only">Arrow keys or WASD</dt>
-                    <dd class="keys-only">Steer one square at a time. Hold a key to keep going that way.</dd>
-
-                    <dt class="pad-only">The arrows beside the board</dt>
-                    <dd class="pad-only">Steer one square at a time. Hold one to keep going that way.</dd>
+                    <dt>Arrow keys, WASD, or D-pad</dt>
+                    <dd>Steer one square at a time. Hold a direction to keep going that way.</dd>
                 </dl>
             </aside>
         </div>
@@ -271,25 +262,35 @@
             <button id="open-settings" type="button">Settings</button>
         </div>
 
-        <div class="board-wrap" id="board-wrap">
-            <canvas id="board" aria-label="Game board"></canvas>
-            <canvas id="board-overlay" aria-hidden="true"></canvas>
-            <div id="board-tip" hidden>
-                <span class="tip-who">&mdash;</span>
-                <span class="tip-detail"></span>
+        <div class="arena">
+            <aside id="rival-card" hidden>
+                <img id="rival-portrait" alt="" aria-hidden="true">
+                <span id="rival-title"></span>
+                <strong id="rival-name"></strong>
+            </aside>
+
+            <div class="board-wrap" id="board-wrap">
+                <canvas id="board" aria-label="Game board"></canvas>
+                <canvas id="board-overlay" aria-hidden="true"></canvas>
+                <div id="board-tip" hidden>
+                    <span class="tip-who">&mdash;</span>
+                    <span class="tip-detail"></span>
+                </div>
             </div>
 
-            <!--
-                 Four arrow keys for a device with none, in the strip a square board leaves in a
-                 track that is not square. Positioned out of flow so the board never gives up a pixel
-                 for it, and shown only where there is a finger to press it -- see #steer-pad in
-                 styles.css and SteerPad.kt, which decides which strip and how big.
-            -->
-            <div id="steer-pad" hidden>
-                <button id="steer-north" class="steer" type="button" aria-label="Steer up">&#9650;</button>
-                <button id="steer-west" class="steer" type="button" aria-label="Steer left">&#9664;</button>
-                <button id="steer-east" class="steer" type="button" aria-label="Steer right">&#9654;</button>
-                <button id="steer-south" class="steer" type="button" aria-label="Steer down">&#9660;</button>
+            <div id="steer-pad" aria-label="Steering controls" hidden>
+                <button id="steer-north" class="steer" type="button" aria-label="Steer up">
+                    <span aria-hidden="true">&#9650;</span><kbd>W</kbd>
+                </button>
+                <button id="steer-west" class="steer" type="button" aria-label="Steer left">
+                    <span aria-hidden="true">&#9664;</span><kbd>A</kbd>
+                </button>
+                <button id="steer-south" class="steer" type="button" aria-label="Steer down">
+                    <span aria-hidden="true">&#9660;</span><kbd>S</kbd>
+                </button>
+                <button id="steer-east" class="steer" type="button" aria-label="Steer right">
+                    <span aria-hidden="true">&#9654;</span><kbd>D</kbd>
+                </button>
             </div>
         </div>
 
@@ -352,10 +353,20 @@
                 <output id="seek-value" for="seek">0 / 0</output>
             </div>
 
+            <p id="round">Round 0</p>
             <p id="status" role="status">Starting&hellip;</p>
         </div>
     </section>
 </main>
+
+<div id="gauntlet-intro" role="dialog" aria-modal="true" aria-label="Opponent introduction"
+     tabindex="-1" hidden>
+    <div class="intro-card">
+        <img id="intro-portrait" alt="" aria-hidden="true">
+        <p id="intro-title"></p>
+        <h2 id="intro-name"></h2>
+    </div>
+</div>
 
 <!-- Dims the board a panel is covering, and closes it when clicked. -->
 <div id="panel-scrim" hidden></div>

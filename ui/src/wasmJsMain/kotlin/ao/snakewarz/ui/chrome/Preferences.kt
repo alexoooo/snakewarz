@@ -1,5 +1,6 @@
 package ao.snakewarz.ui.chrome
 
+import ao.snakewarz.match.gauntlet.Gauntlet
 import kotlinx.browser.localStorage
 
 /**
@@ -41,6 +42,23 @@ internal object Preferences {
         write(GAUNTLET_KEY, progress)
     }
 
+    /** Marks [level] introduced and answers whether this browser had never entered it before. */
+    fun markLevelIntroduced(level: Int): Boolean {
+        require(level in 1..Gauntlet.size) { "there are ${Gauntlet.size} levels, so there is no level $level" }
+        val bit = 1 shl (level - 1)
+        val seen = introducedBits()
+        if (seen and bit != 0) {
+            return false
+        }
+        write(INTRODUCED_KEY, (seen or bit).toString())
+        return true
+    }
+
+    internal fun introducedBits(): Int {
+        val parsed = read(INTRODUCED_KEY)?.toIntOrNull() ?: return 0
+        return parsed.takeIf { it >= 0 && it and ALL_LEVEL_BITS.inv() == 0 } ?: 0
+    }
+
     /**
      * The run that cleared level [level] on this browser, or `null` where nothing is kept for it.
      *
@@ -80,6 +98,8 @@ internal object Preferences {
 
     /** The seven-level campaign; the retired development table remains unread under its old key. */
     private const val GAUNTLET_KEY = "snakewarz.gauntlet.v2"
+    private const val INTRODUCED_KEY = "snakewarz.gauntlet.intros.v1"
+    private val ALL_LEVEL_BITS = (1 shl Gauntlet.size) - 1
 
     /**
      * One key per rung — `snakewarz.gauntlet.replay.<n>.v2` — rather than one key holding them all.

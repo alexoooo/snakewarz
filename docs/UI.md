@@ -20,7 +20,7 @@ everything a person does comes back up as a `UiIntent` into `GameSession.dispatc
 painted separately per turn because stroking the snakes again is nearly free while writing text is not.
 Keep those two cadences apart: `UiModel` is built once per *frame*, not once per turn.
 
-### Playing, replaying, and three clocks
+### Playing, replaying, and five clocks
 
 **Playing and replaying are one code path.** A replay is a match whose slots already know what they
 are going to do, so run, pause, step, restart and the scoreboard work on both without a branch. Only
@@ -29,11 +29,20 @@ target — microseconds, and nothing to keep consistent. The replay transport sa
 *Restart replay*, because *Play* and *Restart* beside a human recording sound like ways back into the
 game rather than ways through the recording.
 
-What *does* branch is which clock runs, and it branches on `Match.interactive` rather than on a mode
-flag: `TurnScheduler` paces bots and replays, while a match with a live player is stepped by
-`GameSession.playRound` straight out of the **keydown**. `TournamentRunner` is the third clock and the
-only one with no speed at all — a batch is not something you watch at a rate, it is something you
-wait for, so it runs flat out on an 8ms-per-frame guard and reports progress instead.
+What *does* branch is which match clock runs, and it branches on `Match.interactive` rather than on a
+mode flag: `TurnScheduler` paces bots and replays, while a match with a live player is stepped by
+`GameSession.playRound` from direct input. `SteerRepeat` is the second input clock, producing held
+arrow and D-pad directions at a human rate rather than advancing the match itself. `TournamentRunner`
+is the third clock and the only one with no speed at all — a batch is not something you watch at a
+rate, it is something you wait for, so it runs flat out on an 8ms-per-frame guard and reports progress
+instead. The paint-only `Ticker` is the fourth and is detailed with the overlay below.
+
+`AnimatedSteering` is the fifth: rapid arrow, WASD, or D-pad directions are still intentions, but a
+second one cannot advance while the renderer is gliding the first move. It keeps up to three direct
+directions in order and releases one on the first animation frame after the preceding 120ms move
+transition finishes. The first direction remains synchronous when no move is animating, reduced
+motion adds no delay, and match replacement, navigation, a route taking over, or another overlay
+cancels the anticipated directions with the other controls.
 
 That keydown sentence is the **keyboard's half** and no longer the whole of an interactive match.
 There is a fourth arrangement, and it is the first time a live player has run `TurnScheduler`: a held
@@ -95,6 +104,11 @@ Six consequences, each of which is a thing to get wrong:
   rather than finishing the route. The rest of the round still finishes before the match parks on
   the player's turn; carrying an AI turn into the next press makes the two controls appear to move
   twice in turn. Holding is what makes the player's snake move, and that is the whole interaction.
+- **A finishing press owns its release.** If the first point-to-move step ends the match,
+  `GameSession` withholds the result and replay action while the board gesture remains active.
+  `PathInput` retains capture and reports the ordinary release; only then is the route settled and
+  the result dialog exposed. Match replacement, navigation, and a new overlay still cancel controls
+  synchronously, because those are genuine ownership changes rather than steering becoming false.
 - **A route that empties while still held needs no state at all.** The queue runs dry,
   `InteractiveBot` answers `Pending`, `Match.step` reports `AwaitingInput`, and the scheduler clamps
   its accumulator and waits — so no debt builds while the player thinks, and dragging further just
@@ -115,6 +129,11 @@ Six consequences, each of which is a thing to get wrong:
   saying where to go, left to interleave, produce a move neither one asked for. `steer` opens with
   `endPath()` and then pushes its key, which is why that queue rewrite is guarded on a route actually
   being held: unguarded, it would swap the keypress straight back out.
+- **Rapid direct directions wait for separate move transitions.** Two pointer or key events can run
+  before a browser paint; stepping both synchronously replaces the first `MoveTransition`, making the
+  snake jump a square even though both turns were played. `AnimatedSteering` holds later directions
+  outside the match's route queue and releases one only when `BoardRenderer.moveAnimating()` is
+  false, so each direction gets its own visible glide without changing their order.
 
 The press, the drag and the release are `UiIntent.Shell` for **Hover**'s reason, and taking hold is
 refused outright while a batch owns the arena — the board on screen is then the tournament's, so a
@@ -154,32 +173,19 @@ the match, so folding one away must not end somebody's tournament.
 ### Steering with a thumb
 
 **A drawn route cannot be the only way to steer, because on a phone the finger drawing it is over the
-squares it is aiming at.** `SteerPad` is the answer: four arrows in `#steer-pad`, feeding
+squares it is aiming at.** `SteerPad` is the answer on every screen size: four arrows in
+`#steer-pad`, feeding
 `UiIntent.Steer` through the same `SteerRepeat` a held arrow key drives. There is no second control
 path — a tap is one move and a hold is a move every 250ms, on a keyboard and under a thumb alike.
 
-- **The board never gives up a pixel for it.** The canvas is square and its track rarely is, so a
-  fitted board leaves a strip of `.board-wrap` above and below it, or to either side. `SteerPad.place`
-  measures both and puts the pad in the deeper one, positioned **out of flow** — because
-  `BoardRenderer.fit` measures that same container, and a pad in the flow would be room the board is
-  then short of. This is the one thing to keep true when touching either file.
-- **Which strip it may claim differs by side, and the phone is why.** Under the board it takes the
-  strip *whole*, and the `pad-below` class on the container is what moves the board to the top of its
-  track to give it one: height is what a portrait phone has least of. Beside the board it takes half
-  and the board stays centred, because a wide track always leaves more room to one side than a pad
-  wants. Where neither strip can hold `MIN_SIZE` the pad **overlaps** the outermost squares, which is
-  what its translucency is for — a control that disappears at some board sizes is worse than one
-  briefly in the way.
-- **`place` follows every fit**, exactly as `refreshOverlay` does and for the same kind of reason: the
-  pad hangs off the drawn board's own edges. `GameSession.fitBoard` is the single door both go
-  through, so a new match, a level, a resize, a theme and a batch's opening cannot each forget.
+- **The arena reserves the room.** In portrait, the board owns the first row and the rival/pad own a
+  second row; in landscape, rival, board, and pad occupy three columns. The board shrinks inside its
+  own `minmax(0, 1fr)` track on a tight screen, so controls never overlap or clip a canvas edge.
+- **The cluster is a fixed 3×2 map.** W/up is centred above A/left, S/down, and D/right. Each key is
+  clamped from 48 to 64 CSS pixels and has theme-derived hover, focus, held, and disabled states.
 - **It is shown exactly while `UiModel.steering`** — which is `GameSession.canSteer()`, the very
   predicate a press on the board is answered by, so the pad offers what the board would accept.
-  Absent rather than greyed, for the reason `Mode.offers` hides a panel opener.
-- **`@media (pointer: coarse)`, and the *primary* pointer is the whole of that rule.**
-  `any-pointer: coarse` is true of every touchscreen laptop — a machine with arrow keys and no need
-  of a pad. The same query hides the menu's *Arrow keys or WASD* entry and reveals the one naming the
-  pad, so the controls list describes the machine it is being read on.
+  Absent rather than greyed in bot matches, replay playback, intros, and finished games.
 - **No `setPointerCapture`, and the release listens on `window`.** Capture throws outright on a
   pointer the browser has stopped tracking, which would take the press down with it; what it exists
   to prevent — a thumb that leaves the pad before it lifts, leaving a snake walking with nobody
@@ -199,8 +205,9 @@ Every one of them is rendered from the same `UiModel` on the way through `Chrome
 
 The home screen's release badge is written into `index.html` whenever the app processes its browser
 resources, which covers the development server and both development and production distributions.
-That task is neither cached nor considered up to date, so its UTC timestamp identifies this browser
-build rather than one whose resources Gradle restored.
+That task is neither cached nor considered up to date, so its UTC instant identifies this browser
+build rather than one whose resources Gradle restored. The browser converts it locally and renders
+the fixed numeric form `Release · yyyy-MM-dd HH:mm:ss`, with no locale-dependent month or zone label.
 
 - **`#panel-setup` is the tall one and is the reason panels scroll.** It carries the board size, the
   map, four seats with their knob grids and the seed, so it is what `.panel-body`'s `overflow-y:
@@ -285,7 +292,7 @@ builds one from the rung's own board, map, opponent and allowance; `GameSession.
 the same driver, the same renderer and the same codec as anything else, so a level is shareable,
 replayable and scrubbable like a custom match. **The mode must never branch the match code path.**
 
-What the mode does branch is three things and only three, and all three come off `UiModel.level` — the
+What the mode does branch comes off `UiModel.level` — the
 rung number, `null` for a custom match:
 
 1. **Which panels are offered.** `Mode` is derived from `level`, and `Mode.offers` hides `#panel-setup`
@@ -298,6 +305,14 @@ rung number, `null` for a custom match:
    same single line either way, because the bar's height is what the board's track is measured
    against. On a phone the wordmark is hidden by the `max-width: 30rem` rule, and the opponent's name and face on
    the scoreboard are what identify the level there.
+4. **The rival presentation.** A prominent card uses the campaign portrait and existing configured
+   opponent label outside the board. On the first live entry to each level, a full-viewport version
+   holds and fades for about 1.5 seconds while pointer, keyboard, and pad input remain blocked.
+
+First-entry memory is independent of unlock progress. `snakewarz.gauntlet.intros.v1` is a decimal
+bitmask keyed by frozen level index; missing or malformed storage means none seen. The bit is written
+on entry, so retries do not repeat the intro, and neither saved nor shared replay playback enters this
+path. Replacing the match, navigating, or opening another overlay cancels the timer and presentation.
 
 **Retry draws a fresh match seed, not a fresh map.** `GameSession.restart` is the one place the mode
 is read on the match path: another attempt varies turn order and bot randomness, while
@@ -422,10 +437,11 @@ same board at two magnifications. `BoardRenderer.fit` measures `.board-wrap` and
 longer of `rows` and `cols`: the container is the *input* to the size, not a clamp on a size decided
 elsewhere. An 8x8 and a 28x28 therefore occupy the same frame, at different magnifications.
 
-Two clamps survive, and neither is a frame size. `MAX_CELL` stops a small board turning into a
+The upper clamp survives: `MAX_CELL` stops a small board turning into a
 handful of enormous squares in a large window — it binds only on the small end of the picker, since a
-20x20 needs nearly nine hundred pixels of frame before it is reached at all — and `MIN_CELL` keeps a
-28x28 legible on a phone. Both are stated in CSS pixels at the `devicePixelRatio` the page opened at,
+20x20 needs nearly nine hundred pixels of frame before it is reached at all. The lower bound is one
+device pixel per cell so a tight landscape screen preserves all four edges and both side controls
+rather than clipping the board. The maximum is stated in CSS pixels at the `devicePixelRatio` the page opened at,
 which is what makes zooming move the text around a board that stays put: the room is measured in
 device pixels too, and there the zoom cancels out exactly.
 
@@ -475,6 +491,10 @@ keep working without a pack knowing a single hex string.
   three are `Theme.wall`, `Theme.wallEdge` and `Theme.background` shaded towards the first of them —
   a figured ground is the wall colour at a whisper of itself, which is why it follows a theme change
   for free and can never be mistaken for a wall.
+- **A staged ground is painted at 0.88 alpha.** The board bitmap is cleared before that fill so the
+  stage illustration whispers through it; wall fills, edges, gridlines, snakes, and every non-level
+  board return to alpha 1. The canvas frame is an inset shadow inside the overlay's visible box, so
+  no external ring can be clipped away.
 - **It may never vary `Theme.body`, `Theme.head` or `Theme.accent`.** A trail is what a snake *is*
   and a route is the player's; a texture that moved either would make the board's one reliable colour
   channel depend on which level you happen to be on.
@@ -658,8 +678,8 @@ only thing that draws a snake at all, so a missed call does not lose a decoratio
 with no game on it.
 
 **Everything on the overlay has a floor, and the eyes have a cut-off instead.** `MIN_MARK = 2.0`
-device pixels is under every width and radius here, because `MIN_CELL` is stated in CSS pixels at the
-ratio the page opened at and a display can report less than one. Eyes are *dropped* below
+device pixels is under every width and radius here, because an arena can shrink a cell to a single
+device pixel on an exceptionally tight screen. Eyes are *dropped* below
 `EYE_MIN_CELL` rather than scaled to it — the same shape of decision as `WALL_EDGE_MIN_CELL` — since
 two dots and the gap between them are three features across a fraction of a square and shrink into one
 smudge.
@@ -821,11 +841,10 @@ build-config change, not a rewrite.
   the track width is definite, and `.board-wrap` is a one-cell grid that centres the canvas without
   shrink-wrapping it. Don't switch either back to flexbox, and don't put a shrink-to-fit box around
   the canvas.
-- **`#board` carries an `outline`, not a `border`, and that is load-bearing twice.**
-  `box-sizing: border-box` makes a border eat into the width Kotlin wrote, so a backing store of N
-  device pixels was being squeezed into N-2 pixels' worth of CSS and every gridline resampled; and
-  `getBoundingClientRect` reports the *border* box, which the hover hit-test would then be a pixel out
-  on at every ratio. An outline is painted outside the box and changes neither.
+- **The board frame is inset, never a border or external outline.** `#board-overlay` carries inset
+  shadows inside the exact CSS box Kotlin wrote, plus a drop shadow that may be clipped without
+  losing an edge. A border would squeeze the backing store and move the hit-test; an external ring
+  could disappear at a tight container edge.
 - **`[hidden] { display: none !important; }` is load-bearing.** The chrome hides things by setting
   `hidden`, and an author `display: flex`/`grid` outranks the user agent's `[hidden]` rule — so
   hidden rows stayed on screen while reporting `hidden == true`. Kotlin cannot see that; the fix

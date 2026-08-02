@@ -44,6 +44,10 @@ internal class UiModel(
      * level to clear.
      */
     val levelCleared: Boolean,
+    /** The Gauntlet opponent presented beside the board, or `null` in every other mode. */
+    val rival: RivalCard? = null,
+    /** The first-entry splash currently blocking the game, or `null` once play is available. */
+    val intro: RivalCard? = null,
     /** The panel slid over the board, or `null` when the board has the screen to itself. */
     val openPanel: Panel?,
     /**
@@ -95,6 +99,8 @@ internal class UiModel(
     val running: Boolean,
     /** The length of the recording, or the current turn when there is no recording to be ahead of. */
     val turnCount: Int,
+    /** The fixed-width round badge, kept separate from the changing status sentence. */
+    val round: String = "Round 0",
     /** One sentence about where the match is, already worded for a person. */
     val status: String,
     val stats: MatchStats,
@@ -140,3 +146,10 @@ internal class UiModel(
      */
     val nextLevel: Int? get() = level?.takeIf { levelCleared && it < Gauntlet.size }?.plus(1)
 }
+
+/** The stable presentation shared by a Gauntlet rival card and its first-entry splash. */
+internal class RivalCard(
+    val name: String,
+    val title: String,
+    val portrait: String?,
+)

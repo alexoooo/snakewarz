@@ -164,6 +164,9 @@ internal sealed interface UiIntent {
      */
     data object Relayout : Shell
 
+    /** The timed first-entry Gauntlet presentation has finished. */
+    data object IntroFinished : Shell
+
     /** Wind a recorded match to a turn. Replay only; a live match has no future to seek into. */
     class SeekTo(val turnIndex: Int) : Match
 

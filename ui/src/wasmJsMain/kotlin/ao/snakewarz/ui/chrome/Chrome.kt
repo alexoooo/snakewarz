@@ -75,12 +75,17 @@ internal class Chrome(
     private val seekValue: HTMLElement = elementById("seek-value")
 
     private val status: HTMLElement = elementById("status")
+    private val round: HTMLElement = elementById("round")
+    private val rival: HTMLElement = elementById("rival-card")
+    private val rivalPortrait: HTMLImageElement = elementById("rival-portrait")
+    private val rivalName: HTMLElement = elementById("rival-name")
+    private val rivalTitle: HTMLElement = elementById("rival-title")
     private val rows: List<SlotRow> = List(SetupPanel.SEATS) { SlotRow(elementById("slot-$it")) }
 
     private val repeat = SteerRepeat { direction -> dispatch(UiIntent.Steer(direction)) }
 
     /** The keyboard's four keys, for a device that has none. Shares [repeat], so both hold alike. */
-    private val steerPad = SteerPad(boardWrap, canvas, repeat)
+    private val steerPad = SteerPad(repeat)
 
     /** Where the pointer last was, so [placeTip] can run again once the label has a width. */
     private var tipX: Double = 0.0
@@ -122,14 +127,6 @@ internal class Chrome(
     /** Where the speed slider is now, so the scheduler and the label agree from the first frame. */
     fun turnsPerSecond(): Double = settingsPanel.turnsPerSecond()
 
-    /**
-     * Puts the steering pad back in the room the board leaves.
-     *
-     * Follows every fit, exactly as the overlay does: the pad hangs off the board's own edges, so a
-     * board that has changed size or shape leaves it over the squares or nowhere near them.
-     */
-    fun placeSteerPad(): Unit = steerPad.place()
-
     fun readOptions(): MatchOptions = setupPanel.readOptions()
 
     /** Draws a fresh seed into the form, so that the next [readOptions] is a game nobody has played. */
@@ -168,12 +165,6 @@ internal class Chrome(
         sharePanel.render(model)
         settingsPanel.render(model)
 
-        // A pointer release can arrive after the move that eliminated its snake. Withdraw the board
-        // gesture with the controls so that release belongs only to the match it began on.
-        if (!model.steering) {
-            path.cancel()
-        }
-
         // A key held down when a panel opened has no keyup coming that this will hear about — the
         // same hole `blur` covers — so the snake would keep going behind the panel.
         if (!shell.boardHasKeys) {
@@ -197,7 +188,16 @@ internal class Chrome(
         // moving, so a four-way match counts four of them per move and the number means nothing to
         // anybody watching; a round is a move by everyone still going, which is what a player sees
         // happen. The seek readout below still says Turn, because a scrub position really is one.
-        status.textContent = "Round ${model.stats.rounds} · ${model.status}"
+        round.textContent = model.round
+        status.textContent = model.status
+
+        val opponent = model.rival
+        rival.hidden = opponent == null
+        if (opponent != null) {
+            rivalPortrait.showPortrait(opponent.portrait)
+            rivalName.textContent = opponent.name
+            rivalTitle.textContent = opponent.title
+        }
 
         // A match with a person in it advances on their key and on nothing else, so there is no
         // clock here to start or step. A running batch owns the board for the same reason: there is

@@ -38,6 +38,7 @@ class PreferencesTest {
         localStorage.removeItem(THEME_KEY)
         localStorage.removeItem(GAUNTLET_KEY)
         localStorage.removeItem(OLD_GAUNTLET_KEY)
+        localStorage.removeItem(INTRODUCED_KEY)
         localStorage.removeItem(replayKey(1))
         localStorage.removeItem(replayKey(2))
         localStorage.removeItem(oldReplayKey(1))
@@ -136,6 +137,25 @@ class PreferencesTest {
         assertNull(localStorage.getItem(replayKey(1)))
     }
 
+    @Test
+    fun `every level is introduced once independently`() {
+        for (level in 1..7) {
+            assertEquals(true, Preferences.markLevelIntroduced(level), "first entry to $level")
+            assertEquals(false, Preferences.markLevelIntroduced(level), "retry of $level")
+        }
+        assertEquals(127, Preferences.introducedBits())
+    }
+
+    @Test
+    fun `missing and malformed intro storage both mean no levels seen`() {
+        assertEquals(0, Preferences.introducedBits())
+
+        for (bad in listOf("", "not-bits", "-1", "128")) {
+            localStorage.setItem(INTRODUCED_KEY, bad)
+            assertEquals(0, Preferences.introducedBits(), bad)
+        }
+    }
+
     private companion object {
         /** `Preferences`' own keys, which are private and stay that way for one test. */
         const val THEME_KEY = "snakewarz.theme.v1"
@@ -143,6 +163,7 @@ class PreferencesTest {
         /** The v2 campaign deliberately does not read the retired development table's progress. */
         const val GAUNTLET_KEY = "snakewarz.gauntlet.v2"
         const val OLD_GAUNTLET_KEY = "snakewarz.ladder.v1"
+        const val INTRODUCED_KEY = "snakewarz.gauntlet.intros.v1"
 
         /**
          * The per-rung key, written out here rather than asked for, for [GAUNTLET_KEY]'s reason: it

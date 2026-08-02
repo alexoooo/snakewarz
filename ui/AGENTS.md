@@ -2,15 +2,15 @@
 
 Read [`../AGENTS.md`](../AGENTS.md) and [`../docs/UI.md`](../docs/UI.md) before changing anything here.
 
-The UI guide documents the one-way data flow, frame-versus-turn cadence, three clocks, board fitting,
+The UI guide documents the one-way data flow, frame-versus-turn cadence, five clocks, board fitting,
 and two canvases. The overlay carries **the snakes themselves** and is painted whole, so
 `paintOverlay` must follow every played turn and every `fit`. Its order is
 **wash → preview → route → bodies → heads**. The board canvas holds the background, walls, and grid;
 `fit` is the only operation that paints it.
 
-**Every press on the board costs the player a move.** There is no cancel. Nothing in Kotlin prevents
-a stray click while another UI layer is open; `#panel-scrim` and `#dialog-result` are full-viewport
-and above `#board`. Changing their stacking or box can change the game.
+**Every accepted press on the board costs the player a move.** There is no cancel. The panel scrim,
+result dialog, and Gauntlet intro are full-viewport and above `#board`; `Shell` also makes everything
+behind the active layer inert. Changing their stacking or box can change the game.
 
 When that press ends, discard its remaining route and finish the opponents' outstanding turns before
 parking on the player again. A pointer gesture must not carry an AI turn into the next gesture; this
@@ -20,9 +20,13 @@ While a press is held, expose at most one match turn per browser frame. Multiple
 animation callback paint only their final position and make a snake appear to move twice; bot matches
 and replays retain `TurnScheduler`'s multi-turn catch-up loop.
 
-`SteerPad` is the arrow keys for a device without them. It is out of flow inside `.board-wrap`, which
-`BoardRenderer.fit` measures. Putting it in flow makes the board reserve space for the pad. Position
-it through `GameSession.fitBoard`, the single fitting entry point.
+Direct arrow, WASD, and D-pad inputs must not replace an unfinished snake glide. `AnimatedSteering`
+keeps rapid directions in order and releases one only after the renderer reports that the preceding
+move transition has finished; ownership changes cancel that queue with the other controls.
+
+`SteerPad` is always offered during a live human match. It occupies its own `.arena` grid track: below
+the board in portrait and to its right in landscape. The Gauntlet rival occupies the matching left
+track. Neither control may be positioned over `.board-wrap` or allowed to clip the canvases.
 
 The keyboard map is recorded in exactly two user-facing places: the table in `docs/UI.md` and the
 Keys note in `#panel-settings`. Change `Chrome.onKeyDown`, that note, and that table together.

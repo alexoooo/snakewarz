@@ -69,6 +69,11 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
     private val dialogNext: HTMLButtonElement = elementById("result-next")
     private val dialogReplay: HTMLButtonElement = elementById("result-replay")
 
+    private val intro: HTMLElement = elementById("gauntlet-intro")
+    private val introPortrait: HTMLImageElement = elementById("intro-portrait")
+    private val introName: HTMLElement = elementById("intro-name")
+    private val introTitle: HTMLElement = elementById("intro-title")
+
     private val replayActions: HTMLElement = elementById("replay-actions")
     private val replayAgain: HTMLButtonElement = elementById("replay-again")
     private val replayNext: HTMLButtonElement = elementById("replay-next")
@@ -115,7 +120,7 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
      * while the card claims `aria-modal`. Marking everything that is not the thing in front is the
      * rule, so it is written as one list rather than as one element that happens to be enough.
      */
-    private val behind: List<HTMLElement> = listOf(app) + panels.map { it.second }
+    private val behind: List<HTMLElement> = listOf(app, dialog) + panels.map { it.second }
 
     /** The overlay on screen, so the focus moves when one opens rather than on every frame. */
     private var overlay: HTMLElement? = null
@@ -190,8 +195,17 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
             renderResultActions(model)
         }
 
-        // The dialog is over the panels, so it is the one that owns the focus while it is up.
+        val introduction = model.intro
+        intro.hidden = introduction == null
+        if (introduction != null) {
+            introPortrait.showPortrait(introduction.portrait)
+            introName.textContent = introduction.name
+            introTitle.textContent = introduction.title
+        }
+
+        // A first-entry presentation is above every other layer and blocks every form of input.
         val wanted = when {
+            introduction != null -> intro
             result != null -> dialog
             else -> model.openPanel?.let { panel -> panels.first { it.first == panel }.second }
         }
@@ -325,6 +339,10 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
 
     private fun onKeyDown(event: KeyboardEvent) {
         if (event.key != "Escape" || event.ctrlKey || event.altKey || event.metaKey) {
+            return
+        }
+        if (overlay === intro) {
+            event.preventDefault()
             return
         }
         if (overlay != null) {

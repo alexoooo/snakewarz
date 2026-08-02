@@ -24,6 +24,7 @@ import ao.snakewarz.ui.model.MatchOptions
 import ao.snakewarz.ui.model.Panel
 import ao.snakewarz.ui.model.Portraits
 import ao.snakewarz.ui.model.ReplayLink
+import ao.snakewarz.ui.model.RivalCard
 import ao.snakewarz.ui.model.Screen
 import ao.snakewarz.ui.model.SlotLabels
 import ao.snakewarz.ui.model.SlotPortraits
@@ -38,6 +39,7 @@ import ao.snakewarz.ui.render.GauntletVisual
 import ao.snakewarz.ui.render.TexturePack
 import ao.snakewarz.ui.render.Theme
 import ao.snakewarz.ui.render.prefersDark
+import ao.snakewarz.ui.schedule.AnimatedSteering
 import ao.snakewarz.ui.schedule.Ticker
 import ao.snakewarz.ui.schedule.TournamentRunner
 import ao.snakewarz.ui.schedule.TurnScheduler
@@ -77,6 +79,7 @@ public class GameSession(
     private val renderer = BoardRenderer(chrome.canvas, chrome.overlay)
     private val scheduler = TurnScheduler(::advance, ::renderChrome) { match.interactive }
     private val batch = TournamentRunner(::batchFrame)
+    private val animatedSteering = AnimatedSteering(renderer::moveAnimating, ::playSteeredDirection)
 
     /**
      * The third clock, and the only one that cannot change a result.
@@ -118,6 +121,9 @@ public class GameSession(
      */
     private var dragging: Boolean = false
 
+    /** A board pointer that is still down, even if its first move has already ended the match. */
+    private var boardGestureActive: Boolean = false
+
     /** The recording being watched, or `null` while a match is being played for real. */
     private var replay: MatchRecord? = null
 
@@ -134,6 +140,10 @@ public class GameSession(
      */
     private var level: Int? = null
 
+    /** The first-entry presentation currently withholding input and the result dialog. */
+    private var introLevel: Int? = null
+    private var introTimer: Int? = null
+
     /**
      * How far up the gauntlet this browser has got.
      *
@@ -142,6 +152,7 @@ public class GameSession(
      * evening's gauntlet — the writes go nowhere and the reads never happen.
      */
     private var progress: GauntletProgress = GauntletProgress.parse(Preferences.gauntlet())
+    private var introducedLevels: Int = Preferences.introducedBits()
 
     /** Whether the level on the board has already been settled, so a win is written down once. */
     private var levelRecorded = false
@@ -358,6 +369,8 @@ public class GameSession(
 
             UiIntent.PathReleased -> endPath()
 
+            UiIntent.IntroFinished -> finishIntro()
+
             UiIntent.Relayout -> refit()
 
             is UiIntent.OpenPanel -> showPanel(intent.panel)
@@ -538,7 +551,7 @@ public class GameSession(
      */
     private fun canSteer(): Boolean =
         !batch.running && batchBoard == null && previewBoard == null && match.interactive &&
-            match.outcome == null && playerSeat != null
+            match.outcome == null && playerSeat != null && introLevel == null
 
     /**
      * Takes hold of the snake and plays one move towards where the press landed.
@@ -562,6 +575,7 @@ public class GameSession(
      */
     private fun pathBegan(clientX: Double, clientY: Double) {
         endPath()
+        boardGestureActive = true
 
         if (!canSteer()) {
             return
@@ -593,7 +607,7 @@ public class GameSession(
         // Not merely "there is more to walk". A press that killed the player leaves [consumePlan]
         // having called `forgetPath()` and [playPlayerMove] having handed the ending to the clock
         // already, and this is what stops a second start from being asked for.
-        if (!plan.isEmpty) {
+        if (!plan.isEmpty && match.outcome == null) {
             scheduler.start()
             renderChrome()
         }
@@ -654,13 +668,21 @@ public class GameSession(
      * between clicking a running board and stopping it.
      */
     private fun endPath() {
+        val releasedGesture = boardGestureActive
+        boardGestureActive = false
         if (!dragging && plan.cellCount == 0) {
+            if (releasedGesture) {
+                renderChrome()
+            }
             return
         }
         forgetPath()
         scheduler.stop()
-        playRound()
+        if (match.outcome == null) {
+            playRound()
+        }
         refreshOverlay()
+        renderChrome()
     }
 
     /**
@@ -674,6 +696,7 @@ public class GameSession(
         dragging = false
         plan.clear()
         input.clear()
+        animatedSteering.clear()
     }
 
     /**
@@ -756,7 +779,6 @@ public class GameSession(
      */
     private fun fitBoard(shown: Match) {
         renderer.fit(shown.view)
-        chrome.placeSteerPad()
     }
 
     // -- colour
@@ -800,6 +822,7 @@ public class GameSession(
             visual.applyToPage()
         }
         renderer.applyTheme(theme)
+        renderer.applyGroundAlpha(if (visual == null) 1.0 else GAUNTLET_GROUND_ALPHA)
     }
 
     // -- the shell
@@ -821,11 +844,14 @@ public class GameSession(
         }
 
         scheduler.stop()
+        cancelIntro()
         batch.stop()
         // The motion clock goes with them. It would stop itself on the next frame, once the route
         // below is dropped and nothing is left moving — but a board nobody can see should not be
         // repainted even once, and this is the one navigation that costs anything anyway.
         ticker.stop()
+        chrome.cancelControls()
+        boardGestureActive = false
         // A route is a pointer held on a board that is about to leave the screen, and a queue full
         // of moves for a match nobody can see. The clock above already stopped.
         forgetPath()
@@ -847,6 +873,10 @@ public class GameSession(
 
     /** Slides a panel over the board. No refit: an overlay leaves the board's box exactly as it was. */
     private fun showPanel(panel: Panel) {
+        cancelIntro()
+        chrome.cancelControls()
+        boardGestureActive = false
+        forgetPath()
         openPanel = panel
         renderChrome()
     }
@@ -911,7 +941,10 @@ public class GameSession(
      * the question answer differently — the same rule every colour on this board follows.
      */
     private fun resultText(): String? {
-        if (screen != Screen.GAME || resultDismissed || replay != null || batch.running || batchBoard != null) {
+        if (
+            screen != Screen.GAME || resultDismissed || replay != null || batch.running || batchBoard != null ||
+            boardGestureActive || introLevel != null
+        ) {
             return null
         }
         val seat = playerSeat ?: return null
@@ -983,8 +1016,10 @@ public class GameSession(
     // -- match lifecycle
 
     private fun begin() {
+        cancelIntro()
         paintTheme()
         chrome.cancelControls()
+        boardGestureActive = false
         awaitingInput = false
         resultDismissed = false
         levelRecorded = false
@@ -1061,6 +1096,10 @@ public class GameSession(
      */
     private fun startLevel(index: Int) {
         val rung = Gauntlet.levelAt(index)
+        val bit = 1 shl (index - 1)
+        val introduce = introducedLevels and bit == 0
+        introducedLevels = introducedLevels or bit
+        Preferences.markLevelIntroduced(index)
         level = index
         screen = Screen.GAME
         openPanel = null
@@ -1068,6 +1107,38 @@ public class GameSession(
         // the map it names is the one thing about it the board itself could never say.
         pack = TexturePack.of(rung.shape)
         playFresh(rung.setup(freshSeed(), PlayableRegistry.HUMAN_ID))
+        if (introduce) {
+            showIntro(index)
+        }
+    }
+
+    private fun showIntro(index: Int) {
+        chrome.cancelControls()
+        introLevel = index
+        introTimer = window.setTimeout(
+            {
+                dispatch(UiIntent.IntroFinished)
+                null
+            },
+            INTRO_MILLIS,
+        )
+        renderChrome()
+    }
+
+    private fun finishIntro() {
+        if (introLevel == null) {
+            return
+        }
+        introTimer = null
+        introLevel = null
+        renderChrome()
+        refreshOverlay()
+    }
+
+    private fun cancelIntro() {
+        introTimer?.let { window.clearTimeout(it) }
+        introTimer = null
+        introLevel = null
     }
 
     /**
@@ -1267,6 +1338,9 @@ public class GameSession(
         }
 
         scheduler.stop()
+        cancelIntro()
+        chrome.cancelControls()
+        boardGestureActive = false
         // The queue and any route still in it. The arena is about to belong to the tournament, so
         // there is nothing left for either to steer.
         forgetPath()
@@ -1383,17 +1457,27 @@ public class GameSession(
      * here as well would double-step; and a paused bots-only match must not resume because somebody
      * leant on an arrow key.
      *
+     * A second direct direction can arrive while the first is still gliding. [AnimatedSteering]
+     * holds it outside [input] until that transition finishes, then [playSteeredDirection] gives it
+     * the same one-call path through the match. Keeping it outside matters: [playRound] drains every
+     * direction already in [input], which would collapse the queued moves into the same paint again.
+     *
      * **A key mid-drag takes over outright.** The route goes, the moves it queued go with it, and so
      * does the clock it started — otherwise the two ways of saying where to go interleave and the
      * snake does what neither one asked for.
      */
     private fun steer(direction: Direction) {
         endPath()
-        input.push(direction)
+        animatedSteering.offer(direction)
+    }
 
-        if (match.interactive && !scheduler.running) {
-            playRound()
+    /** Plays one direct input after [AnimatedSteering] has left the preceding glide visible. */
+    private fun playSteeredDirection(direction: Direction) {
+        if (!canSteer() || scheduler.running) {
+            return
         }
+        input.push(direction)
+        playRound()
     }
 
     /**
@@ -1512,6 +1596,8 @@ public class GameSession(
         val shown = batchBoard ?: match
         val faces = facesFor(shown)
         val verdict = resultText()
+        val rival = rivalCard(faces)
+        val stats = shown.stats()
 
         chrome.render(
             UiModel(
@@ -1519,6 +1605,8 @@ public class GameSession(
                 level = level,
                 gauntlet = progress,
                 levelCleared = levelWon(),
+                rival = rival,
+                intro = rival.takeIf { introLevel != null },
                 openPanel = openPanel,
                 theme = theme,
                 result = verdict,
@@ -1530,18 +1618,28 @@ public class GameSession(
                 steering = canSteer(),
                 running = scheduler.running,
                 turnCount = replay?.turnCount ?: shown.turnIndex,
+                round = "Round ${stats.rounds}",
                 status = statusText(shown),
-                stats = shown.stats(),
+                stats = stats,
                 labels = labelsFor(shown),
                 portraits = faces,
                 hover = hoverInfo(shown.view, hovered, labelsFor(shown)),
                 // The *player's* match, deliberately not `shown`: while a batch owns the board its
                 // finished matches must not light the button up.
-                canWatchReplay = replay == null && match.outcome != null && !batch.running,
+                canWatchReplay = replay == null && match.outcome != null && !batch.running && !boardGestureActive,
                 shareUrl = shareUrl,
                 tournament = batchStatus(),
             ),
         )
+    }
+
+    private fun rivalCard(faces: SlotPortraits): RivalCard? {
+        val current = level ?: return null
+        if (screen != Screen.GAME || batchBoard != null || previewBoard != null) {
+            return null
+        }
+        val rung = Gauntlet.levelAt(current)
+        return RivalCard(labelsFor(match)[OPPONENT_SLOT], rung.title, faces[OPPONENT_SLOT])
     }
 
     /** The human seat in the recording on screen, if it has one. */
@@ -1614,5 +1712,11 @@ public class GameSession(
 
         MatchEnd.ALL_ELIMINATED -> "nobody left standing"
         MatchEnd.TURN_LIMIT -> "a draw — the turn limit ran out"
+    }
+
+    private companion object {
+        const val OPPONENT_SLOT = 1
+        const val INTRO_MILLIS = 1_500
+        const val GAUNTLET_GROUND_ALPHA = 0.88
     }
 }
