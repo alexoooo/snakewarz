@@ -780,7 +780,7 @@ public class GameSession(
      * follows leaves it over the squares or stranded in the middle of the page.
      */
     private fun fitBoard(shown: Match) {
-        renderer.fit(shown.view)
+        renderer.fit(shown.view, closeUp = shown === match && level == Gauntlet.size)
     }
 
     // -- colour
@@ -1611,6 +1611,7 @@ public class GameSession(
                 replayNextLevel = replayNextLevel(),
                 interactive = match.interactive,
                 steering = canSteer(),
+                steeringPad = playerSeat != null || replayHumanSeat() != null,
                 running = scheduler.running,
                 turnCount = replay?.turnCount ?: shown.turnIndex,
                 round = "Round ${stats.rounds}",

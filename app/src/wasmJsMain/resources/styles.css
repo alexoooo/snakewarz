@@ -281,6 +281,7 @@ body.failed #loading {
 
     .arena .board-wrap {
         grid-area: 1 / 2;
+        align-self: stretch;
     }
 
     #rival-card {

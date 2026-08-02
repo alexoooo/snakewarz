@@ -96,6 +96,8 @@ internal class UiModel(
      * arena, and off the instant the match has an outcome.
      */
     val steering: Boolean,
+    /** A human seat belongs to this board, even when playback or a verdict temporarily disables input. */
+    val steeringPad: Boolean,
     val running: Boolean,
     /** The length of the recording, or the current turn when there is no recording to be ahead of. */
     val turnCount: Int,

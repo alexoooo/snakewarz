@@ -42,13 +42,13 @@ internal class SteerPad(private val repeat: SteerRepeat) {
         window.addEventListener("pointercancel") { release() }
     }
 
-    /** Offered in every live human match, independent of pointer type or viewport size. */
+    /** Present for a human board and enabled exactly while that board accepts steering. */
     fun render(model: UiModel) {
         offered = model.steering
         if (!offered) {
             release()
         }
-        root.hidden = !offered
+        root.hidden = !model.steeringPad
         for ((button, _) in buttons) {
             button.disabled = !offered
         }

@@ -24,9 +24,10 @@ Direct arrow, WASD, and D-pad inputs must not replace an unfinished snake glide.
 keeps rapid directions in order and releases one only after the renderer reports that the preceding
 move transition has finished; ownership changes cancel that queue with the other controls.
 
-`SteerPad` is always offered during a live human match. It occupies its own `.arena` grid track: below
-the board in portrait and to its right in landscape. The Gauntlet rival occupies the matching left
-track. Neither control may be positioned over `.board-wrap` or allowed to clip the canvases.
+`SteerPad` is always present for a human match or its replay and disabled while steering is not
+available, so a verdict or playback cannot shift the arena. It occupies its own `.arena` grid track:
+below the board in portrait and to its right in landscape. The Gauntlet rival occupies the matching
+left track. Neither control may be positioned over `.board-wrap` or allowed to clip the canvases.
 
 The keyboard map is recorded in exactly two user-facing places: the table in `docs/UI.md` and the
 Keys note in `#panel-settings`. Change `Chrome.onKeyDown`, that note, and that table together.

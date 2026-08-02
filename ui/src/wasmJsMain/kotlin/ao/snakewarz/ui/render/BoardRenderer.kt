@@ -167,6 +167,7 @@ internal class BoardRenderer(
      * same board at two magnifications, which is the whole of "snakes centre stage".
      *
      * [MAX_CELL] stops a small board turning into a handful of enormous squares in a large window.
+     * [closeUp] raises that ceiling for a board deliberately staged as the centrepiece.
      * At the other end a cell may shrink to one device pixel, preserving all four board edges when
      * controls reserve most of a tight landscape screen. The maximum is in CSS pixels at [bootRatio], so zooming the page moves the
      * text around a board that stays where it is — the room is measured in device pixels too, where
@@ -183,7 +184,7 @@ internal class BoardRenderer(
      * If you ever do re-introduce `context.scale`, note that setting `canvas.width` resets the
      * context transform, so it has to come after the resize and not with the rest of the setup.
      */
-    fun fit(view: BoardView) {
+    fun fit(view: BoardView, closeUp: Boolean = false) {
         grid = view.grid
 
         val ratio = ratioNow()
@@ -197,8 +198,9 @@ internal class BoardRenderer(
         // measured against.
         val span = maxOf(grid.rows, grid.cols)
         val fits = (room - 1) / span
+        val maxCell = if (closeUp) CLOSE_UP_MAX_CELL else MAX_CELL
         cellSize = fits.toInt()
-            .coerceAtMost((MAX_CELL * bootRatio).toInt())
+            .coerceAtMost((maxCell * bootRatio).toInt())
             .coerceAtLeast(1)
 
         val width = cellSize * grid.cols + 1
@@ -524,7 +526,7 @@ internal class BoardRenderer(
         val tail = tailAlpha(view, snake, corpse)
         val fading = tail != alpha
         if (fading) {
-            drawTaper(id.index, snake, colour, tail)
+            drawTaper(view, id.index, snake, colour, tail)
         }
 
         val first = if (fading) 1 else 0
@@ -535,9 +537,9 @@ internal class BoardRenderer(
             overlayContext.globalAlpha = alpha
             overlayContext.lineWidth = bodyWidth()
             overlayContext.beginPath()
-            overlayContext.moveTo(bodyX(id.index, snake, first), bodyY(id.index, snake, first))
+            overlayContext.moveTo(bodyX(view, id.index, snake, first), bodyY(view, id.index, snake, first))
             for (i in first + 1 until bodyPointCount(id.index, snake)) {
-                overlayContext.lineTo(bodyX(id.index, snake, i), bodyY(id.index, snake, i))
+                overlayContext.lineTo(bodyX(view, id.index, snake, i), bodyY(view, id.index, snake, i))
             }
             overlayContext.stroke()
         }
@@ -547,12 +549,12 @@ internal class BoardRenderer(
         // dropping it on the turn of the death is the snake becoming scenery between two frames.
         val spine = if (snake.alive) 1.0 else deathFlash(id.index)
         if (spine > 0.0) {
-            drawSpine(id.index, snake, theme.head(id.index), spine)
+            drawSpine(view, id.index, snake, theme.head(id.index), spine)
         }
     }
 
     /**
-     * The oldest square's share of the body, narrowing towards a tip at its centre.
+     * The oldest square's share of the body, narrowing towards a tip that advances through it.
      *
      * A filled quadrilateral rather than a stroke, because a stroke has one width and the tail is the
      * one place the ribbon changes width along a single segment. What it buys is which end of a coil
@@ -561,11 +563,11 @@ internal class BoardRenderer(
      * Adjacent squares are exactly one cell apart on one axis, so the perpendicular is that step
      * turned a quarter turn and divided by the cell — no length to measure and no zero to guard.
      */
-    private fun drawTaper(slot: Int, snake: SnakeView, colour: String, alpha: Double) {
-        val x0 = bodyX(slot, snake, 0)
-        val y0 = bodyY(slot, snake, 0)
-        val x1 = bodyX(slot, snake, 1)
-        val y1 = bodyY(slot, snake, 1)
+    private fun drawTaper(view: BoardView, slot: Int, snake: SnakeView, colour: String, alpha: Double) {
+        val x0 = bodyX(view, slot, snake, 0)
+        val y0 = bodyY(view, slot, snake, 0)
+        val x1 = bodyX(view, slot, snake, 1)
+        val y1 = bodyY(view, slot, snake, 1)
         val acrossX = (y0 - y1) / cellSize
         val acrossY = (x1 - x0) / cellSize
 
@@ -598,7 +600,7 @@ internal class BoardRenderer(
      * [weight] is the whole line's share of itself, which is one for a living snake and a share
      * running to nothing across a death — see [drawBody].
      */
-    private fun drawSpine(slot: Int, snake: SnakeView, colour: String, weight: Double) {
+    private fun drawSpine(view: BoardView, slot: Int, snake: SnakeView, colour: String, weight: Double) {
         val width = (cellSize * SPINE_WIDTH).coerceAtLeast(MIN_MARK)
         val points = bodyPointCount(slot, snake)
 
@@ -611,8 +613,8 @@ internal class BoardRenderer(
             overlayContext.globalAlpha = weight * ramp(i, points - 1, SPINE_TAIL_ALPHA, SPINE_HEAD_ALPHA)
             overlayContext.lineWidth = ramp(i, points - 1, MIN_MARK, width)
             overlayContext.beginPath()
-            overlayContext.moveTo(bodyX(slot, snake, i), bodyY(slot, snake, i))
-            overlayContext.lineTo(bodyX(slot, snake, i + 1), bodyY(slot, snake, i + 1))
+            overlayContext.moveTo(bodyX(view, slot, snake, i), bodyY(view, slot, snake, i))
+            overlayContext.lineTo(bodyX(view, slot, snake, i + 1), bodyY(view, slot, snake, i + 1))
             overlayContext.stroke()
         }
     }
@@ -930,17 +932,41 @@ internal class BoardRenderer(
     private fun bodyPointCount(slot: Int, snake: SnakeView): Int =
         snake.length + if (transitions.getOrNull(slot)?.retracts == true) 1 else 0
 
-    private fun bodyX(slot: Int, snake: SnakeView, point: Int): Double = bodyCoordinate(slot, snake, point, true)
+    private fun bodyX(view: BoardView, slot: Int, snake: SnakeView, point: Int): Double =
+        bodyCoordinate(view, slot, snake, point, true)
 
-    private fun bodyY(slot: Int, snake: SnakeView, point: Int): Double = bodyCoordinate(slot, snake, point, false)
+    private fun bodyY(view: BoardView, slot: Int, snake: SnakeView, point: Int): Double =
+        bodyCoordinate(view, slot, snake, point, false)
 
-    private fun bodyCoordinate(slot: Int, snake: SnakeView, point: Int, horizontal: Boolean): Double {
-        val transition = transitions.getOrNull(slot) ?: return centre(snake.cellAt(point), horizontal)
+    private fun bodyCoordinate(
+        view: BoardView,
+        slot: Int,
+        snake: SnakeView,
+        point: Int,
+        horizontal: Boolean,
+    ): Double {
+        val transition = transitions.getOrNull(slot)
+        if (point == 0) {
+            val finish = tailCoordinate(view, snake, horizontal)
+            if (transition == null) {
+                return finish
+            }
+            val old = transition.oldCells
+            val start = if (old.size < 2) {
+                centre(Cell(old[0]), horizontal)
+            } else {
+                val offset = if (transition.retracts) TAIL_FORWARD_OFFSET else TAIL_STAY_OFFSET
+                tailCoordinate(Cell(old[0]), Cell(old[1]), offset, horizontal)
+            }
+            return interpolate(start, finish, transitionProgress(transition))
+        }
+        if (transition == null) {
+            return centre(snake.cellAt(point), horizontal)
+        }
         val progress = transitionProgress(transition)
         val old = transition.oldCells
         if (transition.retracts) {
             return when (point) {
-                0 -> interpolate(Cell(old[0]), Cell(old[1]), progress, horizontal)
                 old.size -> interpolate(Cell(old.last()), snake.head, progress, horizontal)
                 else -> centre(Cell(old[point]), horizontal)
             }
@@ -950,6 +976,21 @@ internal class BoardRenderer(
         } else {
             centre(Cell(old[point]), horizontal)
         }
+    }
+
+    private fun tailCoordinate(view: BoardView, snake: SnakeView, horizontal: Boolean): Double {
+        val offset = when {
+            !snake.alive || view.rules.growEveryNthMove < 2 -> 0.0
+            tailClearsNext(view, snake) -> TAIL_FORWARD_OFFSET
+            else -> TAIL_STAY_OFFSET
+        }
+        return tailCoordinate(snake.cellAt(0), snake.cellAt(1), offset, horizontal)
+    }
+
+    private fun tailCoordinate(from: Cell, toward: Cell, offset: Double, horizontal: Boolean): Double {
+        val start = centre(from, horizontal)
+        val direction = centre(toward, horizontal) - start
+        return start + direction * offset
     }
 
     private fun headX(slot: Int, snake: SnakeView): Double = headCoordinate(slot, snake, true)
@@ -963,8 +1004,10 @@ internal class BoardRenderer(
 
     private fun interpolate(from: Cell, to: Cell, progress: Double, horizontal: Boolean): Double {
         val start = centre(from, horizontal)
-        return start + (centre(to, horizontal) - start) * progress
+        return interpolate(start, centre(to, horizontal), progress)
     }
+
+    private fun interpolate(from: Double, to: Double, progress: Double): Double = from + (to - from) * progress
 
     private fun centre(cell: Cell, horizontal: Boolean): Double = if (horizontal) centreX(cell) else centreY(cell)
 
@@ -1033,6 +1076,9 @@ internal class BoardRenderer(
          */
         const val MAX_CELL = 44
 
+        /** Lets a deliberately intimate board fill more of a desktop arena without affecting ordinary small maps. */
+        const val CLOSE_UP_MAX_CELL = 64
+
         /**
          * Reached whenever `.board-wrap` measures zero — before the first layout, and on a screen
          * that is not showing the board. Both are followed by a `fit` that can measure for real.
@@ -1100,6 +1146,10 @@ internal class BoardRenderer(
          * snake dies in, and it has to look like one.
          */
         const val TAIL_TIP_SHARE = 0.30
+
+        /** The tail tip moves from the cell centre to the front third over its two-move lifetime. */
+        const val TAIL_STAY_OFFSET = 0.0
+        const val TAIL_FORWARD_OFFSET = 1.0 / 6.0
 
         /**
          * The spine at its widest, at the head end; [MIN_MARK] is what it ramps down to at the tail.

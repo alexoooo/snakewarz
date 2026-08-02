@@ -18,6 +18,7 @@ import ao.snakewarz.ui.model.gauntlet.GauntletProgress
 import ao.snakewarz.ui.render.Theme
 import kotlinx.browser.document
 import kotlinx.browser.window
+import org.w3c.dom.HTMLButtonElement
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.pointerevents.PointerEvent
 import org.w3c.dom.pointerevents.PointerEventInit
@@ -112,16 +113,17 @@ class SteerPadTest {
     }
 
     @Test
-    fun `the pad is withdrawn the moment there is nothing to steer, and lets go as it goes`() {
+    fun `the pad is disabled the moment there is nothing to steer, and lets go as it goes`() {
         pad.render(model(steering = true))
         press("steer-north")
         moves.clear()
 
         pad.render(model(steering = false))
 
-        assertTrue(element("steer-pad").hidden)
-        // The release would land on an element the page has hidden, so a hold left standing here is
-        // one nothing could ever end.
+        assertFalse(element("steer-pad").hidden)
+        assertTrue((element("steer-north") as HTMLButtonElement).disabled)
+        // A disabled pad cannot receive the release that would ordinarily end its hold, so it must
+        // let go while it is being disabled.
         repeat.frame(0.0)
         repeat.frame(1_000.0)
         assertEquals(emptyList(), moves.toList())
@@ -145,6 +147,13 @@ class SteerPadTest {
         assertFalse(element("steer-pad").hidden, "the pad is offered without a coarse-pointer query")
     }
 
+    @Test
+    fun `a bot-only board does not reserve room for a pad`() {
+        pad.render(model(steering = false, steeringPad = false))
+
+        assertTrue(element("steer-pad").hidden)
+    }
+
     // -- internals
 
     private fun element(id: String): HTMLElement =
@@ -161,7 +170,7 @@ class SteerPadTest {
         window.dispatchEvent(PointerEvent(type, PointerEventInit(pointerId = 1, bubbles = true)))
     }
 
-    private fun model(steering: Boolean): UiModel = UiModel(
+    private fun model(steering: Boolean, steeringPad: Boolean = true): UiModel = UiModel(
         screen = Screen.GAME,
         level = null,
         gauntlet = GauntletProgress.NONE,
@@ -175,6 +184,7 @@ class SteerPadTest {
         replayNextLevel = null,
         interactive = steering,
         steering = steering,
+        steeringPad = steeringPad,
         running = false,
         turnCount = 0,
         status = "your move",

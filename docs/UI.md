@@ -184,9 +184,10 @@ path — a tap is one move and a hold is a move every 250ms, on a keyboard and u
   own `minmax(0, 1fr)` track on a tight screen, so controls never overlap or clip a canvas edge.
 - **The cluster is a fixed 3×2 map.** W/up is centred above A/left, S/down, and D/right. Each key is
   clamped from 48 to 64 CSS pixels and has theme-derived hover, focus, held, and disabled states.
-- **It is shown exactly while `UiModel.steering`** — which is `GameSession.canSteer()`, the very
-  predicate a press on the board is answered by, so the pad offers what the board would accept.
-  Absent rather than greyed in bot matches, replay playback, intros, and finished games.
+- **It remains present for a human match and its replay.** `UiModel.steeringPad` reserves its arena
+  track, while `UiModel.steering` — `GameSession.canSteer()`, the very predicate a board press is
+  answered by — enables its buttons. A verdict or playback therefore greys the pad without moving
+  the board; bot-only matches omit it.
 - **No `setPointerCapture`, and the release listens on `window`.** Capture throws outright on a
   pointer the browser has stopped tracking, which would take the press down with it; what it exists
   to prevent — a thumb that leaves the pad before it lifts, leaving a snake walking with nobody
@@ -650,7 +651,9 @@ a corpse's ribbon is translucent and a segment drawn over its neighbour's round 
 every joint. Over it runs the **spine**, the same line at `SPINE_WIDTH` in `Theme.head(slot)`, ramping
 in both alpha and width along the body so a coil reads from tail to head. The **head** is a marker in
 the same head colour with two eyes offset perpendicular to `SnakeView.lastDirection`, and the
-**tail** tapers, in a filled quadrilateral rather than a stroke, because a stroke has one width.
+**tail** tapers, in a filled quadrilateral rather than a stroke, because a stroke has one width. Its
+tip advances from the centre to the front third of the oldest square across that square's two
+growth phases, making the next square to clear visible in both position and colour.
 
 **The tail fade is a rule being drawn, not decoration**, and it survives all of that:
 `BoardRenderer.tailAlpha` fades the oldest square through `Theme.AGING_ALPHA` and then

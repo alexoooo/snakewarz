@@ -1,213 +1,39 @@
 # Snake Warz
 
-Tron-style snakes game as an **AI testbed**. Snakes move one square per turn on a rectangular grid;
-walls and every snake body — including your own — are lethal; the last one moving wins. No food, no
-score. Snakes grow at half speed: the tail retracts on alternating turns only.
+A fast, unforgiving Tron-style snake game. Every wall and trail is lethal, there is nothing to eat,
+and the last snake moving wins.
 
-Originally written in 2005 and imported from the Google Code archive, and rewritten from Java/Swing
-into Kotlin/Wasm as a web app.
+## [▶ Play Snake Warz](https://alexoooo.github.io/snakewarz/)
 
-## Status
+No download or sign-in required. Play in a modern desktop or mobile browser.
 
-**The rewrite is done, and there is now something worth losing to.** Play against
-the shipped bots with the arrow keys, or sit out and watch up to four of them fight; pause, step a
-turn at a time, change the speed, scrub back through a finished match, and share the whole thing as a
-link. A 160-turn duel is 129 characters of URL, and no server is involved at any point.
+[![Snake Warz gameplay](docs/images/gameplay.png)](https://alexoooo.github.io/snakewarz/)
 
-Nine of the twelve bots are a ladder, weakest first, and each rung beats the one below it over twenty
-matches:
+## Play your way
 
-| Bot | How it plays |
-|---|---|
-| Random | Uniformly among the moves that do not kill it |
-| Wall Hugger | Straight while it can, then left, then right |
-| Space Filler | Flood-fills each way and takes the side with the most room |
-| Pressure | Room first, then crowds an opponent with what is left over |
-| Chaser | Walks the shortest path to the nearest opponent, then hands over to Pressure |
-| Flat Monte Carlo | Plays each move out to the end at random, many times, and takes the best |
-| UCT | Monte Carlo tree search with UCB1 |
-| PUCT | AlphaZero's tree search with a hand-written position appraisal in place of a neural network |
-| Alpha Beta | Full-width minimax with alpha-beta pruning and a selectable leaf appraisal |
+- Take on the bots yourself with the keyboard, D-pad, mouse, or touch.
+- Set up battles with two to four snakes on a variety of boards and maps.
+- Pause, step through turns, replay finished matches, and share matches by URL.
+- Run head-to-head or free-for-all tournaments directly in the browser.
 
-One wall-map specialist sits outside that empty-12 ordering. It earned a permanent place in five
-map-separated fields, but not a ladder rung:
+![Choose a board, map, and bots for a custom match](docs/images/bot-setup.png)
 
-| Bot | How it plays |
-|---|---|
-| Cartographer | Scores guarded paths, local shape, reachable room and mover-owned ground in one zero-budget board sweep |
+## An AI playground too
 
-One measured fixed-depth bridge sits between that live-board policy and the full searchers without
-claiming another empty-12 ladder rung:
+Snake Warz includes bots ranging from simple reactive strategies to Monte Carlo tree search and
+alpha-beta search. Matches are deterministic and bots use reproducible evaluation budgets, making
+the game useful for comparing strategies as well as playing against them.
 
-| Bot | How it plays |
-|---|---|
-| Lookahead | Orders and backs up one to three complete turns, falling back to Cartographer if the whole fixed tree will not fit |
+Want to explore or add a bot? Start with [the contributor guide](AGENTS.md) and
+[the bot documentation](docs/Bots.md). The rest of the design and research notes live in
+[`docs/`](docs).
 
-One more was contributed to the original 2005 project and claims nothing about strength; it plays the
-same contract suite as everything else:
+## Run locally
 
-| Bot | How it plays |
-|---|---|
-| Burnin Hell | First open direction, always north, south, east, west — which comes out as a serpentine sweep of the board |
-
-The top two searchers earned their ladder places in equal-clock fields, not just at equal evaluation
-allowances. Their `Evaluation` setting is the interesting part — `territory` reads a share of the
-board off one sweep, `survival` works out how many moves each snake could actually still make, and
-`mobility` is a near-free reading that gets more search for the same clock. Setting two seats to the
-same bot at two evaluations and running a tournament is how those numbers are measured.
-
-## Settings
-
-A bot with a real choice to offer says so, and the sidebar offers it: pick UCT in a slot, open
-**Settings** under it, and there is its search allowance and its exploration constant. Each seat is
-configured on its own, so one bot can play another copy of itself set up differently. Nothing about
-this is hard-coded in the page — the rows come off the same registry the pickers do, so a contributed
-bot's settings appear by declaring them and nothing else.
-
-The bar for appearing there is deliberately high: a **tradeoff**, meaning several values are valid and
-each plays visibly differently, rather than a number a sweep settles better than you can. A bot's other
-tunables are still declared and still reachable — `:lab` sweeps them and a replay link carries them —
-they just do not take up a row in front of somebody with no way to judge them.
-
-The allowance is counted in **evaluations** — rollouts, appraisals, tree iterations — rather than in
-milliseconds, which is what keeps a match reproducible on any machine and what makes one number mean
-the same amount of search to bots that do quite different things with it. Everything you change
-travels in the replay link, so a shared match says what it was played under and opens one click away
-from a rematch under the same conditions.
-
-## Tournaments
-
-"Is this bot better than that one" is a question about a few hundred matches, not about one, and the
-engine runs millions of turns a second — so asking it properly is nearly free. Pick two to four bots
-in the sidebar, choose how many rounds a pairing, and press **Run tournament**: every pair meets over
-that many matches, each seed played from both seats so that acting first is not a free point, and the
-win-rate matrix fills in as it goes.
-
-```
-        | wallhug |  random |   space |   score
-wallhug |       - |       7 |       4 |     55%
-random  |       3 |       - |       2 |     25%
-space   |       6 |       8 |       - |     70%
-```
-
-A contestant is a *configured* seat rather than just a bot, so the same bot may enter twice at two
-settings — which is the question this whole thing exists to answer:
-
-```
-        |     uct | uct@100 |   score
-uct     |       - |       7 |     70%
-uct@100 |       3 |       - |     30%
-
-uct@100   budget=100
-```
-
-It runs on the animation frame in slices of a few milliseconds, so the page stays responsive
-throughout and the board shows whichever match the batch is currently on. No server, no worker, and
-nothing to install.
-
-[AGENTS.md](AGENTS.md) is the map of the design — the module graph, the forbidden dependency edges
-and the handful of rules that are easy to get subtly wrong — and it routes to a file per audience
-under [docs/](docs). The measurements behind the tuning constants live beside the constants
-themselves; [docs/Bots.md](docs/Bots.md) says which is where.
-
-The original Java implementation is at the `legacy-java-final` git tag —
-`git show legacy-java-final:src/main/java/ao/…`. It was deleted from the working tree once the port
-was complete.
-
-## Building
-
-Needs a JDK 17–26 on `PATH`. Everything else, including the Kotlin and Node toolchains, is fetched by
-the Gradle wrapper.
+With JDK 17–26 on `PATH`:
 
 ```bash
-# compiles wasmJs + jvm, runs JVM tests, checks module purity
-./gradlew build
-
-# inner loop, with IDE breakpoints
-./gradlew jvmTest
-
-# local dev server with hot reload
 ./gradlew :app:wasmJsBrowserDevelopmentRun
 ```
 
-In native Windows PowerShell, use `.\gradlew.bat` in place of `./gradlew`.
-
-Most modules test in seconds. `:bots` takes a couple of minutes, because the tests that claim one bot
-is stronger than another play several hundred complete matches to say so.
-
-The `wasmJs` target is what ships. The `jvm` target exists **only** so tests run in milliseconds with
-a debugger instead of seconds in headless Chrome; it is never deployed.
-
-Browser tests need a real Chrome and are off by default:
-
-```bash
-./gradlew allTests -PbrowserTests=true
-```
-
-## Deploying
-
-CI builds `app/build/dist/wasmJs/productionExecutable` and publishes it to GitHub Pages on every push
-to `master`. The workflow fails the build if the gzipped transfer size exceeds its budget.
-
-To enable it on a fresh clone or fork: **Settings → Pages → Source → GitHub Actions**.
-
-The game needs WebAssembly with garbage collection — Chrome 119+, Firefox 120+, or Safari 18.2+.
-Older browsers get an explicit message rather than a blank page.
-
-## Architecture
-
-Seven modules with strictly enforced layering. `:core` has no project dependencies at all — the engine
-does not know that bots exist — and the four pure modules cannot reference the DOM. That is checked
-by the build (`checkModulePurity`), not by convention, because it is what keeps tests runnable on the
-JVM and keeps a Kotlin/JS fallback target a config change rather than a rewrite.
-
-| Module | Responsibility |
-|---|---|
-| `:core` | Grid, occupancy, rules, state transition, PRNG. Pure Kotlin |
-| `:bot-api` | The contract bot authors implement |
-| `:bots` | Shipped bots and the registry |
-| `:match` | Turn sequencing, human input, replay codec, stats, tournaments. No time, no DOM |
-| `:ui` | Canvas renderer, DOM chrome, frame schedulers |
-| `:app` | Entry point and wiring |
-| `:lab` | A JVM command line for running batches headlessly. Not shipped, and nothing depends on it |
-
-Time lives only in `:ui` and `:lab`: a bot is handed a budget counted in evaluations and has no way to
-reach a clock, so a match reproduces by construction rather than by discipline. `:lab` sits outside
-the shipped graph precisely so that reporting how long a batch took cannot put a clock inside it.
-
-## Writing a bot
-
-Bots are Kotlin classes compiled into the app. The flow is: fork, add a file, register it, open a PR.
-CI runs every registered bot against a shared contract suite — it must never return an illegal move
-when a legal one exists, must respect its search budget, must be deterministic given the same seed,
-and must keep nothing from one match to the next.
-
-```kotlin
-class MyBot(setup: BotSetup) : Bot {
-    private val rng = setup.rng
-
-    override fun chooseMove(turn: Turn): Decision =
-        Decision.Move(rng.pick(turn.legalMoves) ?: Direction.NORTH)
-}
-```
-
-Then one line in `bots/src/commonMain/kotlin/ao/snakewarz/bots/ShippedBots.kt`:
-
-```kotlin
-register("my-bot", "My Bot", ::MyBot)
-```
-
-A bot instance lives for a whole match, so a search tree is just an instance field. To explore moves,
-take `turn.scratch.playout()` — a private copy of the board that plays forward and unwinds without
-allocating. Asking for one is what spends the turn's allowance, and one the allowance will not
-stretch to comes back already over, so a search loop stops on its own rather than on trust.
-
-That is the whole of it: no HTML to edit, because the pickers in the sidebar are built from the
-registry. Matches are deterministic from a seed, so results are reproducible and a whole game fits in
-a URL.
-
-## Contributing
-
-Read [AGENTS.md](AGENTS.md) first — it documents the module graph, the forbidden dependency edges,
-and the five non-obvious game invariants that a rewrite tends to get wrong, and it routes to the rest of
-[`docs/`](docs): the rules a change is reviewed against, and one file per module.
+In PowerShell, use `.\gradlew.bat` instead of `./gradlew`.

@@ -387,6 +387,7 @@ class ShellTest {
         replayNextLevel = replayNextLevel,
         interactive = false,
         steering = false,
+        steeringPad = false,
         running = false,
         turnCount = 0,
         status = "paused",

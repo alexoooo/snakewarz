@@ -133,6 +133,17 @@ class BoardRendererTest {
         assertTrue(canvas.width + snugCell > room, "and takes all of it bar the remainder of one cell")
     }
 
+    @Test
+    fun `a close-up board gets a larger desktop cap`() {
+        val grid = Grid(8, 8)
+
+        fitted(grid, ROOMY_FRAME)
+        val ordinaryCell = cellSize(grid)
+        fitted(grid, ROOMY_FRAME, closeUp = true)
+
+        assertTrue(cellSize(grid) > ordinaryCell)
+    }
+
     // -- internals
 
     private fun cellSize(grid: Grid): Int = (canvas.width - 1) / grid.cols
@@ -140,12 +151,12 @@ class BoardRendererTest {
     private fun ratio(): Double = window.devicePixelRatio.takeIf { it > 0.0 } ?: 1.0
 
     /** Sizes the canvas to [grid] inside a frame of [side] CSS pixels, and hands back its renderer. */
-    private fun fitted(grid: Grid, side: Int = ORDINARY_FRAME): BoardRenderer {
+    private fun fitted(grid: Grid, side: Int = ORDINARY_FRAME, closeUp: Boolean = false): BoardRenderer {
         frame.style.width = "${side}px"
         frame.style.height = "${side}px"
 
         val renderer = BoardRenderer(canvas, overlay)
-        renderer.fit(Board(grid, intArrayOf(grid.cellAt(0, 0).index)))
+        renderer.fit(Board(grid, intArrayOf(grid.cellAt(0, 0).index)), closeUp)
         return renderer
     }
 
