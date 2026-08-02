@@ -570,6 +570,12 @@ public class GameSession(
         if (!plan.route(match.view, renderer.cellAt(clientX, clientY))) {
             // No route means no hold: the preview already said as much, under the pointer.
             plan.clear()
+            // With no legal square, however, refusing the press would park forever: unlike an arrow
+            // or d-pad press it would never poll InteractiveBot and let its forced fatal move run.
+            // There is no choice to invent here, so make that final move automatically.
+            if (match.view.legalMoves(SnakeId(seat)).isEmpty) {
+                playRound()
+            }
             return
         }
 
@@ -968,10 +974,12 @@ public class GameSession(
     // -- match lifecycle
 
     private fun begin() {
+        chrome.cancelControls()
         awaitingInput = false
         resultDismissed = false
         levelRecorded = false
         playerSeat = match.setup.slots.indexOfFirst { it == PlayableRegistry.HUMAN_ID }.takeIf { it >= 0 }
+        hovered = Cell.NONE
 
         // A planner's buffers are sized off the board it plans on, so a match on a different board
         // needs its own. The ones being replaced are emptied rather than merely dropped, because the

@@ -1085,8 +1085,8 @@ body.failed #loading {
  * so the two groups read as "what now" and "what just happened".
  */
 .result-replay {
-    margin-top: 1rem;
-    padding-top: 1rem;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
     border-top: 1px solid var(--line);
 }
 

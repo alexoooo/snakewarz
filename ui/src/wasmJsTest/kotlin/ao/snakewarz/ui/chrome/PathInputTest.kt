@@ -88,6 +88,21 @@ class PathInputTest {
     }
 
     @Test
+    fun `cancelling a press makes its late release harmless and leaves the next press free`() {
+        press(pointerId = 1)
+        path.cancel()
+        intents.clear()
+
+        fire("pointerup")
+        press(pointerId = 1, clientX = 19, clientY = 23)
+
+        val began = intents.single() as UiIntent.PathBegan
+        assertEquals(19.0, began.clientX)
+        assertEquals(23.0, began.clientY)
+        assertTrue(path.pressing)
+    }
+
+    @Test
     fun `a second finger does not take the route off the first`() {
         press(pointerId = 1)
         intents.clear()

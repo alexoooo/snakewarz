@@ -61,9 +61,11 @@ So: press a square there is a route to, and `GameSession` takes hold, swaps the 
 the rest is walked at the speed on the slider; a quick click costs one step and no more, because the
 `pointerup` a few milliseconds later discards what is left, lets the opponents finish the current
 round and parks on the player's next turn. Press a square with no route — a wall, a sealed pocket,
-off the board — and nothing happens at all: no hold, no step, no clock, which is what the empty
-preview already said. Press your own head and the zero-length route counts as existing, so it takes
-hold and plays nothing; that is how a freehand drawing starts.
+off the board — and nothing happens at all while a legal move still exists: no hold, no step, no
+clock, which is what the empty preview already said. If no legal move exists, that same press polls
+the player once and `InteractiveBot` makes the forced fatal move instead of leaving finger control
+parked forever. Press your own head and the zero-length route counts as existing, so it takes hold
+and plays nothing; that is how a freehand drawing starts.
 
 **There is no grace radius any more, and the reason it had one is why it is not missed.** It existed
 because a fingertip covers several squares of a large board while the browser reports one point

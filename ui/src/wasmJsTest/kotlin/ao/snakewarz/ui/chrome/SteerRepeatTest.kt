@@ -117,4 +117,20 @@ class SteerRepeatTest {
 
         assertEquals(1, moves.size)
     }
+
+    @Test
+    fun `an immediate move can cancel its own hold without priming another move`() {
+        val moves = mutableListOf<Direction>()
+        lateinit var repeat: SteerRepeat
+        repeat = SteerRepeat { direction ->
+            moves += direction
+            repeat.cancel()
+        }
+
+        repeat.press(Direction.SOUTH)
+        repeat.frame(0.0)
+        repeat.frame(1_000.0)
+
+        assertEquals(listOf(Direction.SOUTH), moves)
+    }
 }

@@ -104,6 +104,9 @@ internal class SteerPad(
         write()
     }
 
+    /** Releases a thumb hold when the match beneath the pad is being replaced. */
+    fun cancel(): Unit = release()
+
     /**
      * Puts the pad in the deeper of the two strips the fitted board leaves, and sizes it to fit.
      *

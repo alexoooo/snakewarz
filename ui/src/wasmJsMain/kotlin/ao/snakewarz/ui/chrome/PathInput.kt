@@ -39,6 +39,23 @@ internal class PathInput(
         board.addEventListener("lostpointercapture") { release() }
     }
 
+    /**
+     * Forgets a press whose board is no longer steerable.
+     *
+     * Match replacement is synchronous, but the browser owns the matching pointer release and may
+     * deliver it after the replacement. Marking the press ended before releasing capture makes that
+     * late event harmless instead of carrying the old gesture into the new match.
+     */
+    fun cancel() {
+        if (!pressing) {
+            return
+        }
+        pressing = false
+        if (board.hasPointerCapture(pointerId)) {
+            board.releasePointerCapture(pointerId)
+        }
+    }
+
     override fun toString(): String = "PathInput(pressing=$pressing)"
 
     /**

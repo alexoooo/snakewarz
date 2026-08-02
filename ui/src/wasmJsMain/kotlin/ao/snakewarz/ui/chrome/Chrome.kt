@@ -146,6 +146,13 @@ internal class Chrome(
 
     fun copyShareUrl(): Unit = sharePanel.copyShareUrl()
 
+    /** Drops every control hold before another match takes the board. */
+    fun cancelControls() {
+        path.cancel()
+        steerPad.cancel()
+        repeat.cancel()
+    }
+
     fun render(model: UiModel) {
         // Ahead of the shell, and that ordering is load-bearing: the level select marks the tile it
         // would open `[data-focus]`, and the shell takes the focus to it on the very frame the
@@ -160,6 +167,12 @@ internal class Chrome(
         tournamentPanel.render(model)
         sharePanel.render(model)
         settingsPanel.render(model)
+
+        // A pointer release can arrive after the move that eliminated its snake. Withdraw the board
+        // gesture with the controls so that release belongs only to the match it began on.
+        if (!model.steering) {
+            path.cancel()
+        }
 
         // A key held down when a panel opened has no keyup coming that this will hear about — the
         // same hole `blur` covers — so the snake would keep going behind the panel.

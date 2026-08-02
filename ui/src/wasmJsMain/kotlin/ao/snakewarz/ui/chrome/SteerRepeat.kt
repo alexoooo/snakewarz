@@ -30,13 +30,15 @@ internal class SteerRepeat(private val onMove: (Direction) -> Unit) {
 
     /** Plays [direction] now, and again every [PERIOD_MILLIS] until it is let go of. */
     fun press(direction: Direction) {
-        onMove(direction)
-
         // A second direction taken while the first is still down takes the repeat over, which is how
         // anybody actually turns a corner: the new direction is the one being asked for.
         held = direction
         dueAt = Double.NaN
-        if (handle == 0) {
+        // Establish the hold before playing the immediate move. That move can end the match and
+        // synchronously cancel steering; writing the hold afterwards would resurrect it and prime
+        // the next match with a direction nobody pressed there.
+        onMove(direction)
+        if (held == direction && handle == 0) {
             handle = window.requestAnimationFrame(::frame)
         }
     }
