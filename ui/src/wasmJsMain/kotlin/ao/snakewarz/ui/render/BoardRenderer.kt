@@ -144,7 +144,7 @@ internal class BoardRenderer(
     private var diedAt: DoubleArray = DoubleArray(0)
     private var cellsWhenLastDrawn: Array<IntArray> = emptyArray()
     private var transitions: Array<MoveTransition?> = emptyArray()
-    private val reducedMotion: Boolean = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    private val reducedMotion: Boolean = prefersReducedMotion()
 
     /**
      * The dash pattern the marching route is stroked with, and the empty one that puts it back.

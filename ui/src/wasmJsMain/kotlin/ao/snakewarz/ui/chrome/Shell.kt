@@ -69,6 +69,7 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
     private val dialogNext: HTMLButtonElement = elementById("result-next")
     private val dialogReplay: HTMLButtonElement = elementById("result-replay")
 
+    private val objective: HTMLElement = elementById("objective")
     private val intro: HTMLElement = elementById("gauntlet-intro")
     private val introPortrait: HTMLImageElement = elementById("intro-portrait")
     private val introName: HTMLElement = elementById("intro-name")
@@ -195,6 +196,8 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
             renderResultActions(model)
         }
 
+        objective.hidden = !model.objective
+
         val introduction = model.intro
         intro.hidden = introduction == null
         if (introduction != null) {
@@ -203,8 +206,12 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
             introTitle.textContent = introduction.title
         }
 
-        // A first-entry presentation is above every other layer and blocks every form of input.
+        // A first-entry presentation is above every other layer and blocks every form of input. The
+        // objective card is above that again, on the one match it ever appears on: what the game is
+        // has to land before who the opponent is. `GameSession` sequences them so the two are never
+        // up together, and this order is what would decide it if that ever stopped being true.
         val wanted = when {
+            model.objective -> objective
             introduction != null -> intro
             result != null -> dialog
             else -> model.openPanel?.let { panel -> panels.first { it.first == panel }.second }

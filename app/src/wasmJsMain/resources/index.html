@@ -109,9 +109,42 @@
               The pointer has three separate verbs and nothing else on the page says so. Beside the
               menu where there is room for it and under the menu where there is not -- .home-row
               wraps, which is the whole of the arrangement.
+
+              The goal line and the board come first and the verbs second, because the verbs were
+              never what people got wrong: readers who had this column in front of them still tried
+              to collect the rival, or to escape it. What to want has to arrive before how to press.
             -->
             <aside class="controls">
-                <h2>Controls</h2>
+                <h2>How to play</h2>
+                <p class="goal">Trap the other snake. Don&rsquo;t crash into anything.</p>
+
+                <!--
+                  A recorded match on a loop. Kotlin writes the caption's text and the two canvases'
+                  size and nothing else here, so this is not a third exception to "Kotlin never
+                  constructs structure".
+
+                  Two canvases for the same reason the arena has two: `fit` lays the ground down on
+                  one and every snake is painted whole onto the other. .demo-wrap carries a definite
+                  size and no padding -- `clientWidth` counts padding, and the board is sized from
+                  the box it is given.
+
+                  aria-hidden, and the sentence below carries it instead: the caption rewrites itself
+                  every few seconds forever, and a live region that never stops talking is worse than
+                  no region at all.
+                -->
+                <figure class="demo" aria-hidden="true">
+                    <div class="demo-wrap">
+                        <canvas id="demo-board"></canvas>
+                        <canvas id="demo-overlay"></canvas>
+                    </div>
+                    <figcaption id="demo-caption"></figcaption>
+                </figure>
+                <p class="visually-hidden">
+                    Two snakes move one square per turn and leave a solid trail behind them. Touching
+                    a wall or any trail, including your own, is fatal. The last snake still moving
+                    wins, so you win by leaving your rival nowhere to go.
+                </p>
+
                 <dl>
                     <dt>Click a square</dt>
                     <dd>Move one step towards it.</dd>
@@ -358,6 +391,25 @@
         </div>
     </section>
 </main>
+
+<!--
+  Shown once per browser, over the first match somebody actually plays, and then never again. The
+  demo on the menu teaches the same thing to whoever looks at it; pressing straight through to a
+  board is an ordinary thing to do, and this is what catches that.
+
+  Above #gauntlet-intro and outside #app, like every other full-viewport layer: what the game is has
+  to land before who the opponent is, and Shell marks everything behind the front layer inert.
+-->
+<div id="objective" role="dialog" aria-modal="true" aria-label="How to win" tabindex="-1" hidden>
+    <div class="objective-card">
+        <p class="objective-lead">How to win</p>
+        <h2>Trap the other snake.</h2>
+        <p>
+            Every wall and every trail is lethal &mdash; including your own. Nothing to collect,
+            nowhere to hide: take their room away before they take yours.
+        </p>
+    </div>
+</div>
 
 <div id="gauntlet-intro" role="dialog" aria-modal="true" aria-label="Opponent introduction"
      tabindex="-1" hidden>

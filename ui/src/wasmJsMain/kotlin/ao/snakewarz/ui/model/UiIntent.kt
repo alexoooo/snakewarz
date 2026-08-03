@@ -167,6 +167,9 @@ internal sealed interface UiIntent {
     /** The timed first-entry Gauntlet presentation has finished. */
     data object IntroFinished : Shell
 
+    /** The timed once-per-browser objective card has finished, and any deferred intro may run. */
+    data object ObjectiveFinished : Shell
+
     /** Wind a recorded match to a turn. Replay only; a live match has no future to seek into. */
     class SeekTo(val turnIndex: Int) : Match
 

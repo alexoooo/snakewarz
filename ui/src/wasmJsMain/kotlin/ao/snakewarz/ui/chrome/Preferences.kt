@@ -54,6 +54,22 @@ internal object Preferences {
         return true
     }
 
+    /**
+     * Marks the objective card shown and answers whether this browser had never seen it.
+     *
+     * [markLevelIntroduced]'s shape, for [markLevelIntroduced]'s reason: the question and the writing
+     * down are one act, so there is no window in which two callers both believe they are the first.
+     * One card for the whole game rather than one per mode — somebody who has been told what winning
+     * means does not need telling again because they pressed Custom this time.
+     */
+    fun markObjectiveShown(): Boolean {
+        if (read(OBJECTIVE_KEY) != null) {
+            return false
+        }
+        write(OBJECTIVE_KEY, SHOWN)
+        return true
+    }
+
     internal fun introducedBits(): Int {
         val parsed = read(INTRODUCED_KEY)?.toIntOrNull() ?: return 0
         return parsed.takeIf { it >= 0 && it and ALL_LEVEL_BITS.inv() == 0 } ?: 0
@@ -100,6 +116,16 @@ internal object Preferences {
     private const val GAUNTLET_KEY = "snakewarz.gauntlet.v2"
     private const val INTRODUCED_KEY = "snakewarz.gauntlet.intros.v1"
     private val ALL_LEVEL_BITS = (1 shl Gauntlet.size) - 1
+
+    /**
+     * That the objective card has been seen.
+     *
+     * The value is never read back and only the key's presence is, so what is stored is a word rather
+     * than a flag somebody would be tempted to parse. Versioned like the rest: a later card that
+     * genuinely deserves showing again gets `.v2` and leaves this one lying unread.
+     */
+    private const val OBJECTIVE_KEY = "snakewarz.objective.v1"
+    private const val SHOWN = "shown"
 
     /**
      * One key per rung — `snakewarz.gauntlet.replay.<n>.v2` — rather than one key holding them all.

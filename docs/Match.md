@@ -188,6 +188,32 @@ by construction, so `verify` compares the recorded moves and the eliminations in
 turns, and stops there. A replay that ends **short** of the recording is still a divergence, and a
 finished record is still held to an exact match.
 
+### One record is content rather than history
+
+`demo/DemoReplay.PAYLOAD` is a thirty-turn 8x8 match that the home screen plays on a loop to show new
+players what winning looks like. It is a payload like any other, and everything above applies to it —
+which is the point of it being one.
+
+**It is authored, not played, so it does not `verify`.** `verify` re-runs the real bots from the seed
+and asks whether they still play these moves; they never did. A match between two real bots would have
+been cheaper to obtain and would have ended however the seed decided — a wall bump, a mutual crash, a
+turn limit — and this record has one job: the loser must end **boxed in**, with two walls ahead of it,
+its own body behind it and the winner's head immediately below. The slugs name real bots so the seats
+would read sensibly if anything showed them, and nothing more should be read into them.
+
+**It lives here rather than in `:ui`, which draws it.** `:ui` has no JVM target, so its suite runs only
+under `-PbrowserTests=true`; a demo that quietly stopped decoding, or started ending in a draw, would
+go unnoticed. In `:match` it is covered by the default `./gradlew build`, and `DemoReplayTest` pins the
+story — board size, an empty map, the turn count, the winner, and `TRAPPED` rather than any other
+fate — so a payload swapped for a prettier one still has to end with somebody out of room. The module
+already hosts fixed content in `gauntlet/`; this is the same kind of thing.
+
+Authoring one is `MatchSetup`'s raw constructor rather than `create` — `create` shuffles the turn
+order from the seed and derives spawns through the internal `mostDistantSpawns`, and a demo wants both
+fixed. The moves are a single interleaved stream in play order, the fatal move needs no symbol because
+an illegal recorded direction describes itself, and `outcome` must be set: a `null` outcome is a
+partial record, which parks on `AwaitingInput` and throws on the step after.
+
 ## Stats and tournaments
 
 `MatchStats` is **derived, never accumulated**. The board already knows every figure worth reporting

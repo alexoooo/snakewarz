@@ -147,6 +147,18 @@ public class GameSession(
     private var introTimer: Int? = null
 
     /**
+     * The once-per-browser objective card, and the rival presentation waiting behind it.
+     *
+     * Two overlays want the same moment on a first Gauntlet entry, and they are not equals: being
+     * told what winning means has to arrive before being told who is in the way, because the second
+     * is meaningless without the first. So this one runs and [pendingIntro] holds the other until it
+     * is done. They are never both up, which is why neither has to be drawn over the other.
+     */
+    private var objectiveTimer: Int? = null
+    private var showingObjective = false
+    private var pendingIntro: Int? = null
+
+    /**
      * How far up the gauntlet this browser has got.
      *
      * Read once, at boot, and written only when a level is beaten. Keeping it here rather than
@@ -372,6 +384,8 @@ public class GameSession(
             UiIntent.PathReleased -> endPath()
 
             UiIntent.IntroFinished -> finishIntro()
+
+            UiIntent.ObjectiveFinished -> finishObjective()
 
             UiIntent.Relayout -> refit()
 
@@ -847,6 +861,7 @@ public class GameSession(
 
         scheduler.stop()
         cancelIntro()
+        cancelObjective()
         batch.stop()
         // The motion clock goes with them. It would stop itself on the next frame, once the route
         // below is dropped and nothing is left moving — but a board nobody can see should not be
@@ -1048,6 +1063,11 @@ public class GameSession(
         fitBoard(match)
         refreshOverlay()
 
+        // Ahead of the early return below, because a match with a person in it is the only kind this
+        // is ever offered on: a replay has been watched rather than played, and a board full of bots
+        // is not somebody who needs telling what to aim for.
+        offerObjective()
+
         if (match.interactive) {
             // Play up to the player's first move and stop there: any slot ahead of them in the turn
             // order opens, and then the board sits and waits, which is the whole point. Costs no
@@ -1103,7 +1123,13 @@ public class GameSession(
         pack = TexturePack.of(rung.shape)
         playFresh(rung.setup(freshSeed(), PlayableRegistry.HUMAN_ID))
         if (introduce) {
-            showIntro(index)
+            // [playFresh] has already run, so the objective card is up by now if it was ever going
+            // to be. Behind it rather than under it: see [pendingIntro].
+            if (showingObjective) {
+                pendingIntro = index
+            } else {
+                showIntro(index)
+            }
         }
     }
 
@@ -1134,6 +1160,65 @@ public class GameSession(
         introTimer?.let { window.clearTimeout(it) }
         introTimer = null
         introLevel = null
+        // A rung waiting behind the objective card belongs to the match that queued it, so a new one
+        // starting drops it rather than presenting a rival for a board that has gone.
+        pendingIntro = null
+    }
+
+    /**
+     * Says what winning means, once per browser, over the first match somebody plays.
+     *
+     * The demo on the menu is the same lesson and reaches more people, but only the people who look
+     * at it: pressing straight through to a board is an ordinary thing to do, and this is what
+     * catches that. Once for the game and not once per mode — see [Preferences.markObjectiveShown].
+     *
+     * The mark is taken here rather than when the card is dismissed, so a reader who closes the tab
+     * mid-card is not shown it again on their next visit. That is the same trade the Gauntlet intros
+     * make, and for the same reason: an overlay that reappears because you did not sit through it is
+     * worse than one you saw half of.
+     */
+    private fun offerObjective() {
+        // The screen test comes first and is not a formality: the page opens with a playable match
+        // already built behind the menu, so without it the one showing this browser will ever get is
+        // spent at boot on a board nobody has looked at. Both ways onto a board — a rung and a custom
+        // match — set the screen before the match, so by the time this runs the answer is settled.
+        if (screen != Screen.GAME || !match.interactive || !Preferences.markObjectiveShown()) {
+            return
+        }
+
+        chrome.cancelControls()
+        showingObjective = true
+        objectiveTimer = window.setTimeout(
+            {
+                dispatch(UiIntent.ObjectiveFinished)
+                null
+            },
+            OBJECTIVE_MILLIS,
+        )
+    }
+
+    private fun finishObjective() {
+        if (!showingObjective) {
+            return
+        }
+        objectiveTimer = null
+        showingObjective = false
+
+        // The rung this card made wait, now that the game has been explained.
+        val queued = pendingIntro
+        pendingIntro = null
+        if (queued != null) {
+            showIntro(queued)
+            return
+        }
+        renderChrome()
+        refreshOverlay()
+    }
+
+    private fun cancelObjective() {
+        objectiveTimer?.let { window.clearTimeout(it) }
+        objectiveTimer = null
+        showingObjective = false
     }
 
     /**
@@ -1602,6 +1687,9 @@ public class GameSession(
                 levelCleared = levelWon(),
                 rival = rival,
                 intro = rival.takeIf { introLevel != null },
+                // Screen-gated for the reason [rivalCard] is: a full-viewport card is fixed to the
+                // window rather than to the board, so one left up would cover whatever was navigated to.
+                objective = showingObjective && screen == Screen.GAME,
                 openPanel = openPanel,
                 theme = theme,
                 result = verdict,
@@ -1730,6 +1818,9 @@ public class GameSession(
     private companion object {
         const val OPPONENT_SLOT = 1
         const val INTRO_MILLIS = 1_500
+
+        /** Longer than [INTRO_MILLIS]: a picture is recognised and two sentences have to be read. */
+        const val OBJECTIVE_MILLIS = 3_500
         const val GAUNTLET_GROUND_ALPHA = 0.88
     }
 }

@@ -417,6 +417,64 @@ body.failed #loading {
     letter-spacing: 0.07em;
 }
 
+/*
+ * The objective, in the one place on this screen that is about understanding the game rather than
+ * operating it. Full ink and not --ink-dim: the rules sentence under the menu is dim, and being dim
+ * is part of why it went unread.
+ */
+.controls .goal {
+    margin: 0.6rem 0 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.demo {
+    margin: 1.1rem 0 0;
+}
+
+/*
+ * Sized here and never by its contents. The renderer divides whatever box it is handed into cells,
+ * so a wrapper that shrink-wrapped its canvas would be a board sizing itself from itself. The
+ * aspect-ratio is what gives `clientHeight` a definite answer on a square board.
+ *
+ * No padding, for the reason .board-wrap carries the same rule: `clientWidth` counts it.
+ */
+.demo-wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    align-content: center;
+    width: 100%;
+    max-width: 13rem;
+    aspect-ratio: 1;
+    margin-inline: auto;
+}
+
+#demo-board,
+#demo-overlay {
+    grid-area: 1 / 1;
+    display: block;
+    border-radius: 5px;
+}
+
+#demo-overlay {
+    box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/*
+ * Three lines of room whatever the line in force says, because the shortest of them is four words
+ * and the longest wraps to three -- and a caption that changed height every few seconds would walk
+ * the control list up and down the page underneath it.
+ */
+#demo-caption {
+    margin: 0.7rem 0 0;
+    min-height: 4.2em;
+    color: var(--ink-dim);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
 .controls dl {
     margin: 0;
 }
@@ -1737,6 +1795,70 @@ html[data-stage] #board-overlay {
     0% { opacity: 0; }
     14%, 68% { opacity: 1; }
     100% { opacity: 0; }
+}
+
+/*
+ * The once-per-browser objective card. #gauntlet-intro's layer, one above it, and the two are never
+ * up at the same time -- GameSession holds the rival presentation until this one is done, because
+ * what the game is has to land before who the opponent is.
+ */
+#objective {
+    position: fixed;
+    z-index: 31;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1.5rem;
+    background: rgb(0 0 0 / 0.86);
+    animation: objective-life 3.5s ease-in both;
+}
+
+.objective-card {
+    width: min(30rem, 88vw);
+    text-align: center;
+}
+
+.objective-lead {
+    margin: 0;
+    color: var(--accent);
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.objective-card h2 {
+    margin: 0.3rem 0 0;
+    color: #fff5df;
+    font: 800 clamp(1.4rem, 5vw, 2.4rem)/1.15 Georgia, "Times New Roman", serif;
+}
+
+.objective-card p:last-child {
+    margin: 0.9rem 0 0;
+    color: #e8dcc4;
+    font-size: clamp(0.95rem, 2.6vw, 1.1rem);
+    line-height: 1.5;
+}
+
+/* Matches OBJECTIVE_MILLIS. Held long enough to read rather than to recognise. */
+@keyframes objective-life {
+    0% { opacity: 0; }
+    8%, 86% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/*
+ * Both timed cards are removed by a Kotlin timer and not by their animation, so with the global
+ * reduced-motion rule shortening every animation to nothing, `both` would otherwise settle them on
+ * their closing keyframe -- an overlay that withholds the board for its full duration while being
+ * invisible. The card still arrives and still leaves on time; what goes is the fade.
+ */
+@media (prefers-reduced-motion: reduce) {
+    #objective,
+    #gauntlet-intro {
+        animation: none !important;
+        opacity: 1;
+    }
 }
 
 html[data-stage] .bar {

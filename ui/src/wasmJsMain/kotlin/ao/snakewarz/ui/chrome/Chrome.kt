@@ -6,6 +6,7 @@ import ao.snakewarz.core.rules.EliminationReason
 import ao.snakewarz.match.MatchSetup
 import ao.snakewarz.match.gauntlet.Gauntlet
 import ao.snakewarz.match.stats.SlotStats
+import ao.snakewarz.ui.chrome.demo.DemoBoard
 import ao.snakewarz.ui.chrome.panel.SettingsPanel
 import ao.snakewarz.ui.chrome.panel.SetupPanel
 import ao.snakewarz.ui.chrome.panel.SharePanel
@@ -49,6 +50,7 @@ internal class Chrome(
 ) {
     private val shell = Shell(dispatch)
     private val home = HomeScreen(dispatch)
+    private val demo = DemoBoard()
     private val gauntlet = GauntletScreen(registry, portraits, dispatch)
     private val setupPanel = SetupPanel(registry, dispatch)
     private val tournamentPanel = TournamentPanel(dispatch)
@@ -170,6 +172,9 @@ internal class Chrome(
 
         shell.render(model)
         home.render(model)
+        // After the shell, which is what reveals `#screen-home`: a demo board measured against a
+        // hidden section reports no room and sizes every cell to the minimum.
+        demo.render(model)
         steerPad.render(model)
         setupPanel.render(model)
         tournamentPanel.render(model)

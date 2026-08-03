@@ -45,6 +45,12 @@ transition finishes. The first direction remains synchronous when no move is ani
 motion adds no delay, and match replacement, navigation, a route taking over, or another overlay
 cancels the anticipated directions with the other controls.
 
+**Five *kinds* of clock, not five instances.** The demo board on the menu owns a second
+`TurnScheduler` and a second `Ticker` of its own, at half the game's turn rate, and they are the same
+two kinds doing the same two jobs on a different pair of canvases. Nothing about the count above
+changes: what matters is that only `TurnScheduler` advances a match, only `Ticker` paints without
+advancing one, and neither of the demo's can reach the arena.
+
 That keydown sentence is the **keyboard's half** and no longer the whole of an interactive match.
 There is a fourth arrangement, and it is the first time a live player has run `TurnScheduler`: a held
 press starts it, so the same clock that paces two bots walks a person's snake along the route they
@@ -205,6 +211,45 @@ the new-match form and its seats, `TournamentPanel` the schedule and the matrix,
 link, `SettingsPanel` the theme and the speed.
 Every one of them is rendered from the same `UiModel` on the way through `Chrome.render`.
 
+### The demo board on the menu
+
+**The menu plays a recorded match on a loop, inside the `How to play` card.** The objective is what
+new players got wrong — they read the rival as something to collect, or something to escape — and
+prose had already failed at it: the rules were on this screen in a `.note` nobody read. Release 3
+settled that this game explains itself by *making the interaction self-evident rather than by
+instructing*, and the demo is that decision applied to what to want instead of to what to press. The
+card reads goal line, board, caption, then the control verbs, because the verbs were never the
+problem.
+
+`DemoBoard` owns a **second `BoardRenderer`** over `#demo-board` and `#demo-overlay`. That is cheap
+rather than clever: a renderer is per canvas-pair and keeps no static state. The two share only a
+`Theme`, handed down each render, so the demo cannot be lit one way while the page is lit the other.
+`.demo-wrap` carries a definite size and **no padding**, for `.board-wrap`'s reason — `clientWidth`
+counts padding, and the board is divided out of the box it is handed. Its `aspect-ratio` is what gives
+`clientHeight` a definite answer.
+
+**The clocks run on the menu and stop the moment it is left.** `GameSession.begin` refuses to start a
+match clock anywhere but the game screen, on the grounds that it would be a game playing itself out
+where nobody can see it — the grounds are visibility, and this board is the thing being looked at. A
+`requestAnimationFrame` chain left running behind a hidden section is a phone getting warm. Returning
+to the menu restarts from turn 0 rather than resuming, so an arrival meets the setup rather than the
+last frame of a kill it did not see coming.
+
+`DemoCaptions` keys four lines by the first turn each holds from, and the third does the real work:
+*"So you win by taking the other snake's room away."* `#demo-caption` reserves three lines whatever is
+in force, or the control list below it walks up and down the page. The `<figure>` is `aria-hidden`
+with one static `visually-hidden` sentence beside it — a caption that rewrites itself on a loop
+forever would be a live region that never stops talking.
+
+**Under `prefers-reduced-motion` it does not play at all.** `replay` steps the record out without
+painting a frame and shows the finished position: two long bodies, one snake wedged in a corner it
+cannot leave, and the closing line. That is the same three rules as one picture, which is a better
+answer for that reader than a slower loop. `render/prefersReducedMotion.kt` is the one spelling of
+that query, shared with `BoardRenderer`.
+
+The record itself is `DemoReplay.PAYLOAD` in `:match` — see [`Match.md`](Match.md) for why it is
+authored rather than played, and why it lives there rather than beside the canvas that draws it.
+
 The home screen's release badge is written into `index.html` whenever the app processes its browser
 resources, which covers the development server and both development and production distributions.
 That task is neither cached nor considered up to date, so its UTC instant identifies this browser
@@ -318,6 +363,37 @@ First-entry memory is independent of unlock progress. `snakewarz.gauntlet.intros
 bitmask keyed by frozen level index; missing or malformed storage means none seen. The bit is written
 on entry, so retries do not repeat the intro, and neither saved nor shared replay playback enters this
 path. Replacing the match, navigating, or opening another overlay cancels the timer and presentation.
+
+### The objective card
+
+**`#objective` is shown once per browser, over the first match somebody actually plays, and says what
+winning means.** It is `#gauntlet-intro`'s mechanism at one layer higher — a full-viewport timed
+overlay, input blocked, dismissed by a `GameSession` timer at `OBJECTIVE_MILLIS` rather than by its
+own animation — and it exists because *what the game is* has to land before *who the opponent is*. The
+demo board on the menu teaches the same thing to whoever looks at it; pressing straight through to a
+board is an ordinary thing to do, and this is what catches that.
+
+**The two cards are sequenced and never coincide.** On a first Gauntlet entry `startLevel` finds the
+objective card already up — `playFresh` has run by then — and parks the rung in `pendingIntro`;
+`finishObjective` starts the rival presentation afterwards. `Shell`'s overlay `when` puts the
+objective first regardless, so the ordering survives that sequencing changing.
+
+**`offerObjective` tests the screen before anything else, and that test is load-bearing.** The page
+opens with a playable match already built behind the menu, so without it the one showing a browser
+ever gets is spent at boot on a board nobody has looked at. Both ways onto a board set `screen` before
+the match, so the answer is settled by the time it runs. `UiModel.objective` is screen-gated for
+`RivalCard`'s reason: a fixed full-viewport card left up would cover whatever was navigated to.
+
+Memory is `localStorage["snakewarz.objective.v1"]`, whose presence is the whole signal — the value is
+never read back. `Preferences.markObjectiveShown` asks and writes in one act, so two callers cannot
+both believe they are the first, and the mark is taken when the card is *shown* rather than when it is
+dismissed: an overlay that reappears because you closed the tab is worse than one you saw half of. One
+card for the game and not one per mode.
+
+Both timed cards carry an explicit `prefers-reduced-motion` override. The global rule shortens every
+animation to nothing, and with `animation-fill-mode: both` that would settle each on its closing
+keyframe — an overlay that withholds the board for its full duration while being invisible. The
+override drops the fade and leaves the card opaque; the Kotlin timer still removes it on time.
 
 **Retry draws a fresh match seed, not a fresh map.** `GameSession.restart` is the one place the mode
 is read on the match path: another attempt varies turn order and bot randomness, while

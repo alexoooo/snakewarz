@@ -48,6 +48,13 @@ internal class UiModel(
     val rival: RivalCard? = null,
     /** The first-entry splash currently blocking the game, or `null` once play is available. */
     val intro: RivalCard? = null,
+    /**
+     * The once-per-browser card that says what winning means, currently blocking the game.
+     *
+     * It is above [intro] rather than beside it, and the two never coincide: a first Gauntlet entry
+     * says what the game is before it says who the opponent is, so the rival presentation waits.
+     */
+    val objective: Boolean = false,
     /** The panel slid over the board, or `null` when the board has the screen to itself. */
     val openPanel: Panel?,
     /**
