@@ -154,6 +154,13 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
         // from the button behind it.
         elementById<HTMLButtonElement>("result-home").addEventListener("click") { back() }
 
+        // **Anywhere on the layer, and not only on the button.** A card that has been read is done
+        // with, and hunting for the one live pixel is a tax on having read it — so the whole
+        // full-viewport layer is the target, and Got it is the affordance that says a press is what
+        // ends this rather than the only press that does. One listener and not two: the button is
+        // inside this element, so its own click arrives here by bubbling.
+        objective.addEventListener("click") { dispatch(UiIntent.ObjectiveFinished) }
+
         window.addEventListener("keydown") { event -> onKeyDown(event as KeyboardEvent) }
     }
 
@@ -348,6 +355,17 @@ internal class Shell(private val dispatch: (UiIntent) -> Unit) {
         if (event.key != "Escape" || event.ctrlKey || event.altKey || event.metaKey) {
             return
         }
+        // The objective card waits for a press rather than for a clock, so Escape has to be one of
+        // the presses that ends it — otherwise it is the one overlay on the page the key cannot
+        // close. Its own intent and not `ClosePanel`: there is nothing open behind it to close.
+        if (overlay === objective) {
+            event.preventDefault()
+            dispatch(UiIntent.ObjectiveFinished)
+            return
+        }
+        // The rival presentation is timed and takes itself away, so Escape is swallowed rather than
+        // answered: it blocks every other form of input for its second and a half, and a key that
+        // skipped it would be the only exception.
         if (overlay === intro) {
             event.preventDefault()
             return

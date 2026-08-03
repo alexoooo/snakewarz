@@ -153,8 +153,10 @@ public class GameSession(
      * told what winning means has to arrive before being told who is in the way, because the second
      * is meaningless without the first. So this one runs and [pendingIntro] holds the other until it
      * is done. They are never both up, which is why neither has to be drawn over the other.
+     *
+     * A flag rather than a flag and a timer: unlike the rival presentation, this card is dismissed by
+     * the person reading it. See [offerObjective].
      */
-    private var objectiveTimer: Int? = null
     private var showingObjective = false
     private var pendingIntro: Int? = null
 
@@ -1172,6 +1174,12 @@ public class GameSession(
      * at it: pressing straight through to a board is an ordinary thing to do, and this is what
      * catches that. Once for the game and not once per mode — see [Preferences.markObjectiveShown].
      *
+     * **It waits for the reader and not for a clock**, which is the one way it differs from
+     * [showIntro]. The rival presentation is a picture to be recognised and three and a half seconds
+     * were enough for it; this is three sentences somebody is meeting for the first time, and the
+     * only honest length for that is however long they take. So there is no timer here: the card is
+     * up until `#objective-go`, or Escape, sends [UiIntent.ObjectiveFinished].
+     *
      * The mark is taken here rather than when the card is dismissed, so a reader who closes the tab
      * mid-card is not shown it again on their next visit. That is the same trade the Gauntlet intros
      * make, and for the same reason: an overlay that reappears because you did not sit through it is
@@ -1188,20 +1196,12 @@ public class GameSession(
 
         chrome.cancelControls()
         showingObjective = true
-        objectiveTimer = window.setTimeout(
-            {
-                dispatch(UiIntent.ObjectiveFinished)
-                null
-            },
-            OBJECTIVE_MILLIS,
-        )
     }
 
     private fun finishObjective() {
         if (!showingObjective) {
             return
         }
-        objectiveTimer = null
         showingObjective = false
 
         // The rung this card made wait, now that the game has been explained.
@@ -1215,9 +1215,14 @@ public class GameSession(
         refreshOverlay()
     }
 
+    /**
+     * Drops the card without running what waits behind it, for a board that is no longer there.
+     *
+     * The flag rather than the model is what has to be cleared: `UiModel.objective` is screen-gated,
+     * so leaving the menu already hides the card — and leaving it set would put it back up on the
+     * next match this browser starts, which is exactly the once it was allowed.
+     */
     private fun cancelObjective() {
-        objectiveTimer?.let { window.clearTimeout(it) }
-        objectiveTimer = null
         showingObjective = false
     }
 
@@ -1818,9 +1823,6 @@ public class GameSession(
     private companion object {
         const val OPPONENT_SLOT = 1
         const val INTRO_MILLIS = 1_500
-
-        /** Longer than [INTRO_MILLIS]: a picture is recognised and two sentences have to be read. */
-        const val OBJECTIVE_MILLIS = 3_500
         const val GAUNTLET_GROUND_ALPHA = 0.88
     }
 }

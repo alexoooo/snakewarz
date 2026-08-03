@@ -1,225 +1,102 @@
 package ao.snakewarz.ui.chrome.demo
 
-import ao.snakewarz.core.grid.Cell
-import ao.snakewarz.match.Match
-import ao.snakewarz.match.StepResult
-import ao.snakewarz.match.demo.DemoReplay
-import ao.snakewarz.match.human.PathPlanner
-import ao.snakewarz.match.replay.MatchRecord
-import ao.snakewarz.match.replay.ReplayCodec
 import ao.snakewarz.ui.chrome.elementById
 import ao.snakewarz.ui.model.Screen
 import ao.snakewarz.ui.model.UiModel
-import ao.snakewarz.ui.render.BoardRenderer
-import ao.snakewarz.ui.render.Theme
-import ao.snakewarz.ui.render.prefersReducedMotion
-import ao.snakewarz.ui.schedule.Ticker
-import ao.snakewarz.ui.schedule.TurnScheduler
-import kotlinx.browser.window
-import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.HTMLElement
 
 /**
- * A small board on the menu, playing one recorded match over and over.
+ * The demo on the menu: [DemoLoop]'s board, with a rule written under it and a way to pick one.
  *
- * It is here because the objective is the thing people got wrong, and prose had already failed at
- * it: the rules were on this screen in a sentence nobody read, and playtesters still arrived
- * expecting to collect something or to run away. The release this screen was designed in settled
- * that the game explains itself by *making the interaction self-evident rather than by instructing*,
- * and this is that decision applied to what to want instead of to what to press.
+ * The board itself is not here — it is the same loop the objective card plays, and everything about
+ * how it moves belongs to that class. What is here is the half the menu adds: one line per lap, four
+ * dots, and the rule that a press moves the words and never the snakes.
  *
- * It owns a second [BoardRenderer], and that is cheap rather than clever: a renderer is per
- * canvas-pair and keeps no static state, so two of them coexist without knowing about each other.
- * The only thing they share is a `Theme`, handed down each render for the same reason the arena is —
- * the board must not be lit one way while the panel around it is lit the other.
+ * **One line per lap, and the board never stops for it.** The caption used to be keyed to a turn,
+ * which also paced it by the match: thirty turns at six a second is under two seconds a rule, long
+ * enough to notice a sentence and not long enough to finish it. Stopping the board to fix that only
+ * traded the problem for a worse one — the motion is the part that was already working, and a demo
+ * that pauses every ten turns reads as a stutter rather than as a beat. So the match plays through at
+ * one unbroken speed exactly as it always did, and the *line* is what slows down: [DemoCaptions] holds
+ * one for a whole lap, and it changes where the board resets, which is the one moment a change of text
+ * costs the eye nothing. Each rule gets about seven seconds instead of under two.
  *
- * **`GameSession.begin` refuses to run a match clock anywhere but the game screen**, on the grounds
- * that it would be a game playing itself out where nobody can see it. The grounds are visibility and
- * not the screen, and this board is the thing being looked at — so the clocks below start on the
- * menu and stop the moment it is left. That is not merely tidiness: a `requestAnimationFrame` chain
- * left running behind a hidden section is a phone getting warm in somebody's hand.
+ * That makes a full cycle four laps long, which is what [DemoDots] is for: one press puts any rule up
+ * rather than waiting three laps for it to come round. **A press moves the caption and nothing else.**
+ * [show] writes two DOM nodes and touches no clock, so the recording plays the same unbroken way
+ * whichever rule is over it.
  *
- * Under `prefers-reduced-motion` it does not play at all. The finished position — two long bodies,
- * one snake wedged in a corner it cannot leave — carries the same three rules as a single picture,
- * which is a better answer for that reader than a slower loop would be.
+ * A reduced-motion reader gets the finished position instead of a loop, so the line that belongs over
+ * it is the one about the snake wedged in the corner rather than the one about setting off. That
+ * reader gets no rotation at all; the dots are how they reach the other three.
  */
 internal class DemoBoard {
-    private val canvas: HTMLCanvasElement = elementById("demo-board")
-    private val overlay: HTMLCanvasElement = elementById("demo-overlay")
     private val caption: HTMLElement = elementById("demo-caption")
+    private val dots = DemoDots(::show)
+
+    /** The line this lap is carrying, which is the whole of what the caption and the dots read. */
+    private var line: Int = FIRST_LINE
 
     /**
-     * Decoded once. Playback is a fresh [Match] per loop and costs no search at all, so restarting is
-     * a few microseconds of replaying moves onto a clean board.
-     */
-    private val record: MatchRecord = ReplayCodec.decode(DemoReplay.PAYLOAD)
-
-    private val renderer = BoardRenderer(canvas, overlay)
-
-    /** No `onFrame` work: nothing outside this board reports on it, so a frame owes the page nothing. */
-    private val scheduler = TurnScheduler(::advance, {})
-    private val ticker = Ticker(::paintMotion)
-
-    /**
-     * Empty for the life of the page.
+     * Set by a dot press, so the next reset keeps [line] rather than rotating past it.
      *
-     * `paintOverlay` draws a held route and the route a press would commit to, and there is no
-     * pointer on this board — but it takes them rather than assuming, so a pair of empty planners on
-     * the demo's own grid is what says "nothing is being steered here".
+     * Without it a press landing in the two seconds the finished board is held would put a rule up
+     * and take it away again before it had been read, which is the complaint this whole card is
+     * answering. Asking for a rule buys the lap after this one as well.
      */
-    private val plan = PathPlanner(record.setup.grid())
-    private val preview = PathPlanner(record.setup.grid())
+    private var held: Boolean = false
 
-    private val still: Boolean = prefersReducedMotion()
-
-    private var play: Match = Match.playback(record)
-
-    /** Whether the menu is the screen showing, which is the whole of when this may measure or move. */
-    private var showing: Boolean = false
-
-    /** The theme last applied, so a render that changed nothing does not repaint the ground. */
-    private var themed: Theme? = null
-
-    private var loopTimer: Int? = null
-
-    init {
-        // Half the speed of a real match. This is a board being read by somebody who does not yet
-        // know the rules, and at playing speed a move is over before it has been understood.
-        scheduler.turnsPerSecond = TURNS_PER_SECOND
-        window.addEventListener("resize") {
-            if (showing) {
-                refit()
+    private val loop = DemoLoop(
+        boardId = "demo-board",
+        overlayId = "demo-overlay",
+        onEnter = { still ->
+            // Arriving at the menu: the first line, or for a reduced-motion reader the closing one,
+            // because the board that reader is given is the ending rather than the setting off.
+            line = if (still) DemoCaptions.count - 1 else FIRST_LINE
+            held = false
+        },
+        onLap = {
+            if (held) {
+                held = false
+            } else {
+                line = DemoCaptions.after(line)
             }
-        }
-    }
+        },
+        onFit = ::say,
+    )
 
     fun render(model: UiModel) {
         if (model.screen != Screen.HOME) {
-            leave()
+            loop.hide()
             return
         }
-
-        val restyled = themed != model.theme
-        if (restyled) {
-            themed = model.theme
-            renderer.applyTheme(model.theme)
-        }
-
-        if (!showing) {
-            showing = true
-            // From the top rather than from wherever it was paused: somebody arriving back at the
-            // menu should meet the setup, not the last frame of a kill they did not see coming.
-            replay()
-        } else if (restyled) {
-            refit()
-        }
+        loop.show(model.theme)
     }
 
-    override fun toString(): String = "DemoBoard(turn ${play.turnIndex}, showing=$showing)"
+    override fun toString(): String = "DemoBoard(line $line, $loop)"
 
     // -- internals
 
-    private fun leave() {
-        if (!showing) {
-            return
-        }
-        showing = false
-        scheduler.stop()
-        ticker.stop()
-        cancelLoop()
-    }
-
-    private fun replay() {
-        cancelLoop()
-        play = Match.playback(record)
-        refit()
-
-        if (!still) {
-            scheduler.start()
-            return
-        }
-        runOut()
-        paint()
-        say()
-    }
-
-    /** Steps to the end without painting a frame of it, which is the reduced-motion reading. */
-    private fun runOut() {
-        while (true) {
-            val result = play.step()
-            if (result is StepResult.Finished || result == StepResult.AwaitingInput) {
-                return
-            }
-        }
-    }
-
-    private fun advance(): TurnScheduler.Progress {
-        val result = play.step()
-        paint()
-        say()
-
-        // AwaitingInput cannot happen against a complete recording, and stepping past it throws
-        // rather than parking twice — so it ends the loop here exactly as the ending does.
-        if (result is StepResult.Finished || result == StepResult.AwaitingInput) {
-            holdThenReplay()
-            return TurnScheduler.Progress.FINISHED
-        }
-        return TurnScheduler.Progress.CONTINUED
-    }
-
     /**
-     * Sizes the board to the room it has and lays the ground down, then puts the snakes back.
+     * Puts [index] up. It writes two DOM nodes and touches nothing else.
      *
-     * `fit` is the only thing that paints the board canvas, and `paintOverlay` is the only thing that
-     * paints a snake anywhere — so neither is useful without the other.
+     * The board and the text are two separate things, and this is the seam: the recording plays the
+     * same unbroken way whichever rule is over it, so a dot press changes the caption and never what
+     * the snakes are doing. It claims the lap after this one through [held], which is about reading
+     * time and still not about the board.
      */
-    private fun refit() {
-        renderer.fit(play.view)
-        paint()
+    private fun show(index: Int) {
+        line = index
+        held = true
         say()
     }
-
-    private fun paint() {
-        val moving = renderer.paintOverlay(play.view, Cell.NONE, plan, preview)
-        if (moving && !still) {
-            ticker.start()
-        }
-    }
-
-    /**
-     * [Ticker]'s half of [paint]: the same position at a later instant, so a body settling after the
-     * kill finishes rather than snapping. It answers whether anything is still moving, which is what
-     * stops the loop.
-     */
-    private fun paintMotion(motionMillis: Double): Boolean = renderer.animate(play.view, motionMillis)
 
     private fun say() {
-        caption.textContent = DemoCaptions.at(play.turnIndex)
-    }
-
-    /** Holds the finished board long enough for the closing line to be read, then starts over. */
-    private fun holdThenReplay() {
-        cancelLoop()
-        loopTimer = window.setTimeout(
-            {
-                if (showing) {
-                    replay()
-                }
-                null
-            },
-            HOLD_MILLIS,
-        )
-    }
-
-    private fun cancelLoop() {
-        loopTimer?.let { window.clearTimeout(it) }
-        loopTimer = null
+        caption.textContent = DemoCaptions.text(line)
+        dots.render(line)
     }
 
     private companion object {
-        const val TURNS_PER_SECOND: Double = 6.0
-
-        /** Long enough to read the closing line, short enough that a glance catches a whole match. */
-        const val HOLD_MILLIS: Int = 2_000
+        const val FIRST_LINE: Int = 0
     }
 }

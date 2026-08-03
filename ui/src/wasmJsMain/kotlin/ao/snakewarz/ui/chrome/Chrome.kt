@@ -7,6 +7,7 @@ import ao.snakewarz.match.MatchSetup
 import ao.snakewarz.match.gauntlet.Gauntlet
 import ao.snakewarz.match.stats.SlotStats
 import ao.snakewarz.ui.chrome.demo.DemoBoard
+import ao.snakewarz.ui.chrome.demo.DemoLoop
 import ao.snakewarz.ui.chrome.panel.SettingsPanel
 import ao.snakewarz.ui.chrome.panel.SetupPanel
 import ao.snakewarz.ui.chrome.panel.SharePanel
@@ -51,6 +52,16 @@ internal class Chrome(
     private val shell = Shell(dispatch)
     private val home = HomeScreen(dispatch)
     private val demo = DemoBoard()
+
+    /**
+     * The same recording again, on the card that says what winning is.
+     *
+     * Bare [DemoLoop] and not a second [DemoBoard]: the card writes its own three sentences and holds
+     * them still, so there is nothing here to caption and nothing to page through. What it is for is
+     * the half prose cannot do — somebody meeting this game for the first time reads "trap the other
+     * snake" and watches one being trapped in the same breath.
+     */
+    private val objectiveDemo = DemoLoop("objective-demo-board", "objective-demo-overlay")
     private val gauntlet = GauntletScreen(registry, portraits, dispatch)
     private val setupPanel = SetupPanel(registry, dispatch)
     private val tournamentPanel = TournamentPanel(dispatch)
@@ -175,6 +186,14 @@ internal class Chrome(
         // After the shell, which is what reveals `#screen-home`: a demo board measured against a
         // hidden section reports no room and sizes every cell to the minimum.
         demo.render(model)
+        // The objective card's board, after the shell for exactly that reason — the card it sits in
+        // is `hidden` until the line above cleared the flag. Started and stopped by the model rather
+        // than by the card's own listener, so it is one more thing rendered from the frame.
+        if (model.objective) {
+            objectiveDemo.show(model.theme)
+        } else {
+            objectiveDemo.hide()
+        }
         steerPad.render(model)
         setupPanel.render(model)
         tournamentPanel.render(model)

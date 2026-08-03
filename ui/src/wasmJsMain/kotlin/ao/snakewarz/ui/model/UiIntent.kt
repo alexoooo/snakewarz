@@ -167,7 +167,12 @@ internal sealed interface UiIntent {
     /** The timed first-entry Gauntlet presentation has finished. */
     data object IntroFinished : Shell
 
-    /** The timed once-per-browser objective card has finished, and any deferred intro may run. */
+    /**
+     * The once-per-browser objective card has been read, and any deferred intro may run.
+     *
+     * Sent by the card's own button or by Escape, and by nothing on a clock: it is dismissed by the
+     * person who has finished reading it rather than after a length somebody guessed.
+     */
     data object ObjectiveFinished : Shell
 
     /** Wind a recorded match to a turn. Replay only; a live match has no future to seek into. */

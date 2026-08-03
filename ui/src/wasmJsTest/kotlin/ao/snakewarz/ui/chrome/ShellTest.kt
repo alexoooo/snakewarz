@@ -204,6 +204,61 @@ class ShellTest {
     }
 
     @Test
+    fun `the objective card is in front of every other layer, the rival presentation included`() {
+        // `GameSession` sequences these two so they are never up together, and the order here is what
+        // would decide it if that ever stopped being true — so this is the tiebreak under test rather
+        // than a state the app reaches. It goes this way round because *what the game is* has to land
+        // before *who the opponent is*: a rival card over an unexplained board teaches nothing.
+        val rival = RivalCard("The Hunter", "Hunter", null, 4, "In play")
+        shell.render(
+            model(
+                screen = Screen.GAME,
+                openPanel = Panel.SETUP,
+                result = "You lose",
+                intro = rival,
+                objective = true,
+            ),
+        )
+
+        assertTrue(!element("objective").hidden)
+        assertEquals("objective-go", focused(), "the one control that takes the card off the board")
+        assertTrue(!shell.boardHasKeys)
+
+        // Asked after the focus, because reachable() moves it to find out what would take it. Every
+        // layer the card is over at once: the board, the verdict beside it and the panel beside that.
+        assertEquals(listOf("objective-go"), reachable(), "the card's own button and nothing behind it")
+        assertEquals("", element("app").getAttribute("inert"))
+        assertTrue(element("dialog-result").hasAttribute("inert"))
+        assertTrue(element("panel-setup").hasAttribute("inert"))
+    }
+
+    @Test
+    fun `the objective card is dismissed by any press on it, and by no clock`() {
+        shell.render(model(screen = Screen.GAME, objective = true))
+        (element("objective-go") as HTMLButtonElement).click()
+
+        // The intent and not the element: the card is a render of the model like everything else, so
+        // what a press owes is to tell the session — which is what puts it away on the next frame.
+        assertEquals(listOf(UiIntent.ObjectiveFinished), intents.toList())
+
+        // The backdrop, which is most of what a card this size is. Hunting for the one live pixel is
+        // a tax on having read it, so the layer is the target and Got it only says so.
+        intents.clear()
+        element("objective").click()
+
+        assertEquals(listOf(UiIntent.ObjectiveFinished), intents.toList(), "a click anywhere on it")
+
+        intents.clear()
+        escape()
+
+        assertEquals(
+            listOf(UiIntent.ObjectiveFinished),
+            intents.toList(),
+            "Escape is a way out of this card rather than a panel to close behind it",
+        )
+    }
+
+    @Test
     fun `the verdict offers the run back, under its actions rather than among them`() {
         shell.render(model(screen = Screen.GAME))
         shell.render(model(screen = Screen.GAME, level = 3, result = "You lose", canWatchReplay = true))
@@ -372,12 +427,14 @@ class ShellTest {
         canTryAgain: Boolean = false,
         replayNextLevel: Int? = null,
         intro: RivalCard? = null,
+        objective: Boolean = false,
     ): UiModel = UiModel(
         screen = screen,
         level = level,
         gauntlet = GauntletProgress.NONE,
         levelCleared = levelCleared,
         intro = intro,
+        objective = objective,
         openPanel = openPanel,
         theme = Theme.of(Theme.DEFAULT_ID, dark = false),
         result = result,
@@ -456,6 +513,7 @@ class ShellTest {
               <button id="result-home" data-focus></button>
               <button id="result-replay" data-focus hidden></button>
             </div>
+            <div id="objective" tabindex="-1" hidden><button id="objective-go" data-focus></button></div>
             <div id="gauntlet-intro" tabindex="-1" hidden>
               <img id="intro-portrait" alt="" hidden>
               <p id="intro-title"></p>

@@ -119,9 +119,9 @@
                 <p class="goal">Trap the other snake. Don&rsquo;t crash into anything.</p>
 
                 <!--
-                  A recorded match on a loop. Kotlin writes the caption's text and the two canvases'
-                  size and nothing else here, so this is not a third exception to "Kotlin never
-                  constructs structure".
+                  A recorded match on a loop. Kotlin writes the caption's text, the two canvases'
+                  size, and each dot's name and state -- text, attributes and sizes, so this is not a
+                  third exception to "Kotlin never constructs structure".
 
                   Two canvases for the same reason the arena has two: `fit` lays the ground down on
                   one and every snake is painted whole onto the other. .demo-wrap carries a definite
@@ -134,11 +134,33 @@
                 -->
                 <figure class="demo" aria-hidden="true">
                     <div class="demo-wrap">
-                        <canvas id="demo-board"></canvas>
-                        <canvas id="demo-overlay"></canvas>
+                        <canvas id="demo-board" class="demo-canvas"></canvas>
+                        <canvas id="demo-overlay" class="demo-canvas"></canvas>
                     </div>
                     <figcaption id="demo-caption"></figcaption>
                 </figure>
+
+                <!--
+                  One dot per line the caption holds. The board now stops on each line long enough to
+                  read it, which is most of the fix and also what makes a lap long: these are what
+                  somebody who wants the third rule again presses, instead of waiting the loop out.
+
+                  Outside the <figure> rather than inside it, because that figure is aria-hidden and
+                  a focusable control in a hidden subtree is one Tab reaches and nothing announces.
+                  Kotlin names each dot with the rule it holds, so the row reads as the lesson in
+                  order to somebody who cannot see the board it steers.
+
+                  There are exactly as many dots as DemoCaptions has lines, and Kotlin looks each one
+                  up by id -- a fifth line written without a fifth dot here stops the boot rather than
+                  quietly dropping a rule.
+                -->
+                <div class="demo-dots" role="group" aria-label="The rules, one at a time">
+                    <button id="demo-dot-0" type="button" class="demo-dot"></button>
+                    <button id="demo-dot-1" type="button" class="demo-dot"></button>
+                    <button id="demo-dot-2" type="button" class="demo-dot"></button>
+                    <button id="demo-dot-3" type="button" class="demo-dot"></button>
+                </div>
+
                 <p class="visually-hidden">
                     Two snakes move one square per turn and leave a solid trail behind them. Touching
                     a wall or any trail, including your own, is fatal. The last snake still moving
@@ -397,6 +419,16 @@
   demo on the menu teaches the same thing to whoever looks at it; pressing straight through to a
   board is an ordinary thing to do, and this is what catches that.
 
+  It waits for a press and not for a clock. This is the one screen in the game that has to be read
+  rather than glanced at, and a card that takes itself away is a card somebody was still reading.
+  Any press ends it -- Shell listens on the whole layer, so the card is dismissed by a click
+  anywhere on it, by Escape, or by the button. Got it says that a press is what ends this; it is not
+  the only press that does, because hunting for the one live pixel is a tax on having read the card.
+
+  The board is the same recording the menu plays, and it is here because prose is the half of this
+  that had already failed: "trap the other snake" lands differently while one is being trapped
+  underneath it. Kotlin writes the two canvases' size and nothing else here.
+
   Above #gauntlet-intro and outside #app, like every other full-viewport layer: what the game is has
   to land before who the opponent is, and Shell marks everything behind the front layer inert.
 -->
@@ -404,10 +436,15 @@
     <div class="objective-card">
         <p class="objective-lead">How to win</p>
         <h2>Trap the other snake.</h2>
+        <div class="demo-wrap" aria-hidden="true">
+            <canvas id="objective-demo-board" class="demo-canvas"></canvas>
+            <canvas id="objective-demo-overlay" class="demo-canvas"></canvas>
+        </div>
         <p>
-            Every wall and every trail is lethal &mdash; including your own. Nothing to collect,
-            nowhere to hide: take their room away before they take yours.
+            Both snakes leave a solid trail. Crash into anything, even your own trail, and
+            you&rsquo;re out. Last snake moving wins.
         </p>
+        <button id="objective-go" type="button" class="primary" data-focus>Got it</button>
     </div>
 </div>
 

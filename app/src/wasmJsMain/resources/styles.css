@@ -216,15 +216,23 @@ body.failed #loading {
  * anything, so a landscape phone with no room for the menu should give it a scrollbar rather than cut
  * the last button off -- which is a different question from the game screen, where a scrollbar would
  * mean the board had been sized against room the page does not have.
+ *
+ * That permission is a floor and not the arrangement. Whatever fits should still fit: the menu is a
+ * title, four buttons and a card beside them, and a page scrollbar next to that reads as a page that
+ * came out wrong. The two block insets are named because .controls subtracts them from the viewport
+ * to find how tall it may be -- one definition, one reference, and no second opinion about the
+ * padding to keep in step.
  */
 #screen-home,
 #screen-gauntlet {
+    --screen-inset-top: max(1.5rem, env(safe-area-inset-top, 0px));
+    --screen-inset-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
     display: flex;
     flex-direction: column;
     gap: 0.9rem;
     padding: 1.5rem;
-    padding-top: max(1.5rem, env(safe-area-inset-top, 0px));
-    padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+    padding-top: var(--screen-inset-top);
+    padding-bottom: var(--screen-inset-bottom);
     padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
     padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
     overflow-y: auto;
@@ -402,10 +410,28 @@ body.failed #loading {
 /*
  * Left aligned where the menu is centred: this is a list to read down rather than a set of things
  * to press, and a centred definition list reads as neither.
+ *
+ * **On the menu this is the thing that scrolls, and the page is not.** It is the tall column -- a
+ * goal line, a board, a caption, four dots and four verbs -- and a laptop is short enough that all of
+ * it does not fit. Read down, the lesson is worth a scrollbar; what it is not worth is scrolling the
+ * page, which pushes the title and the buttons off the top to reach a rule about walls. So the card
+ * is capped at the room the screen has and carries its own bar, and #screen-home's own overflow goes
+ * back to being the floor it was written as: something for a viewport with no room for the menu
+ * either. No `overscroll-behavior` here -- where the row has wrapped and this card sits under the
+ * menu, a swipe that runs out inside it should go on to scroll the page, which is what chaining is.
+ *
+ * `scrollbar-gutter: stable` for a reason particular to what is inside: .demo-wrap is `width: 100%`
+ * of this card and square, so a scrollbar appearing would narrow the board and shorten the card by
+ * the same amount -- which can be exactly enough to put the scrollbar away again. Reserving the
+ * gutter whether or not it is used is what stops that from oscillating on a slow resize.
  */
 .controls {
     flex: 0 1 18rem;
     min-width: 15rem;
+    max-height: calc(100dvh - var(--screen-inset-top) - var(--screen-inset-bottom));
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
     text-align: left;
 }
 
@@ -451,14 +477,20 @@ body.failed #loading {
     margin-inline: auto;
 }
 
-#demo-board,
-#demo-overlay {
+/*
+ * A class rather than the two ids, because there are two of these boards now: the menu's card and the
+ * objective card play the same recording through the same renderer, and only their box differs. The
+ * ring stays on the ids -- it belongs to whichever canvas is the overlay, which is a fact about the
+ * pair and not about a demo.
+ */
+.demo-canvas {
     grid-area: 1 / 1;
     display: block;
     border-radius: 5px;
 }
 
-#demo-overlay {
+#demo-overlay,
+#objective-demo-overlay {
     box-shadow: inset 0 0 0 1px var(--line);
 }
 
@@ -473,6 +505,54 @@ body.failed #loading {
     color: var(--ink-dim);
     font-size: 0.85rem;
     line-height: 1.4;
+}
+
+/*
+ * Pagination, read the way a carousel's is: how many rules there are, which one is up, and one press
+ * to any of the others. It earns the room because the loop holds each line still long enough to be
+ * read, which makes a whole lap far too long to wait through for the one you wanted.
+ */
+.demo-dots {
+    display: flex;
+    justify-content: center;
+    gap: 0.1rem;
+}
+
+/*
+ * The pressable box is a finger's worth and the mark inside it is not, which is the whole reason the
+ * dot is a pseudo-element: half a rem of circle is a target nobody hits on a phone. No border and no
+ * fill either, so four of these read as marks under a picture rather than as four more buttons on a
+ * menu that already has four.
+ */
+.demo-dot {
+    display: grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+}
+
+.demo-dot::before {
+    content: "";
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--ink-dim);
+    opacity: 0.35;
+    transition: opacity 120ms linear, background-color 120ms linear;
+}
+
+.demo-dot:hover::before {
+    opacity: 0.7;
+}
+
+/* The line in force, in the colour a route is already drawn in. */
+.demo-dot[aria-current="true"]::before {
+    background: var(--accent);
+    opacity: 1;
 }
 
 .controls dl {
@@ -1634,6 +1714,15 @@ html[data-stage] body {
     max-width: 29rem;
 }
 
+/*
+ * The card's own bar, in the card's own gold. Left alone it is the browser's, drawn for a white page
+ * -- a bright rail down the one dark card on the screen, and the loudest thing on a menu whose
+ * loudest thing is meant to be New Game.
+ */
+#screen-home .controls {
+    scrollbar-color: rgb(205 161 91 / 0.42) transparent;
+}
+
 #screen-home .tagline,
 #screen-home .note,
 #screen-home .controls h2,
@@ -1801,6 +1890,12 @@ html[data-stage] #board-overlay {
  * The once-per-browser objective card. #gauntlet-intro's layer, one above it, and the two are never
  * up at the same time -- GameSession holds the rival presentation until this one is done, because
  * what the game is has to land before who the opponent is.
+ *
+ * An entrance and no lifetime, unlike the card below it: this one stays until somebody ends it, so an
+ * animation that faded it out would be a card fading off a board it is still withholding.
+ *
+ * The whole layer is the way out -- Shell listens for a click here rather than on the button alone --
+ * so `cursor: pointer` is the honest cursor for all of it, including the backdrop.
  */
 #objective {
     position: fixed;
@@ -1810,12 +1905,25 @@ html[data-stage] #board-overlay {
     place-items: center;
     padding: 1.5rem;
     background: rgb(0 0 0 / 0.86);
-    animation: objective-life 3.5s ease-in both;
+    cursor: pointer;
+    animation: fade-in 160ms ease-out;
 }
 
 .objective-card {
     width: min(30rem, 88vw);
     text-align: center;
+}
+
+/*
+ * The card's own board, playing the same recording the menu does.
+ *
+ * Sized off the viewport's height as well as the card's width, which the menu's copy has no need to
+ * be: this layer is `position: fixed` and never scrolls, so a card taller than the window would put
+ * its own last sentence out of reach. On a short window the picture is what gives way.
+ */
+.objective-card .demo-wrap {
+    max-width: min(15rem, 34vh);
+    margin-top: 1.2rem;
 }
 
 .objective-lead {
@@ -1833,28 +1941,36 @@ html[data-stage] #board-overlay {
     font: 800 clamp(1.4rem, 5vw, 2.4rem)/1.15 Georgia, "Times New Roman", serif;
 }
 
-.objective-card p:last-child {
+.objective-card p:not(.objective-lead) {
     margin: 0.9rem 0 0;
     color: #e8dcc4;
     font-size: clamp(0.95rem, 2.6vw, 1.1rem);
     line-height: 1.5;
 }
 
-/* Matches OBJECTIVE_MILLIS. Held long enough to read rather than to recognise. */
-@keyframes objective-life {
-    0% { opacity: 0; }
-    8%, 86% { opacity: 1; }
-    100% { opacity: 0; }
+/*
+ * Not the only way off this card -- a click anywhere on the layer ends it, and so does Escape -- but
+ * the one that says so, which is why it is sized to be found rather than to sit in a row of controls.
+ * It is over a fixed dark backdrop like the text above it, and `.primary` is already the one fill on
+ * the page that reads against both -- so it takes the accent from the theme and nothing else here.
+ */
+#objective-go {
+    margin-top: 1.5rem;
+    padding: 0.55rem 1.9rem;
+    font-size: 1rem;
+    font-weight: 600;
 }
 
 /*
- * Both timed cards are removed by a Kotlin timer and not by their animation, so with the global
- * reduced-motion rule shortening every animation to nothing, `both` would otherwise settle them on
- * their closing keyframe -- an overlay that withholds the board for its full duration while being
+ * #gauntlet-intro is removed by a Kotlin timer and not by its animation, so with the global
+ * reduced-motion rule shortening every animation to nothing, `both` would otherwise settle it on its
+ * closing keyframe -- an overlay that withholds the board for its full duration while being
  * invisible. The card still arrives and still leaves on time; what goes is the fade.
+ *
+ * #objective needs no such override: it waits for a press rather than for a clock, so its animation
+ * is an entrance with no closing keyframe to be stranded on.
  */
 @media (prefers-reduced-motion: reduce) {
-    #objective,
     #gauntlet-intro {
         animation: none !important;
         opacity: 1;

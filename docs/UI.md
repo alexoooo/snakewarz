@@ -45,11 +45,11 @@ transition finishes. The first direction remains synchronous when no move is ani
 motion adds no delay, and match replacement, navigation, a route taking over, or another overlay
 cancels the anticipated directions with the other controls.
 
-**Five *kinds* of clock, not five instances.** The demo board on the menu owns a second
-`TurnScheduler` and a second `Ticker` of its own, at half the game's turn rate, and they are the same
-two kinds doing the same two jobs on a different pair of canvases. Nothing about the count above
-changes: what matters is that only `TurnScheduler` advances a match, only `Ticker` paints without
-advancing one, and neither of the demo's can reach the arena.
+**Five *kinds* of clock, not five instances.** Every `DemoLoop` owns a `TurnScheduler` and a `Ticker`
+of its own, at half the game's turn rate — the menu's card has one and the objective card has another
+— and they are the same two kinds doing the same two jobs on a different pair of canvases. Nothing
+about the count above changes: what matters is that only `TurnScheduler` advances a match, only
+`Ticker` paints without advancing one, and none of a demo's can reach the arena.
 
 That keydown sentence is the **keyboard's half** and no longer the whole of an interactive match.
 There is a fourth arrangement, and it is the first time a live player has run `TurnScheduler`: a held
@@ -218,12 +218,21 @@ new players got wrong — they read the rival as something to collect, or someth
 prose had already failed at it: the rules were on this screen in a `.note` nobody read. Release 3
 settled that this game explains itself by *making the interaction self-evident rather than by
 instructing*, and the demo is that decision applied to what to want instead of to what to press. The
-card reads goal line, board, caption, then the control verbs, because the verbs were never the
+card reads goal line, board, caption, dots, then the control verbs, because the verbs were never the
 problem.
 
-`DemoBoard` owns a **second `BoardRenderer`** over `#demo-board` and `#demo-overlay`. That is cheap
-rather than clever: a renderer is per canvas-pair and keeps no static state. The two share only a
-`Theme`, handed down each render, so the demo cannot be lit one way while the page is lit the other.
+**`DemoLoop` is the board and `DemoBoard` is what the menu writes around it.** The loop decodes the
+recording, plays it at six turns a second, holds the finished position for `HOLD_MILLIS` and starts
+again; it knows nothing about captions or dots. Three lambdas are the whole seam — `onEnter` when a
+board goes up, `onLap` when one ends, `onFit` once the picture is down — and none of them touches the
+recording, which is what keeps "a press moves the words and never the snakes" true by construction.
+Two instances run in the game: the menu's, wrapped in `DemoBoard`, and the objective card's, which is
+a bare loop with nothing written around it.
+
+Each owns its own **`BoardRenderer`** — over `#demo-board`/`#demo-overlay` and
+`#objective-demo-board`/`#objective-demo-overlay`. That is cheap rather than clever: a renderer is per
+canvas-pair and keeps no static state. They share only a `Theme`, handed to `show` each render, so no
+board is lit one way while the page around it is lit the other.
 `.demo-wrap` carries a definite size and **no padding**, for `.board-wrap`'s reason — `clientWidth`
 counts padding, and the board is divided out of the box it is handed. Its `aspect-ratio` is what gives
 `clientHeight` a definite answer.
@@ -235,17 +244,48 @@ where nobody can see it — the grounds are visibility, and this board is the th
 to the menu restarts from turn 0 rather than resuming, so an arrival meets the setup rather than the
 last frame of a kill it did not see coming.
 
-`DemoCaptions` keys four lines by the first turn each holds from, and the third does the real work:
-*"So you win by taking the other snake's room away."* `#demo-caption` reserves three lines whatever is
-in force, or the control list below it walks up and down the page. The `<figure>` is `aria-hidden`
-with one static `visually-hidden` sentence beside it — a caption that rewrites itself on a loop
-forever would be a live region that never stops talking.
+`DemoCaptions` holds four lines, and the third does the real work: *"So you win by taking the other
+snake's room away."* `#demo-caption` reserves three lines whatever is in force, or the control list
+below it walks up and down the page. The `<figure>` is `aria-hidden` with one static `visually-hidden`
+sentence beside it — a caption that rewrites itself on a loop forever would be a live region that
+never stops talking.
+
+**One line per lap, and the board never stops for it.** The lines used to be keyed to turns, which
+also paced them by the match: thirty turns at six a second is under two seconds a rule, long enough to
+notice a sentence and not long enough to finish it. Stopping the board at each line fixed the reading
+and broke the thing that already worked — a demo that pauses every ten turns reads as a stutter rather
+than as a beat. So the match plays through at one unbroken speed and the *line* is what slows down:
+one is held for a whole lap and changes where the board resets, which is the one moment a change of
+text costs the eye nothing. Every line is true of the whole recording rather than of a moment in it,
+so nothing is lost by not aligning them. A lap is the thirty turns plus `HOLD_MILLIS`, so each rule
+gets about seven seconds instead of under two. `advance` deliberately does **not** write the caption:
+a line lasts a lap, and saying it per turn would be six DOM writes a second to leave the same sentence
+on the page.
+
+**`DemoDots` is what makes a four-lap cycle navigable.** One dot per line under the caption,
+`aria-current` on the one in force, and a press puts that rule up rather than waiting three laps for
+it to come round. **A press moves the caption and nothing else**: `DemoBoard.show` writes two DOM nodes
+and returns — it holds no clock to disturb, because the clocks are the loop's — so the board is never
+restarted, reseeked or interrupted to change a sentence, and a control that jerked the animation would
+be reintroducing the fault the card exists to fix. It does
+claim the following lap, through the `held` flag, because a press landing in the two seconds the
+finished board is held would otherwise put a rule up and take it away before it had been read; that
+is reading time and still not the board.
+
+The dots sit **outside** the `aria-hidden` `<figure>` — a focusable control inside a hidden subtree is
+one `Tab` reaches and nothing announces — and Kotlin names each with the rule it holds, so the row
+reads as the lesson in order to somebody who cannot see the board it steers. `index.html` holds
+exactly `DemoCaptions.count` dots and each is looked up by id, so a fifth line without a fifth dot
+stops the boot rather than dropping a rule. `DemoCaptionsTest` pins the rotation, which is the one
+thing here that can be wrong without looking wrong.
 
 **Under `prefers-reduced-motion` it does not play at all.** `replay` steps the record out without
 painting a frame and shows the finished position: two long bodies, one snake wedged in a corner it
-cannot leave, and the closing line. That is the same three rules as one picture, which is a better
-answer for that reader than a slower loop. `render/prefersReducedMotion.kt` is the one spelling of
-that query, shared with `BoardRenderer`.
+cannot leave, and the closing line — which is why `enter` starts that reader on the last line rather
+than the first. That is the same three rules as one picture, which is a better answer for that reader
+than a slower loop. There is no rotation either, since nothing resets the board; the dots are how that
+reader reaches the other three lines. `render/prefersReducedMotion.kt` is the one spelling of that
+query, shared with `BoardRenderer`.
 
 The record itself is `DemoReplay.PAYLOAD` in `:match` — see [`Match.md`](Match.md) for why it is
 authored rather than played, and why it lives there rather than beside the canvas that draws it.
@@ -314,7 +354,10 @@ the fixed numeric form `Release · yyyy-MM-dd HH:mm:ss`, with no locale-dependen
   default action is not showing still lands somewhere — focusing a hidden element silently does
   nothing, which would leave the focus on a screen that has just gone away.
 - **Escape closes the overlay on top; with none open it goes back a screen.** One `ClosePanel` intent
-  rather than one per overlay, because which is on top is the session's to know.
+  rather than one per overlay, because which is on top is the session's to know. The two full-viewport
+  cards are the exceptions and are answered by identity: the rival presentation swallows the key
+  because it is timed and blocks every other input for its second and a half, and the objective card
+  sends its own `ObjectiveFinished` because there is nothing open behind it for `ClosePanel` to mean.
 - **Back is one screen out, not one screen home.** A rung of the gauntlet is left to the level
   select, so walking out of level 7 does not also cost the seven tiles. `#game-back`'s label is written
   from the same answer, and the verdict card's way out and Escape are the *same call* — which is
@@ -367,11 +410,40 @@ path. Replacing the match, navigating, or opening another overlay cancels the ti
 ### The objective card
 
 **`#objective` is shown once per browser, over the first match somebody actually plays, and says what
-winning means.** It is `#gauntlet-intro`'s mechanism at one layer higher — a full-viewport timed
-overlay, input blocked, dismissed by a `GameSession` timer at `OBJECTIVE_MILLIS` rather than by its
-own animation — and it exists because *what the game is* has to land before *who the opponent is*. The
-demo board on the menu teaches the same thing to whoever looks at it; pressing straight through to a
-board is an ordinary thing to do, and this is what catches that.
+winning means.** It is `#gauntlet-intro`'s layer plus one — full-viewport, input blocked — and it
+exists because *what the game is* has to land before *who the opponent is*. The demo board on the
+menu teaches the same thing to whoever looks at it; pressing straight through to a board is an
+ordinary thing to do, and this is what catches that.
+
+**It waits for the reader, and that is the one way it differs from the presentation below it.** The
+rival card is a picture to be recognised and a second and a half is enough for it; this is three
+sentences and a board somebody is meeting for the first time, and the only honest length for that is
+however long they take. So there is no `OBJECTIVE_MILLIS` and no timer: `offerObjective` raises the
+flag and a press sends `UiIntent.ObjectiveFinished`.
+
+**Any press on the layer ends it.** `Shell` listens on `#objective` itself rather than on the button,
+so a click anywhere — backdrop included — dismisses the card; `#objective-go` is the affordance that
+says a press is what ends this, not the only press that does, and hunting for the one live pixel
+would be a tax on having read the card. One listener and not two, because the button's own click
+arrives there by bubbling. Escape sends the same intent rather than `ClosePanel`, because nothing is
+open behind the card to close, and without that branch it would be the one overlay on the page the
+key cannot dismiss. `#objective` carries `cursor: pointer` for the whole layer, which is the honest
+cursor once all of it is a way out.
+
+**It shows what it says.** The card carries the same recording the menu plays — a bare `DemoLoop` over
+`#objective-demo-board` and `#objective-demo-overlay`, with no caption and no dots, because the card
+writes its own words and holds them still. Prose is the half of this that had already failed once;
+*trap the other snake* lands differently while one is being trapped underneath it. `Chrome` starts and
+stops that loop from `model.objective` **after `shell.render`**, for the reason the menu's demo is
+rendered there too: a board measured while its box is still `hidden` reports no room and sizes every
+cell to the minimum. `.objective-card .demo-wrap` caps the board against `34vh` as well as the card's
+width — this layer is `position: fixed` and never scrolls, so on a short window the picture is what
+gives way rather than the last sentence.
+
+The copy is three plain sentences under *Trap the other snake.*: both snakes leave a solid trail,
+crashing into anything — your own trail included — is out, last snake moving wins. It is the demo
+captions' lesson in the demo captions' words, because the two are the same lesson met on different
+screens, and the board under it is now carrying the part about moving every turn.
 
 **The two cards are sequenced and never coincide.** On a first Gauntlet entry `startLevel` finds the
 objective card already up — `playFresh` has run by then — and parks the rung in `pendingIntro`;
@@ -390,10 +462,12 @@ both believe they are the first, and the mark is taken when the card is *shown* 
 dismissed: an overlay that reappears because you closed the tab is worse than one you saw half of. One
 card for the game and not one per mode.
 
-Both timed cards carry an explicit `prefers-reduced-motion` override. The global rule shortens every
-animation to nothing, and with `animation-fill-mode: both` that would settle each on its closing
+`#gauntlet-intro` carries an explicit `prefers-reduced-motion` override. The global rule shortens
+every animation to nothing, and with `animation-fill-mode: both` that would settle it on its closing
 keyframe — an overlay that withholds the board for its full duration while being invisible. The
 override drops the fade and leaves the card opaque; the Kotlin timer still removes it on time.
+`#objective` needs no such override: it waits for a press, so its animation is an entrance with no
+closing keyframe to be stranded on.
 
 **Retry draws a fresh match seed, not a fresh map.** `GameSession.restart` is the one place the mode
 is read on the match path: another attempt varies turn order and bot randomness, while
@@ -659,6 +733,22 @@ region a panel's own content lives in, and the board takes whatever height the t
 leave. `#screen-home` and `#screen-gauntlet` may scroll, and that is not the same concession: nothing
 measures them, so a landscape phone with no room for the menu should give it a scrollbar rather than
 put the last button out of reach.
+
+**That permission is a floor, and on the menu the scrollbar belongs to the `How to play` card rather
+than to the page.** The card is the tall thing on that screen — goal line, board, caption, dots, four
+verbs — and a laptop is short enough that all of it does not fit; left to the floor, the whole page
+scrolled, and reaching a rule about walls pushed the title and the buttons off the top. So `.controls`
+is capped at `calc(100dvh - var(--screen-inset-top) - var(--screen-inset-bottom))` and carries its own
+`overflow-y: auto`. Those two custom properties are the screen's own block padding, named on
+`#screen-home`/`#screen-gauntlet` and referenced here, so the cap subtracts the padding that is
+actually applied rather than a second copy of it to keep in step.
+
+Two details of that are load-bearing. **`scrollbar-gutter: stable`**, because `.demo-wrap` is
+`width: 100%` of that card and square: a bar appearing narrows the board and shortens the card by the
+same amount, which can be exactly enough to put the bar away again — reserving the gutter whether or
+not it is used is what stops that oscillating on a slow resize. And **no `overscroll-behavior`**,
+unlike `.board-wrap`: where the row has wrapped and the card sits under the menu, a swipe that runs
+out inside it should go on to scroll the page, which is what chaining is for.
 
 `100dvh` and not `100vh`: a phone's address bar is the difference between them, and `vh` is the
 taller — which puts the bottom bar underneath the browser's own chrome. The two bars carry
