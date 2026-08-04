@@ -820,14 +820,25 @@ in both alpha and width along the body so a coil reads from tail to head. The **
 the same head colour with two eyes offset perpendicular to `SnakeView.lastDirection`, and the
 **tail** tapers, in a filled quadrilateral rather than a stroke, because a stroke has one width. Its
 broad tip advances from the centre to the front third of the oldest square across that square's two
-growth phases. Both positions stay within the body's footprint, and the tail keeps the body's full
-colour, so it reads as a solid obstacle while its length still shows which square clears next.
+growth phases. Both positions stay within the body's footprint, so the tail reads as the solid
+obstacle it still is while its length shows which square clears next.
 
 **The moving tail tip is a rule being drawn, not decoration.** `growEveryNthMove = 2` makes the square
 a snake is about to give back knowable a move ahead, so `BoardRenderer` advances the tip on that
 phase. A corpse and a trail that never retracts stay in the body's single path; only a living,
 retracting snake lifts its oldest square into the explicit taper. A corpse keeps
 `Theme.CORPSE_ALPHA`, loses its spine and loses its eyes: a snake that is out is scenery.
+
+**And on that same phase the square is drawn lighter**, taper and first spine segment together at
+`TAIL_CLEARING_ALPHA`. A sixth of a cell of tip travel is a small thing to catch on a board being read
+at speed, and *which square is safe to enter next* is the question a player asks most often — so the
+rule is said twice, in position and in weight, on the one square it is about. The fade is toward the
+board rather than toward black, because *darker* is a fade on a light page and a bolder mark on a dark
+one and the picker offers both; it stops well short of `Theme.CORPSE_ALPHA`, because that square is
+still lethal this turn and a tail as faint as a corpse would be a promise the rules do not make. The
+lifted square is already exactly the square the rule is about, so this costs a multiplier and no
+second notion of which square that is — `tailClearsNext` remains the only place the phase is decided,
+and the hover label still words the same predicate.
 
 **No new colour enters `BoardRenderer` for any of it.** A highlight is `Theme.head(slot)` over
 `Theme.body(slot)` — the pair the theme already keeps for "this snake, but readable against itself" —

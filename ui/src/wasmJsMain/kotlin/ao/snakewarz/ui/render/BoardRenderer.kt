@@ -507,6 +507,10 @@ internal class BoardRenderer(
      * change position without a round cap showing through it. A corpse and a never-retracting trail
      * stay in the body's single path, while a living retracting snake gets the explicit taper.
      *
+     * **On the one move before that square clears it is also drawn lighter**, taper and spine
+     * together — see [TAIL_CLEARING_ALPHA]. The lifted square is exactly the square the rule is
+     * about, so the fade costs a multiplier and no second notion of which square that is.
+     *
      * A corpse loses the spine as well: a snake that is out is scenery, and scenery is one flat
      * obstacle rather than something with a highlight down its back.
      */
@@ -521,8 +525,9 @@ internal class BoardRenderer(
         val corpse = corpseAlpha(id.index)
         val alpha = if (snake.alive) 1.0 else corpse
         val tapering = snake.alive && view.rules.growEveryNthMove >= 2
+        val clearing = if (tailClearsNext(view, snake)) TAIL_CLEARING_ALPHA else 1.0
         if (tapering) {
-            drawTaper(view, id.index, snake, colour, alpha)
+            drawTaper(view, id.index, snake, colour, alpha * clearing)
         }
 
         val first = if (tapering) 1 else 0
@@ -545,7 +550,7 @@ internal class BoardRenderer(
         // dropping it on the turn of the death is the snake becoming scenery between two frames.
         val spine = if (snake.alive) 1.0 else deathFlash(id.index)
         if (spine > 0.0) {
-            drawSpine(view, id.index, snake, theme.head(id.index), spine)
+            drawSpine(view, id.index, snake, theme.head(id.index), spine, clearing)
         }
     }
 
@@ -558,6 +563,10 @@ internal class BoardRenderer(
      *
      * Adjacent squares are exactly one cell apart on one axis, so the perpendicular is that step
      * turned a quarter turn and divided by the cell — no length to measure and no zero to guard.
+     *
+     * [alpha] already carries [TAIL_CLEARING_ALPHA] on the move this square is about to be given
+     * back, which is why the shape here does not change with the phase as well: the tip's position
+     * and the weight are two readings of one rule, and a third would be decoration.
      */
     private fun drawTaper(view: BoardView, slot: Int, snake: SnakeView, colour: String, alpha: Double) {
         val x0 = bodyX(view, slot, snake, 0)
@@ -594,9 +603,19 @@ internal class BoardRenderer(
      * are the ones a reader is trying to trace, and they are the brightest and the widest.
      *
      * [weight] is the whole line's share of itself, which is one for a living snake and a share
-     * running to nothing across a death — see [drawBody].
+     * running to nothing across a death — see [drawBody]. [clearing] is the oldest square's own
+     * share on top of it, and it applies to the first segment because that segment *is* that square:
+     * a highlight left at full weight over a body square drawn lighter would be the drawing saying
+     * two things about one square.
      */
-    private fun drawSpine(view: BoardView, slot: Int, snake: SnakeView, colour: String, weight: Double) {
+    private fun drawSpine(
+        view: BoardView,
+        slot: Int,
+        snake: SnakeView,
+        colour: String,
+        weight: Double,
+        clearing: Double,
+    ) {
         val width = (cellSize * SPINE_WIDTH).coerceAtLeast(MIN_MARK)
         val points = bodyPointCount(slot, snake)
 
@@ -606,7 +625,8 @@ internal class BoardRenderer(
 
         // cellAt(0) is the tail, so `i` runs the body in the order it was laid down.
         for (i in 0 until points - 1) {
-            overlayContext.globalAlpha = weight * ramp(i, points - 1, SPINE_TAIL_ALPHA, SPINE_HEAD_ALPHA)
+            val share = if (i == 0) clearing else 1.0
+            overlayContext.globalAlpha = weight * share * ramp(i, points - 1, SPINE_TAIL_ALPHA, SPINE_HEAD_ALPHA)
             overlayContext.lineWidth = ramp(i, points - 1, MIN_MARK, width)
             overlayContext.beginPath()
             overlayContext.moveTo(bodyX(view, slot, snake, i), bodyY(view, slot, snake, i))
@@ -1121,6 +1141,27 @@ internal class BoardRenderer(
         /** The tail tip moves from the cell centre to the front third over its two-move lifetime. */
         const val TAIL_STAY_OFFSET = 0.0
         const val TAIL_FORWARD_OFFSET = 1.0 / 6.0
+
+        /**
+         * How much of its weight the oldest square keeps on the one move before it clears.
+         *
+         * The advancing tip says the same thing in geometry, and a sixth of a cell is a small thing
+         * to catch on a board being read at speed — this is that one fact said a second time in a
+         * channel the eye picks up across the whole board at once. Which square is safe to enter
+         * next is the question a player asks most often and the drawing answered most quietly.
+         *
+         * **Toward the board rather than toward black.** *Darker* is a fade on a light page and a
+         * bolder mark on a dark one, and the picker offers both; alpha over the board is a fade
+         * under either. It is also the device [Theme.CORPSE_ALPHA] already uses for the neighbouring
+         * statement — a square that has stopped being part of the game.
+         *
+         * Well clear of that figure, and deliberately so, because this square is lethal *this* turn
+         * and a tail as faint as a corpse would be a promise the rules do not make. Roughly halfway
+         * between the two is also as small a step as this can be and still do its job: a tenth or a
+         * fifth off is a shade of the same weight, and a cue read out of the corner of the eye has
+         * to be a different one.
+         */
+        const val TAIL_CLEARING_ALPHA = 0.55
 
         /**
          * The spine at its widest, at the head end; [MIN_MARK] is what it ramps down to at the tail.
