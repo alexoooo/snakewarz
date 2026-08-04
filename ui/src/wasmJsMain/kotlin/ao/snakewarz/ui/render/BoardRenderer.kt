@@ -11,12 +11,14 @@ import ao.snakewarz.ui.schedule.Ticker
 import ao.snakewarz.ui.schedule.TurnScheduler
 import kotlinx.browser.window
 import org.w3c.dom.BUTT
+import org.w3c.dom.CanvasGradient
 import org.w3c.dom.CanvasLineCap
 import org.w3c.dom.CanvasLineJoin
 import org.w3c.dom.CanvasRenderingContext2D
 import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.ROUND
+import kotlin.js.JsAny
 import kotlin.js.JsArray
 import kotlin.js.JsNumber
 import kotlin.js.toJsNumber
@@ -55,9 +57,9 @@ import kotlin.math.sqrt
  *
  * ### Tail phase is read off the position, not remembered
  *
- * A snake's oldest square shortens before it clears. That is derived from the board every time it is
+ * A snake's oldest square fades before it clears. That is derived from the board every time it is
  * painted rather than kept in a counter here, so seeking a replay, resizing the window and painting a
- * tournament's current match all land on the same shape as playing the match forwards would have.
+ * tournament's current match all land on the same drawing as playing the match forwards would have.
  *
  * The renderer knows nothing about matches, bots or time. It is handed a read-only projection of the
  * position, and that projection carries neither a pixel nor a colour.
@@ -494,8 +496,7 @@ internal class BoardRenderer(
     }
 
     /**
-     * One snake's body: the taper on its oldest square, the ribbon along the rest, and the spine down
-     * the middle of both.
+     * One snake's body: the ribbon along its squares, and the spine down the middle of it.
      *
      * The ribbon is a polyline through the cell centres with round joins and caps, which is what
      * turns a right-angle corner into a bend and a run of squares into an animal. **One path and one
@@ -503,13 +504,18 @@ internal class BoardRenderer(
      * translucent, and a segment drawn over its neighbour's round cap would deepen at every joint,
      * where a single stroke composites once however often it crosses itself.
      *
-     * **The oldest square is lifted out of that path exactly when it retracts**, so its taper can
-     * change position without a round cap showing through it. A corpse and a never-retracting trail
-     * stay in the body's single path, while a living retracting snake gets the explicit taper.
+     * **The oldest square is in that path like any other**, at the body's full width and centred on
+     * its cell. It is the last segment rather than a tail: what a player has to read off it is
+     * whether entering it kills, and a shape that gave part of the square back said *safe* on a turn
+     * the rules still answer *no* to.
      *
-     * **On the one move before that square clears it is also drawn lighter**, taper and spine
-     * together — see [TAIL_CLEARING_ALPHA]. The lifted square is exactly the square the rule is
-     * about, so the fade costs a multiplier and no second notion of which square that is.
+     * **On the one move before it clears it dims towards its far end** — see [clearingGradient] for
+     * the shape of that and [TAIL_CLEARING_ALPHA] for how far it goes. It is the one thing that
+     * splits the single path, and only because `globalAlpha` is one value for a whole `stroke` where
+     * this wants a stroke that changes weight along itself: the oldest segment goes down first under
+     * the gradient and the rest is stroked over it at full weight, which the rest has — a snake with
+     * a square about to clear is alive by definition — so the round cap the two share composites to
+     * the opaque one instead of deepening.
      *
      * A corpse loses the spine as well: a snake that is out is scenery, and scenery is one flat
      * obstacle rather than something with a highlight down its back.
@@ -522,27 +528,22 @@ internal class BoardRenderer(
         }
 
         val colour = theme.body(id.index)
-        val corpse = corpseAlpha(id.index)
-        val alpha = if (snake.alive) 1.0 else corpse
-        val tapering = snake.alive && view.rules.growEveryNthMove >= 2
-        val clearing = if (tailClearsNext(view, snake)) TAIL_CLEARING_ALPHA else 1.0
-        if (tapering) {
-            drawTaper(view, id.index, snake, colour, alpha * clearing)
-        }
+        val clearing = tailClearsNext(view, snake)
+        val last = bodyPointCount(id.index, snake) - 1
 
-        val first = if (tapering) 1 else 0
-        if (snake.length - first >= 2) {
-            overlayContext.lineCap = CanvasLineCap.ROUND
-            overlayContext.lineJoin = CanvasLineJoin.ROUND
+        overlayContext.lineCap = CanvasLineCap.ROUND
+        overlayContext.lineJoin = CanvasLineJoin.ROUND
+        overlayContext.lineWidth = bodyWidth()
+        overlayContext.globalAlpha = if (snake.alive) 1.0 else corpseAlpha(id.index)
+
+        val first = if (clearing) 1 else 0
+        if (clearing) {
+            overlayContext.strokeStyle = clearingGradient(colour, snake)
+            strokeRibbon(id.index, snake, 0, 1)
+        }
+        if (last > first) {
             overlayContext.strokeStyle = colour.toJsString()
-            overlayContext.globalAlpha = alpha
-            overlayContext.lineWidth = bodyWidth()
-            overlayContext.beginPath()
-            overlayContext.moveTo(bodyX(view, id.index, snake, first), bodyY(view, id.index, snake, first))
-            for (i in first + 1 until bodyPointCount(id.index, snake)) {
-                overlayContext.lineTo(bodyX(view, id.index, snake, i), bodyY(view, id.index, snake, i))
-            }
-            overlayContext.stroke()
+            strokeRibbon(id.index, snake, first, last)
         }
 
         // The spine goes out with the snake rather than the instant it dies: it is the one part of
@@ -550,44 +551,68 @@ internal class BoardRenderer(
         // dropping it on the turn of the death is the snake becoming scenery between two frames.
         val spine = if (snake.alive) 1.0 else deathFlash(id.index)
         if (spine > 0.0) {
-            drawSpine(view, id.index, snake, theme.head(id.index), spine, clearing)
+            drawSpine(id.index, snake, theme.head(id.index), spine, clearing)
         }
     }
 
-    /**
-     * The oldest square's share of the body, narrowing towards a tip that advances through it.
-     *
-     * A filled quadrilateral rather than a stroke, because a stroke has one width and the tail is the
-     * one place the ribbon changes width along a single segment. What it buys is which end of a coil
-     * is the old one, answered at a glance and from any distance.
-     *
-     * Adjacent squares are exactly one cell apart on one axis, so the perpendicular is that step
-     * turned a quarter turn and divided by the cell — no length to measure and no zero to guard.
-     *
-     * [alpha] already carries [TAIL_CLEARING_ALPHA] on the move this square is about to be given
-     * back, which is why the shape here does not change with the phase as well: the tip's position
-     * and the weight are two readings of one rule, and a third would be decoration.
-     */
-    private fun drawTaper(view: BoardView, slot: Int, snake: SnakeView, colour: String, alpha: Double) {
-        val x0 = bodyX(view, slot, snake, 0)
-        val y0 = bodyY(view, slot, snake, 0)
-        val x1 = bodyX(view, slot, snake, 1)
-        val y1 = bodyY(view, slot, snake, 1)
-        val acrossX = (y0 - y1) / cellSize
-        val acrossY = (x1 - x0) / cellSize
-
-        val base = bodyWidth() / 2
-        val tip = base * TAIL_TIP_SHARE
-
-        overlayContext.fillStyle = colour.toJsString()
-        overlayContext.globalAlpha = alpha
+    /** The ribbon from body point [from] through body point [to], in the stroke already set up. */
+    private fun strokeRibbon(slot: Int, snake: SnakeView, from: Int, to: Int) {
         overlayContext.beginPath()
-        overlayContext.moveTo(x0 + acrossX * tip, y0 + acrossY * tip)
-        overlayContext.lineTo(x1 + acrossX * base, y1 + acrossY * base)
-        overlayContext.lineTo(x1 - acrossX * base, y1 - acrossY * base)
-        overlayContext.lineTo(x0 - acrossX * tip, y0 - acrossY * tip)
-        overlayContext.closePath()
-        overlayContext.fill()
+        overlayContext.moveTo(bodyX(slot, snake, from), bodyY(slot, snake, from))
+        for (i in from + 1..to) {
+            overlayContext.lineTo(bodyX(slot, snake, i), bodyY(slot, snake, i))
+        }
+        overlayContext.stroke()
+    }
+
+    /**
+     * The weight the oldest square is drawn at on the move before it clears: whole where the rest of
+     * the body takes over, [TAIL_CLEARING_ALPHA] of itself at the far end.
+     *
+     * A ramp rather than a step, because a step is an edge and an edge across the middle of an animal
+     * reads as *two things* — one bright snake and one faint one lying against it. What the drawing
+     * has to say is that a single body thins out at the end it is about to lose, and thinning out is
+     * a gradient.
+     *
+     * **The far stop lands half a body-width short of the next square's centre**, which is exactly
+     * where the opaque stroke's round cap begins. Full colour there is what leaves no seam: the two
+     * strokes meet at the same weight, so the joint is invisible and the fade owns precisely the one
+     * square it is about.
+     *
+     * Anchored on the square rather than on the two drawn points, which is what makes it total.
+     * Adjacent squares are exactly one cell apart on one axis, so that step divided by the cell is a
+     * unit vector with no length to measure and no zero to guard — and a retraction that had slid the
+     * two points together would otherwise leave a gradient with nowhere to run.
+     */
+    private fun clearingGradient(colour: String, snake: SnakeView): CanvasGradient {
+        val x = centreX(snake.cellAt(0))
+        val y = centreY(snake.cellAt(0))
+        val alongX = (centreX(snake.cellAt(1)) - x) / cellSize
+        val alongY = (centreY(snake.cellAt(1)) - y) / cellSize
+        val cap = bodyWidth() / 2
+
+        val gradient = overlayContext.createLinearGradient(
+            x - alongX * cap,
+            y - alongY * cap,
+            x + alongX * (cellSize - cap),
+            y + alongY * (cellSize - cap),
+        )
+        gradient.addColorStop(0.0, translucent(colour, TAIL_CLEARING_ALPHA))
+        gradient.addColorStop(1.0, colour)
+        return gradient
+    }
+
+    /**
+     * [colour] at [alpha], as CSS `#rrggbbaa`.
+     *
+     * A gradient stop carries its weight *in the colour*, which is the one thing on this bitmap
+     * `globalAlpha` cannot express — that is a single value for a whole stroke. Every colour drawn
+     * here is a `#rrggbb` literal in [Theme] or `GauntletVisual`, so two more hex digits is the whole
+     * conversion and there is no palette to keep a parser in step with.
+     */
+    private fun translucent(colour: String, alpha: Double): String {
+        require(colour.length == 7 && colour[0] == '#') { "a theme colour must be #rrggbb, was $colour" }
+        return colour + (alpha * 255).toInt().coerceIn(0, 255).toString(16).padStart(2, '0')
     }
 
     /**
@@ -603,34 +628,29 @@ internal class BoardRenderer(
      * are the ones a reader is trying to trace, and they are the brightest and the widest.
      *
      * [weight] is the whole line's share of itself, which is one for a living snake and a share
-     * running to nothing across a death — see [drawBody]. [clearing] is the oldest square's own
-     * share on top of it, and it applies to the first segment because that segment *is* that square:
-     * a highlight left at full weight over a body square drawn lighter would be the drawing saying
-     * two things about one square.
+     * running to nothing across a death — see [drawBody]. [clearing] puts the body's own
+     * [clearingGradient] under the first segment, because that segment *is* the square the fade is
+     * about: a highlight left at full weight over a body square dimming away would be the drawing
+     * saying two things at once. The gradient reaches full colour before that segment ends, so the
+     * spine runs on into the next one without a step.
      */
-    private fun drawSpine(
-        view: BoardView,
-        slot: Int,
-        snake: SnakeView,
-        colour: String,
-        weight: Double,
-        clearing: Double,
-    ) {
+    private fun drawSpine(slot: Int, snake: SnakeView, colour: String, weight: Double, clearing: Boolean) {
         val width = (cellSize * SPINE_WIDTH).coerceAtLeast(MIN_MARK)
         val points = bodyPointCount(slot, snake)
+        val solid: JsAny = colour.toJsString()
+        val oldest: JsAny = if (clearing) clearingGradient(colour, snake) else solid
 
         overlayContext.lineCap = CanvasLineCap.ROUND
         overlayContext.lineJoin = CanvasLineJoin.ROUND
-        overlayContext.strokeStyle = colour.toJsString()
 
         // cellAt(0) is the tail, so `i` runs the body in the order it was laid down.
         for (i in 0 until points - 1) {
-            val share = if (i == 0) clearing else 1.0
-            overlayContext.globalAlpha = weight * share * ramp(i, points - 1, SPINE_TAIL_ALPHA, SPINE_HEAD_ALPHA)
+            overlayContext.strokeStyle = if (i == 0) oldest else solid
+            overlayContext.globalAlpha = weight * ramp(i, points - 1, SPINE_TAIL_ALPHA, SPINE_HEAD_ALPHA)
             overlayContext.lineWidth = ramp(i, points - 1, MIN_MARK, width)
             overlayContext.beginPath()
-            overlayContext.moveTo(bodyX(view, slot, snake, i), bodyY(view, slot, snake, i))
-            overlayContext.lineTo(bodyX(view, slot, snake, i + 1), bodyY(view, slot, snake, i + 1))
+            overlayContext.moveTo(bodyX(slot, snake, i), bodyY(slot, snake, i))
+            overlayContext.lineTo(bodyX(slot, snake, i + 1), bodyY(slot, snake, i + 1))
             overlayContext.stroke()
         }
     }
@@ -948,32 +968,26 @@ internal class BoardRenderer(
     private fun bodyPointCount(slot: Int, snake: SnakeView): Int =
         snake.length + if (transitions.getOrNull(slot)?.retracts == true) 1 else 0
 
-    private fun bodyX(view: BoardView, slot: Int, snake: SnakeView, point: Int): Double =
-        bodyCoordinate(view, slot, snake, point, true)
+    private fun bodyX(slot: Int, snake: SnakeView, point: Int): Double = bodyCoordinate(slot, snake, point, true)
 
-    private fun bodyY(view: BoardView, slot: Int, snake: SnakeView, point: Int): Double =
-        bodyCoordinate(view, slot, snake, point, false)
+    private fun bodyY(slot: Int, snake: SnakeView, point: Int): Double = bodyCoordinate(slot, snake, point, false)
 
-    private fun bodyCoordinate(
-        view: BoardView,
-        slot: Int,
-        snake: SnakeView,
-        point: Int,
-        horizontal: Boolean,
-    ): Double {
+    /**
+     * Where body point [point] is drawn, which is a cell centre except where a glide is still
+     * carrying it between two.
+     *
+     * Point zero is the oldest square, and it is a centre like every other point: the square a snake
+     * is about to give back is drawn where it is until the move that gives it back, and then slides
+     * into its neighbour with the rest of the animal.
+     */
+    private fun bodyCoordinate(slot: Int, snake: SnakeView, point: Int, horizontal: Boolean): Double {
         val transition = transitions.getOrNull(slot)
         if (point == 0) {
-            val finish = tailCoordinate(view, snake, horizontal)
+            val finish = centre(snake.cellAt(0), horizontal)
             if (transition == null) {
                 return finish
             }
-            val old = transition.oldCells
-            val start = if (old.size < 2) {
-                centre(Cell(old[0]), horizontal)
-            } else {
-                val offset = if (transition.retracts) TAIL_FORWARD_OFFSET else TAIL_STAY_OFFSET
-                tailCoordinate(Cell(old[0]), Cell(old[1]), offset, horizontal)
-            }
+            val start = centre(Cell(transition.oldCells[0]), horizontal)
             return interpolate(start, finish, transitionProgress(transition))
         }
         if (transition == null) {
@@ -992,21 +1006,6 @@ internal class BoardRenderer(
         } else {
             centre(Cell(old[point]), horizontal)
         }
-    }
-
-    private fun tailCoordinate(view: BoardView, snake: SnakeView, horizontal: Boolean): Double {
-        val offset = when {
-            !snake.alive || view.rules.growEveryNthMove < 2 -> 0.0
-            tailClearsNext(view, snake) -> TAIL_FORWARD_OFFSET
-            else -> TAIL_STAY_OFFSET
-        }
-        return tailCoordinate(snake.cellAt(0), snake.cellAt(1), offset, horizontal)
-    }
-
-    private fun tailCoordinate(from: Cell, toward: Cell, offset: Double, horizontal: Boolean): Double {
-        val start = centre(from, horizontal)
-        val direction = centre(toward, horizontal) - start
-        return start + direction * offset
     }
 
     private fun headX(slot: Int, snake: SnakeView): Double = headCoordinate(slot, snake, true)
@@ -1130,25 +1129,15 @@ internal class BoardRenderer(
         const val BODY_WIDTH = 0.78
 
         /**
-         * How much of the body's width the tail keeps at its tip.
+         * How little of its weight the oldest square keeps **at its far end** on the one move before
+         * it clears — see [clearingGradient], which runs from here up to full colour where the rest
+         * of the body takes over.
          *
-         * A share rather than a size of its own, so it inherits the body's floor and cannot sharpen
-         * into a whisker on a small board. Not a point, either: the oldest square is still a square a
-         * snake dies in, and it has to look like one.
-         */
-        const val TAIL_TIP_SHARE = 0.48
-
-        /** The tail tip moves from the cell centre to the front third over its two-move lifetime. */
-        const val TAIL_STAY_OFFSET = 0.0
-        const val TAIL_FORWARD_OFFSET = 1.0 / 6.0
-
-        /**
-         * How much of its weight the oldest square keeps on the one move before it clears.
-         *
-         * The advancing tip says the same thing in geometry, and a sixth of a cell is a small thing
-         * to catch on a board being read at speed — this is that one fact said a second time in a
-         * channel the eye picks up across the whole board at once. Which square is safe to enter
-         * next is the question a player asks most often and the drawing answered most quietly.
+         * The whole of the cue, and deliberately the only part of it: the square keeps the body's
+         * full width and its own centre, because it is a square a snake still dies in and it has to
+         * look like one. Weight is the one channel that can say *this clears next* without also
+         * saying *this is already partly yours*, and it is the channel an eye picks up across a whole
+         * board at once. Which square is safe to enter next is the question a player asks most often.
          *
          * **Toward the board rather than toward black.** *Darker* is a fade on a light page and a
          * bolder mark on a dark one, and the picker offers both; alpha over the board is a fade

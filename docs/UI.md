@@ -817,28 +817,40 @@ A body is therefore a **stroked polyline through the cell centres** with round j
 a corpse's ribbon is translucent and a segment drawn over its neighbour's round cap would deepen at
 every joint. Over it runs the **spine**, the same line at `SPINE_WIDTH` in `Theme.head(slot)`, ramping
 in both alpha and width along the body so a coil reads from tail to head. The **head** is a marker in
-the same head colour with two eyes offset perpendicular to `SnakeView.lastDirection`, and the
-**tail** tapers, in a filled quadrilateral rather than a stroke, because a stroke has one width. Its
-broad tip advances from the centre to the front third of the oldest square across that square's two
-growth phases. Both positions stay within the body's footprint, so the tail reads as the solid
-obstacle it still is while its length shows which square clears next.
+the same head colour with two eyes offset perpendicular to `SnakeView.lastDirection`. There is no
+tail *shape*: the oldest square is drawn at the body's full width, centred on its cell, inside the
+same path as every other square. What a player has to read off it is whether entering it kills, and a
+shape that gave part of the square back — a taper, a tip advancing through the cell — said *safe* on a
+turn the rules still answer *no* to.
 
-**The moving tail tip is a rule being drawn, not decoration.** `growEveryNthMove = 2` makes the square
-a snake is about to give back knowable a move ahead, so `BoardRenderer` advances the tip on that
-phase. A corpse and a trail that never retracts stay in the body's single path; only a living,
-retracting snake lifts its oldest square into the explicit taper. A corpse keeps
-`Theme.CORPSE_ALPHA`, loses its spine and loses its eyes: a snake that is out is scenery.
+**The clearing square is a rule being drawn, not decoration.** `growEveryNthMove = 2` makes the square
+a snake is about to give back knowable a move ahead, and on that one move the square dims towards its
+far end, body and first spine segment together, reaching `TAIL_CLEARING_ALPHA` at the tip. Weight is
+the whole of the cue, because it is the one channel that can say *this clears next* without also
+saying *this is already partly yours*, and it is what an eye picks up across a whole board at once. The
+fade is toward the board rather than toward black, because *darker* is a fade on a light page and a
+bolder mark on a dark one and the picker offers both; it stops well short of `Theme.CORPSE_ALPHA`,
+because that square is still lethal this turn and a tail as faint as a corpse would be a promise the
+rules do not make. `tailClearsNext` is the only place the phase is decided, and the hover label words
+the same predicate.
 
-**And on that same phase the square is drawn lighter**, taper and first spine segment together at
-`TAIL_CLEARING_ALPHA`. A sixth of a cell of tip travel is a small thing to catch on a board being read
-at speed, and *which square is safe to enter next* is the question a player asks most often — so the
-rule is said twice, in position and in weight, on the one square it is about. The fade is toward the
-board rather than toward black, because *darker* is a fade on a light page and a bolder mark on a dark
-one and the picker offers both; it stops well short of `Theme.CORPSE_ALPHA`, because that square is
-still lethal this turn and a tail as faint as a corpse would be a promise the rules do not make. The
-lifted square is already exactly the square the rule is about, so this costs a multiplier and no
-second notion of which square that is — `tailClearsNext` remains the only place the phase is decided,
-and the hover label still words the same predicate.
+**A ramp rather than a step**, because a step is an edge, and an edge across the middle of an animal
+reads as *two things* — one bright snake with a faint one lying against it. What the drawing has to
+say is that a single body thins out at the end it is about to lose. `clearingGradient` is anchored on
+the square rather than on the two drawn points, so a retraction that had slid those points together
+still leaves the gradient somewhere to run: adjacent squares are one cell apart on one axis, and that
+step divided by the cell is a unit vector with no length to measure and no zero to guard. Its far stop
+lands half a body-width short of the next centre, which is exactly where the opaque stroke's round cap
+begins, so the two strokes meet at the same weight and the joint is invisible.
+
+That gradient is also the only thing that splits the body's single path, and only because `globalAlpha`
+is one value for a whole `stroke` where this wants a stroke that changes weight along itself. The
+oldest segment goes down first under the gradient and the rest is stroked over it at full weight —
+which the rest has, since a snake with a square about to clear is alive by definition — so the round
+cap the two share composites to the opaque one instead of deepening. Gradient stops carry their weight
+*in the colour*, which is why `translucent` exists: every colour this canvas draws with is a `#rrggbb`
+literal in `Theme` or `GauntletVisual`, so two more hex digits is the whole conversion. A corpse never
+fades, keeps `Theme.CORPSE_ALPHA`, loses its spine and loses its eyes: a snake that is out is scenery.
 
 **No new colour enters `BoardRenderer` for any of it.** A highlight is `Theme.head(slot)` over
 `Theme.body(slot)` — the pair the theme already keeps for "this snake, but readable against itself" —
